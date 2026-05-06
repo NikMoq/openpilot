@@ -35,7 +35,10 @@ class CarInterface(CarInterfaceBase):
       # It is documented in a four-part blog series:
       #   https://blog.willemmelching.nl/carhacking/2022/01/02/vw-part1/
       # Panda ALLOW_DEBUG firmware required.
-      ret.dashcamOnly = True
+      #
+      # Caddy, Jetta MK6, Passat NMS, and Sharan with PQ platform support steering from 0 m/s
+      # after applying the EPS flash update, so dashcamOnly is disabled for these models.
+      # ret.dashcamOnly = True  # Disabled for PQ cars with steer from 0 support
 
     else:
       # Set global MQB parameters

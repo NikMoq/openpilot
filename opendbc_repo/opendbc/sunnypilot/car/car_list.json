@@ -3789,6 +3789,68 @@
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
+  "Volkswagen Caddy 2019": {
+    "platform": "VOLKSWAGEN_CADDY_MK3",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Caddy",
+    "year": [
+      "2019"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen Caddy Maxi 2019": {
+    "platform": "VOLKSWAGEN_CADDY_MK3",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Caddy Maxi",
+    "year": [
+      "2019"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen Jetta 2015-18": {
+    "platform": "VOLKSWAGEN_JETTA_MK6",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Jetta",
+    "year": [
+      "2015",
+      "2016",
+      "2017",
+      "2018"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen Passat NMS 2017-22": {
+    "platform": "VOLKSWAGEN_PASSAT_NMS",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Passat NMS",
+    "year": [
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen Sharan 2018-22": {
+    "platform": "VOLKSWAGEN_SHARAN_MK2",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Sharan",
+    "year": [
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
   "Volkswagen Crafter 2017-24": {
     "platform": "VOLKSWAGEN_CRAFTER_MK2",
     "make": "Volkswagen",

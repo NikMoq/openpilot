@@ -269,7 +269,7 @@ class CAR(Platforms):
       VWCarDocs("Volkswagen Caddy 2019"),
       VWCarDocs("Volkswagen Caddy Maxi 2019"),
     ],
-    VolkswagenCarSpecs(mass=1613, wheelbase=2.6, minSteerSpeed=21 * CV.KPH_TO_MS),
+    VolkswagenCarSpecs(mass=1613, wheelbase=2.6, minSteerSpeed=0.0),
     chassis_codes={"2K"},
     wmis={WMI.VOLKSWAGEN_COMMERCIAL_BUS_VAN},
   )
@@ -302,7 +302,7 @@ class CAR(Platforms):
   )
   VOLKSWAGEN_JETTA_MK6 = VolkswagenPQPlatformConfig(
     [VWCarDocs("Volkswagen Jetta 2015-18")],
-    VolkswagenCarSpecs(mass=1518, wheelbase=2.65, minSteerSpeed=50 * CV.KPH_TO_MS, minEnableSpeed=20 * CV.KPH_TO_MS),
+    VolkswagenCarSpecs(mass=1518, wheelbase=2.65, minSteerSpeed=0.0, minEnableSpeed=20 * CV.KPH_TO_MS),
     chassis_codes={"5K", "AJ"},
     wmis={WMI.VOLKSWAGEN_MEXICO_CAR},
   )
@@ -327,7 +327,7 @@ class CAR(Platforms):
   )
   VOLKSWAGEN_PASSAT_NMS = VolkswagenPQPlatformConfig(
     [VWCarDocs("Volkswagen Passat NMS 2017-22")],
-    VolkswagenCarSpecs(mass=1503, wheelbase=2.80, minSteerSpeed=50 * CV.KPH_TO_MS, minEnableSpeed=20 * CV.KPH_TO_MS),
+    VolkswagenCarSpecs(mass=1503, wheelbase=2.80, minSteerSpeed=0.0, minEnableSpeed=20 * CV.KPH_TO_MS),
     chassis_codes={"A3"},
     wmis={WMI.VOLKSWAGEN_USA_CAR},
   )
@@ -345,7 +345,7 @@ class CAR(Platforms):
       VWCarDocs("Volkswagen Sharan 2018-22"),
       VWCarDocs("SEAT Alhambra 2018-20"),
     ],
-    VolkswagenCarSpecs(mass=1639, wheelbase=2.92, minSteerSpeed=50 * CV.KPH_TO_MS),
+    VolkswagenCarSpecs(mass=1639, wheelbase=2.92, minSteerSpeed=0.0),
     chassis_codes={"7N"},
     wmis={WMI.VOLKSWAGEN_EUROPE_CAR},
   )
