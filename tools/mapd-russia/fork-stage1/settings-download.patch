@@ -1,0 +1,24 @@
+diff --git a/settings/download.go b/settings/download.go
+index 1234567..abcdefg 100644
+--- a/settings/download.go
++++ b/settings/download.go
+@@ -12,6 +12,10 @@ import (
+ 	"github.com/pkg/errors"
+ 	"pfeifer.dev/mapd/params"
+ )
++
++// mapDataBaseURL — базовый URL для загрузки офлайн-карт.
++// Замените на адрес своего сервера после генерации тайлов.
++const mapDataBaseURL = "https://mapd-russia.your-server.com"
+ 
+ type LocationData struct {
+ 	BoundingBox Bounds `json:"bounding_box"`
+@@ -108,7 +112,7 @@ func (d *download) downloadBounds(bounds Bounds, locationName string) (err error
+ 			}
+ 
+ 			filename := fmt.Sprintf("offline/%d/%d.tar.gz", i, j)
+-			url := fmt.Sprintf("https://map-data.pfeifer.dev/%s", filename)
++			url := fmt.Sprintf("%s/%s", mapDataBaseURL, filename)
+ 			outputName := filepath.Join(params.GetBaseOpPath(), "tmp", filename)
+ 			err := os.MkdirAll(filepath.Dir(outputName), 0o775)
+ 			if err != nil {

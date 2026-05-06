@@ -1,0 +1,83 @@
+diff --git a/state.go b/state.go
+index 1234567..abcdefg 100644
+--- a/state.go
++++ b/state.go
+@@ -12,6 +12,7 @@ type State struct {
+ 	Publisher       *cereal.Publisher[custom.MapdOut]
+ 	Data            maps.Offline
+ 	Car             CarState
++	CameraIdx       *maps.CameraIndex
+ 	CurrentWay      CurrentWay
+ 	SpeedLimit      SpeedLimitState
+ 	NextWays        []maps.NextWayResult
+@@ -40,6 +41,15 @@ func (s *State) Init() {
+ 	s.NextAdvisorySpeed = NewUpcoming(10, 0, checkWayForAdvisorySpeedChange)
+ 	s.SpeedLimit.Init()
+ }
++
++// InitCameraIndex rebuilds the camera spatial index when new tile data loads.
++func (s *State) InitCameraIndex() {
++	ext := maps.ReadOfflineWithCameras(s.Data.RawData())
++	if !ext.Loaded || len(ext.Tiles) == 0 {
++		s.CameraIdx = nil
++		return
++	}
++	s.CameraIdx = maps.NewCameraIndex(ext.Tiles, ext.Gen)
++}
+
+ func (s *State) SuggestedSpeed() float32 {
+ 	suggestedSpeed := min(s.Car.VCruise*ms.KPH_TO_MS, ms.MAX_OP_SPEED)
+@@ -103,6 +113,18 @@ func (s *State) Send() error {
+ 	output.SetWaySelectionType(s.CurrentWay.SelectionType)
+ 	output.SetSpeedLimitAccepted(s.SpeedLimit.Accepted)
+
++	// --- Camera info (Russian speed cameras) ---
++	if s.CameraIdx != nil {
++		heading := float64(s.Car.Bearing) // ensure CarState has Bearing field
++		camInfo, ok := s.CameraIdx.FindCameraAhead(
++			s.Position.Latitude(), s.Position.Longitude(),
++			heading, float64(s.Car.VEgo),
++		)
++		if ok {
++			output.SetNextCamera(camInfo)
++		}
++	}
++	// ---------------------------------------------
++
+ 	return s.Publisher.Send(msg)
+ }
++
++// InitCameraIndex rebuilds the camera spatial index when new tile data loads.
++func (s *State) InitCameraIndex() {
++	tiles, err := s.Data.CameraTiles()
++	if err != nil || tiles.Len() == 0 {
++		s.CameraIdx = nil
++		return
++	}
++	gen := s.Data.Generation()
++	s.CameraIdx = maps.NewCameraIndex(tiles, gen)
++}
+
+ func (s *State) SuggestedSpeed() float32 {
+ 	suggestedSpeed := min(s.Car.VCruise*ms.KPH_TO_MS, ms.MAX_OP_SPEED)
+@@ -103,6 +115,20 @@ func (s *State) Send() error {
+ 	output.SetWaySelectionType(s.CurrentWay.SelectionType)
+ 	output.SetSpeedLimitAccepted(s.SpeedLimit.Accepted)
+
++	// --- Camera info (Russian speed cameras) ---
++	if s.CameraIdx != nil {
++		heading := float64(s.Car.Bearing) // ensure CarState has Bearing field
++		camInfo := s.CameraIdx.FindCameraAhead(
++			s.Position.Latitude(), s.Position.Longitude(),
++			heading, float64(s.Car.VEgo),
++		)
++		if camInfo != nil {
++			output.SetNextCamera(*camInfo)
++		} else {
++			output.SetNextCamera(custom.CameraInfo{}) // zero value = no camera
++		}
++	}
++	// ---------------------------------------------
++
+ 	return s.Publisher.Send(msg)
+ }

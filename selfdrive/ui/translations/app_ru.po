@@ -1,0 +1,715 @@
+﻿msgid ""
+msgstr ""
+"Project-Id-Version: sunnypilot v2026.001.000\n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: ru\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+"X-Generator: Poedit 3.9\n"
+
+msgid "--"
+msgstr "--"
+
+msgid " Steering torque response calibration is {}% complete."
+msgstr " Калибровка отклика рулевого момента завершена на {}%."
+
+msgid " Steering torque response calibration is complete."
+msgstr " Калибровка отклика рулевого момента завершена."
+
+msgid " Your device is pointed {:.1f}° {} and {:.1f}° {}."
+msgstr " Ваше устройство направлено {:.1f}° {} и {:.1f}° {}."
+
+msgid "{} ALERT"
+msgstr "{} ALERT"
+
+msgid "{} day ago"
+msgstr "{} день назад"
+
+msgid "{} hour ago"
+msgstr "{} час назад"
+
+msgid "{} minute ago"
+msgstr "{} минуту назад"
+
+msgid "{} segment of your driving is in the training dataset so far."
+msgstr "{} % вашего вождения на данный момент входит в обучающий набор данных."
+
+msgid "<br><br>Steering lag calibration is {}% complete."
+msgstr "<br><br>Калибровка задержки руля выполнена на {}%."
+
+msgid "<br><br>Steering lag calibration is complete."
+msgstr "<br><br>Калибровка задержки руля завершена."
+
+msgid "✓ SUBSCRIBED"
+msgstr "✓ ПОДПИСАНО"
+
+msgid "1 year of drive storage"
+msgstr "1 год хранения поездок"
+
+msgid "24/7 LTE connectivity"
+msgstr "Подключение LTE 24/7"
+
+msgid "2G"
+msgstr "2G"
+
+msgid "3G"
+msgstr "3G"
+
+msgid "5G"
+msgstr "5G"
+
+msgid "Acknowledge Excessive Actuation"
+msgstr "Подтвердить чрезмерное срабатывание"
+
+msgid "ADD"
+msgstr "ДОБАВИТЬ"
+
+msgid "Advanced"
+msgstr "Дополнительно"
+
+msgid "Aggressive"
+msgstr "Агрессивный"
+
+msgid "Agree"
+msgstr "Принять"
+
+msgid "Always-On Driver Monitoring"
+msgstr "Постоянный мониторинг водителя"
+
+msgid "APN Setting"
+msgstr "Настройка APN"
+
+msgid "Are you sure you want to power off?"
+msgstr "Вы уверены, что хотите выключить устройство?"
+
+msgid "Are you sure you want to reboot?"
+msgstr "Вы уверены, что хотите перезагрузить устройство?"
+
+msgid "Are you sure you want to reset calibration?"
+msgstr "Вы уверены, что хотите сбросить калибровку?"
+
+msgid "Are you sure you want to uninstall?"
+msgstr "Вы уверены, что хотите удалить?"
+
+msgid "Back"
+msgstr "Назад"
+
+msgid "Become a comma prime member at connect.comma.ai"
+msgstr "Станьте участником comma prime на connect.comma.ai"
+
+msgid "Bookmark connect.comma.ai to your home screen to use it like an app"
+msgstr "Добавь comaai в закладки экрана, используй как приложение"
+
+msgid "camera starting"
+msgstr "камера запускается"
+
+msgid "Cancel"
+msgstr "Отмена"
+
+msgid "Cellular Metered"
+msgstr "Ограниченный тариф"
+
+msgid "CHANGE"
+msgstr "ИЗМЕНИТЬ"
+
+msgid "Change Language"
+msgstr "Изменить язык"
+
+msgid "Changing this setting will restart sunnypilot if the car is powered on."
+msgstr "Смена опции перезапустит sunnypilot при включенном авто."
+
+msgid "CHECK"
+msgstr "ПРОВЕРИТЬ"
+
+msgid "checking..."
+msgstr "проверка..."
+
+msgid "CHILL MODE ON"
+msgstr "СПОКОЙНЫЙ РЕЖ ВКЛ"
+
+msgid "Choose your sponsorship tier and confirm your support"
+msgstr "Выберите свой уровень спонсорства"
+
+msgid "Click \\"
+msgstr "Нажмите \\"
+
+msgid "Close"
+msgstr "Закрыть"
+
+msgid "comma prime"
+msgstr "comma prime"
+
+msgid "CONNECT"
+msgstr "ПОДЛЮЧЕНИЕ"
+
+msgid "CONNECTING..."
+msgstr "ПОДКЛЮЧЕНИЕ..."
+
+msgid "Current Version"
+msgstr "Текущая версия"
+
+msgid "Decline"
+msgstr "Отклонить"
+
+msgid "Decline, uninstall sunnypilot"
+msgstr "Отказ, удалить sunnypilot"
+
+msgid "default"
+msgstr "стандарт"
+
+msgid "Developer"
+msgstr "Разработчик"
+
+msgid "Device"
+msgstr "Устройство"
+
+msgid "Disengage on Accelerator Pedal"
+msgstr "Выкл при нажатию газа"
+
+msgid "Disengage to Power Off"
+msgstr "Отключить для выключения питания"
+
+msgid "Disengage to Reboot"
+msgstr "Выкл для рестарт"
+
+msgid "Disengage to Reset Calibration"
+msgstr "Отключить для сброса калибровки"
+
+msgid "Display speed in km/h instead of mph."
+msgstr "Отображать скорость в км/ч вместо миль/ч."
+
+msgid "Dongle ID"
+msgstr "ID донгла"
+
+msgid "down"
+msgstr "вниз"
+
+msgid "DOWNLOAD"
+msgstr "СКАЧАТЬ"
+
+msgid "downloading..."
+msgstr "скачивание..."
+
+msgid "Driver Camera"
+msgstr "Камера водителя"
+
+msgid "Driving Personality"
+msgstr "Личность вождения"
+
+msgid "Early Access: Become a sunnypilot Sponsor"
+msgstr "Ранний доступ: стань спонсором sunnypilot"
+
+msgid "EDIT"
+msgstr "ИЗМЕНИТЬ"
+
+msgid "Enable"
+msgstr "Включить"
+
+msgid "Enable ADB"
+msgstr "Вкл. ADB"
+
+msgid "Enable driver monitoring even when sunnypilot is not engaged."
+msgstr "Вкл. контроль водителя даже если sunnypilot не активен."
+
+msgid "Enable Lane Departure Warnings"
+msgstr "Активир. контроль полосы"
+
+msgid "Enable Roaming"
+msgstr "Включить роуминг"
+
+msgid "Enable SSH"
+msgstr "Включить SSH"
+
+msgid "Enable sunnypilot"
+msgstr "Включить sunnypilot"
+
+msgid "Enable Tethering"
+msgstr "Вкл точку доступа"
+
+msgid "Enable the sunnypilot longitudinal control (alpha) toggle to allow Experimental mode."
+msgstr "Включить sunnypilot longitudinal для включения режима Experimental."
+
+msgid "Enter APN"
+msgstr "Введите APN"
+
+msgid "Enter new tethering password"
+msgstr "Введите пароль точки доступа"
+
+msgid "Enter password"
+msgstr "Введите пароль"
+
+msgid "Enter search query"
+msgstr "Введите поиск. запрос"
+
+msgid "Enter SSID"
+msgstr "Введите SSID"
+
+msgid "Enter your GitHub username"
+msgstr "Введите имя пользователя GitHub"
+
+msgid "ERROR"
+msgstr "ОШИБКА"
+
+msgid "ETH"
+msgstr "ETH"
+
+msgid "Experimental Mode"
+msgstr "Экспериментальный режим"
+
+msgid "Experimental mode is currently unavailable on this car since the car's stock ACC is used for longitudinal control."
+msgstr "Режим Experimental сейчас недоступен, включен штатный ACC для продольного контроля."
+
+msgid "Hybrid Longitudinal Mode"
+msgstr "Гибридный продольный контроль"
+
+msgid "Use openpilot lateral control with stock ACC for longitudinal. Enables full perception pipeline while preserving OEM cruise control."
+msgstr "Использует боковое управление sunnypilot, оставляя продольное за штатным ACC."
+
+msgid "Hybrid Longitudinal mode is unavailable when sunnypilot longitudinal control is enabled."
+msgstr "Гибридный продольный режим недоступен при включённом продольном управлении sunnypilot."
+
+msgid "EXPERIMENTAL MODE ON"
+msgstr "ЭКСПЕРИМЕНТАЛЬНЫЙ РЕЖИМ"
+
+msgid "failed to check for update"
+msgstr "не удалось проверить обновления"
+
+msgid "finalizing update..."
+msgstr "завершение обновления..."
+
+msgid "Finish Setup"
+msgstr "Завершить настройку"
+
+msgid "Firehose"
+msgstr "Firehose"
+
+msgid "Firehose Mode"
+msgstr "Firehose Mode"
+
+msgid "Follow the prompts to complete the pairing process"
+msgstr "Следуйте подсказкам, чтобы завершить процесс сопряжения"
+
+msgid "for \\"
+msgstr "для \\"
+
+msgid "Forget"
+msgstr "Забыть"
+
+msgid "Forget Wi-Fi Network \\"
+msgstr "Забыть сеть Wi-Fi \\"
+
+msgid "FORGETTING..."
+msgstr "СТИРАНИЕ..."
+
+msgid "Go to https://connect.comma.ai on your phone"
+msgstr "На телефоне перейдите https://connect.comma.ai"
+
+msgid "GOOD"
+msgstr "ОК"
+
+msgid "Hidden Network"
+msgstr "Скрытая сеть"
+
+msgid "HIGH"
+msgstr "HIGH"
+
+msgid "If sponsorship status was not updated, please contact a moderator on the community forum at https://community.sunnypilot.ai"
+msgstr "Если статус спонсорства не обновлён, свяжитесь с модератором на форуме https://community.sunnypilot.ai"
+
+msgid "INSTALL"
+msgstr "Установить"
+
+msgid "Install Update"
+msgstr "Установить обновление"
+
+msgid "IP Address"
+msgstr "IP-адрес"
+
+msgid "Join our Community Forum at https://community.sunnypilot.ai and reach out to a moderator if you have issues"
+msgstr "Присоединяйтесь к нашему форуму https://community.sunnypilot.ai и обратитесь к модератору при проблемах"
+
+msgid "Joystick Debug Mode"
+msgstr "Режим отладки джойстика"
+
+msgid "km/h"
+msgstr "км/ч"
+
+msgid "Lateral Maneuver Mode"
+msgstr "Режим латерального управления"
+
+msgid "leave blank for automatic configuration"
+msgstr "оставьте пустым для автоматической настройки"
+
+msgid "left"
+msgstr "влево"
+
+msgid "LOADING"
+msgstr "ЗАГРУЗКА"
+
+msgid "Longitudinal Maneuver Mode"
+msgstr "Режим продольного управления"
+
+msgid "LTE"
+msgstr "LTE"
+
+msgid "MAX"
+msgstr "MAX"
+
+msgid "Maximize your training data uploads to improve openpilot's driving models."
+msgstr "Увеличьте загрузку обучающих данных для улучшения моделей sunnypilot."
+
+msgid "metered"
+msgstr "лимитное"
+
+msgid "mph"
+msgstr "миль/ч"
+
+msgid "N/A"
+msgstr "Н/Д"
+
+msgid "Network"
+msgstr "Сеть"
+
+msgid "never"
+msgstr "никогда"
+
+msgid "NO"
+msgstr "НЕТ"
+
+msgid "No release notes available."
+msgstr "Нет описания изменений."
+
+msgid "No SSH keys found for user '{}'"
+msgstr "SSH-ключи пользователя не найдены '{}'"
+
+msgid "now"
+msgstr "сейчас"
+
+msgid "OFFLINE"
+msgstr "ОФФЛАЙН"
+
+msgid "OK"
+msgstr "ОК"
+
+msgid "ONLINE"
+msgstr "ОНЛАЙН"
+
+msgid "Open"
+msgstr "Open"
+
+msgid "PAIR"
+msgstr "ПРИВЯЗАТЬ"
+
+msgid "Pair Device"
+msgstr "Сопряжение устройства"
+
+msgid "Pair device"
+msgstr "Сопряжение устройства"
+
+msgid "Pair your device to your comma account"
+msgstr "Привяжите устройство к аккаунту comma"
+
+msgid "Pair your device with comma connect (connect.comma.ai) and claim your comma prime offer."
+msgstr "Привяжите устройство к comma connect и активируйте предложение comma prime."
+
+msgid "Pair your GitHub account"
+msgstr "Подключите GitHub"
+
+msgid "PANDA"
+msgstr "PANDA"
+
+msgid "Please connect to Wi-Fi to complete initial pairing"
+msgstr "Подключитесь к Wi-Fi для завершения первичного подключения"
+
+msgid "Power Off"
+msgstr "Выключить"
+
+msgid "Prevent large data uploads when on a metered cellular connection"
+msgstr "Запретить загрузку больших данных в лимитной сети"
+
+msgid "Prevent large data uploads when on a metered Wi-Fi connection"
+msgstr "Запретить загрузку больших данных в лимитном Wi-Fi"
+
+msgid "PREVIEW"
+msgstr "ПРОСМОТР"
+
+msgid "Preview the driver facing camera to ensure that driver monitoring has good visibility. (vehicle must be off)"
+msgstr "Просмотр камеры водителя для проверки видимости (авто должно быть выключено)"
+
+msgid "PRIME FEATURES:"
+msgstr "ВОЗМОЖНОСТИ PRIME:"
+
+msgid "QR Code Error"
+msgstr "QR Code Error"
+
+msgid "Reboot"
+msgstr "Перезагрузить"
+
+msgid "Reboot and Update"
+msgstr "Перезагрузить и обновить"
+
+msgid "Reboot Device"
+msgstr "Перезагрузить устройство"
+
+msgid "Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect."
+msgstr "Запись и сохранение аудио во время движения. Аудио будет в видео регистраторе comma connect."
+
+msgid "Record and Upload Driver Camera"
+msgstr "Запись и загрузка камеры водителя"
+
+msgid "Record and Upload Microphone Audio"
+msgstr "Запись и загрузка аудио"
+
+msgid "Re-enter the \\"
+msgstr "Введите \\ еще раз"
+
+msgid "Regulatory"
+msgstr "Нормативные документы"
+
+msgid "Relaxed"
+msgstr "Релакс"
+
+msgid "Remote access"
+msgstr "Удалённый доступ"
+
+msgid "Remote snapshots"
+msgstr "Удалённые снимки"
+
+msgid "REMOVE"
+msgstr "УДАЛИТЬ"
+
+msgid "Request timed out"
+msgstr "Время ожидания истекло"
+
+msgid "RESET"
+msgstr "Сброс"
+
+msgid "Reset Calibration"
+msgstr "Сброс калибровки"
+
+msgid "REVIEW"
+msgstr "Ознакомиться"
+
+msgid "Review the rules, features, and limitations of sunnypilot"
+msgstr "Ознакомьтесь с функциями и ограничениями sunnypilot"
+
+msgid "Review Training Guide"
+msgstr "Ознакомиться с руководством"
+
+msgid "right"
+msgstr "вправо"
+
+msgid "Scan the QR code to login to your GitHub account"
+msgstr "Сканируйте QR-код, чтобы войти в свой аккаунт GitHub"
+
+msgid "Scan the QR code to visit sunnyhaibin's GitHub Sponsors page"
+msgstr "Отсканируйте QR-код, чтобы перейти на страницу GitHub Sponsors"
+
+msgid "Scanning Wi-Fi networks..."
+msgstr "Поиск Wi-Fi сетей..."
+
+msgid "Search"
+msgstr "ПОИСК"
+
+msgid "SELECT"
+msgstr "ВЫБРАТЬ"
+
+msgid "Select a branch"
+msgstr "Выберите ветку"
+
+msgid "Select a language"
+msgstr "Выберите язык"
+
+msgid "Serial"
+msgstr "Серийный номер"
+
+msgid "Snooze Update"
+msgstr "Отложить обновление"
+
+msgid "Software"
+msgstr "Программное обеспечение"
+
+msgid "SSH Keys"
+msgstr "Ключи SSH"
+
+msgid "Standard"
+msgstr "Стандартный"
+
+msgid "sunnypilot Longitudinal Control (Alpha)"
+msgstr "Продольное управление sunnypilot (Alpha)"
+
+msgid "sunnypilot longitudinal control may come in a future update."
+msgstr "Управление по продольной оси в SunnyPilot может появиться в одном из будущих обновлений."
+
+msgid "sunnypilot requires the device to be mounted within 4° left or right and within 5° up or 9° down."
+msgstr "sunnypilot требует установки устройства в пределах 4° влево/вправо и 5° вверх или 9° вниз"
+
+msgid "sunnypilot Unavailable"
+msgstr "sunnypilot недоступен"
+
+msgid "System Unresponsive"
+msgstr "Система не отвечает"
+
+msgid "TAKE CONTROL IMMEDIATELY"
+msgstr "НЕМЕДЛЕННО ПРИМИТЕ УПРАВЛЕНИЕ"
+
+msgid "Target Branch"
+msgstr "Целевая ветка"
+
+msgid "TEMP"
+msgstr "ТЕМП"
+
+msgid "Tethering Password"
+msgstr "Пароль точки доступа"
+
+msgid "Toggles"
+msgstr "Переключатели"
+
+msgid "UI Debug Mode"
+msgstr "Режим отладки UI"
+
+msgid "UNINSTALL"
+msgstr "Удалить"
+
+msgid "Unknown"
+msgstr "Неизвестно"
+
+msgid "unmetered"
+msgstr "безлимитное"
+
+msgid "up"
+msgstr "вверх"
+
+msgid "up to date, last checked {}"
+msgstr "актуальное, проверено {}"
+
+msgid "up to date, last checked never"
+msgstr "актуальное, не проверялось"
+
+msgid "UPDATE"
+msgstr "Обновить"
+
+msgid "update available"
+msgstr "доступно обновление"
+
+msgid "Updates are only downloaded while the car is off."
+msgstr "Обновления загружаются только при выключенном авто."
+
+msgid "Upgrade Now"
+msgstr "Обновить сейчас"
+
+msgid "Upload data from the driver facing camera and help improve the driver monitoring algorithm."
+msgstr "Загружайте данные с камеры водителя, чтобы помочь улучшить алгоритм мониторинга."
+
+msgid "Use Metric System"
+msgstr "Использовать метрическую систему"
+
+msgid "VEHICLE"
+msgstr "ТРАНСПОРТ"
+
+msgid "VIEW"
+msgstr "ПРОСМОТР"
+
+msgid "Waiting to start"
+msgstr "Ожидание запуска"
+
+msgid "Welcome to sunnypilot"
+msgstr "Добро пожаловать sunnypilot"
+
+msgid "When enabled, pressing the accelerator pedal will disengage sunnypilot."
+msgstr "При включении нажатие на газ отключает sunnypilot."
+
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+msgid "Wi-Fi Network Metered"
+msgstr "Лимитный Wi-Fi"
+
+msgid "Wrong password"
+msgstr "Неправильный пароль"
+
+msgid "You must accept the Terms of Service in order to use sunnypilot."
+msgstr "Необходимо принять условия использования sunnypilot"
+
+msgid "You must accept the Terms of Service to use sunnypilot. Read the latest terms at https://sunnypilot.ai/terms before continuing."
+msgstr "Необходимо принять условия sunnypilot. Ознакомьтесь: https://sunnypilot.ai/terms."
+
+msgid "🔥 Firehose Mode 🔥"
+msgstr "🔥 Firehose Mode 🔥"
+
+msgid "Adjust the software delay when Live Learning Steer Delay is toggled off. The default software delay value is 0.2"
+msgstr "Настройка задержки при отключённом Live Learning Steer Delay. По умолчанию 0.2"
+
+msgid "Current Model"
+msgstr "Текущая модель"
+
+msgid "Customize Lane Change"
+msgstr "Настройка смены полосы"
+
+msgid "Customize MADS"
+msgstr "Настройка MADS"
+
+msgid "Clear Model Cache"
+msgstr "Очистить кэш моделей"
+
+msgid "Enable Dynamic Experimental Control"
+msgstr "Включить динамический экспериментальный режим"
+
+msgid "Enable toggle to allow the model to determine when to use sunnypilot ACC or sunnypilot End to End Longitudinal."
+msgstr "Включить переключатель, чтобы модель выбирала между sunnypilot ACC и End-to-End продольным управлением."
+
+msgid "Enabling this will display warnings when a vehicle is detected in your blind spot as long as your car has BSM supported."
+msgstr "При включении — предупреждения о машине в слепой зоне (если установлен Side Assist)."
+
+msgid "Fetching Latest Models"
+msgstr "Загрузка последних моделей"
+
+msgid "If you're driving at 20 mph (32 km/h) or below and have your blinker on, the car will plan a turn in that direction at the nearest drivable path. If you don't turn at the planned turn, the car will cancel the turn."
+msgstr "Если скорость ниже 32 км/ч и включён поворотник, авто запланирует поворот по ближайшей проезжей части. Если поворот не начат — он отменяется."
+
+msgid "Live Learning Steer Delay"
+msgstr "Адаптивная задержка руля"
+
+msgid "Manual Software Delay"
+msgstr "Ручная задержка ПО"
+
+msgid "On-Policy Model"
+msgstr "Текущая модель политики"
+
+msgid "Pause lateral control with blinker when traveling below the desired speed selected."
+msgstr "При скорости ниже заданной и включённом поворотнике — пауза бокового управления."
+
+msgid "Pause Lateral Control with Blinker"
+msgstr "Пауза бокового управления при вкл поворотнике"
+
+msgid "Refresh Model List"
+msgstr "Обновить список моделей"
+
+msgid "Show Blind Spot Warnings"
+msgstr "Показывать предупреждения о слепой зоне"
+
+msgid "Software delay to use when Live Learning Steer Delay is toggled off"
+msgstr "Задержка отклика руля при отключённой автонастройке"
+
+msgid "Use Lane Turn Desires"
+msgstr "Автоматический выбор перестроений и поворотов"
+
+msgid "Wake Up Behavior"
+msgstr "При пробуждении"
+
+msgid "Click \"add new device\" and scan the QR code on the right"
+msgstr "Нажмите «Добавить устройство» и отсканируйте QR-код справа"
+
+msgid "Forget Wi-Fi Network \"{}\"?"
+msgstr "Забыть сеть Wi-Fi «{}»?"
+
+msgid "Re-enter the \"sunnylink\" panel to verify sponsorship status"
+msgstr "Повторно откройте панель «sunnylink» для проверки статуса спонсорства"
+
+msgid "for \"{}\""
+msgstr "для \"{}\""
