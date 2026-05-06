@@ -2,6 +2,24 @@
 
 [![languages](https://raw.githubusercontent.com/commaai/openpilot/badges/translation_badge.svg)](#)
 
+## Supported Languages
+
+| Language | Code | Localization | Maintainer |
+|----------|------|--------------|------------|
+| English | en_US | 100% | - |
+| Русский | ru_RU | 100% (774 translations) | Community |
+| Deutsch | de_DE | - | Community |
+| Español | es_ES | - | Community |
+| Français | fr_FR | - | Community |
+| العربية | ar_SA | - | Community |
+| Português (Brasil) | pt_BR | - | Community |
+| 한국어 | ko_KR | - | Community |
+| 日本語 | ja_JP | - | Community |
+| 中文（简体） | zh_CHS | - | Community |
+| 中文（繁體） | zh_CHT | - | Community |
+| ไทย | th_TH | - | Community |
+| Türkçe | tr_TR | - | Community |
+
 ## Contributing
 
 Before getting started, make sure you have set up the openpilot Ubuntu development environment by reading the [tools README.md](/tools/README.md).
