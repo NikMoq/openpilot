@@ -22,8 +22,8 @@ from openpilot.system.version import is_prebuilt
 from openpilot.sunnypilot.mapd import MAPD_PATH, MAPD_BIN_DIR
 import openpilot.system.sentry as sentry
 
-VERSION = "v1.12.0"
-URL = f"https://github.com/pfeiferj/openpilot-mapd/releases/download/{VERSION}/mapd"
+VERSION = "v1.0.0"
+URL = f"https://github.com/NikMoq/mapd/releases/download/{VERSION}/mapd-linux-arm64.tar.gz"
 
 
 def update_installed_version(version: str, params: Params = None) -> None:
@@ -67,15 +67,28 @@ class MapdInstallManager:
     os.chmod(file_path, current_permissions | stat.S_IEXEC)
 
   def _download_file(self, num_retries=5) -> None:
-    temp_file = Path(MAPD_PATH + ".tmp")
-    download_timeout = 60
+    import tarfile
+    temp_archive = Path(MAPD_PATH + ".tar.gz.tmp")
+    download_timeout = 120
     for cnt in range(num_retries):
       try:
         response = requests.get(URL, stream=True, timeout=download_timeout)
         response.raise_for_status()
-        self._safe_write_and_set_executable(temp_file, response.content)
-        # No exceptions encountered. Safe to replace original file.
-        temp_file.replace(MAPD_PATH)
+        # Save archive
+        with open(temp_archive, 'wb') as f:
+          for chunk in response.iter_content(chunk_size=8192):
+            f.write(chunk)
+        # Extract tar.gz
+        with tarfile.open(temp_archive, "r:gz") as tar:
+          for member in tar.getmembers():
+            if member.name.endswith('mapd-linux-arm64') or member.name == 'mapd':
+              member.name = os.path.basename(member.name)
+              tar.extract(member, path=MAPD_BIN_DIR)
+              extracted_path = os.path.join(MAPD_BIN_DIR, member.name)
+              os.rename(extracted_path, MAPD_PATH)
+              self._safe_write_and_set_executable(Path(MAPD_PATH), open(MAPD_PATH, 'rb').read())
+              break
+        temp_archive.unlink(missing_ok=True)
         return
       except requests.exceptions.ReadTimeout:
         self._spinner.update(f"ReadTimeout caught. Timeout is [{download_timeout}]. Retrying download... [{cnt}]")
@@ -85,8 +98,8 @@ class MapdInstallManager:
         time.sleep(0.5)
 
     # Delete temp file if the process was not successful.
-    if temp_file.exists():
-      temp_file.unlink()
+    if temp_archive.exists():
+      temp_archive.unlink()
     logging.error("Failed to download file after all retries")
 
   def get_installed_version(self) -> str:
