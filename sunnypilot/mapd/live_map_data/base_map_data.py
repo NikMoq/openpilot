@@ -43,21 +43,10 @@ class BaseMapData(ABC):
     pass
 
   def publish(self) -> None:
-    speed_limit = self.get_current_speed_limit()
-    next_speed_limit, next_speed_limit_distance = self.get_next_speed_limit_and_distance()
-
-    mapd_sp_send = messaging.new_message('liveMapDataSP')
-    mapd_sp_send.valid = self.sm['liveLocationKalman'].gpsOK
-    live_map_data = mapd_sp_send.liveMapDataSP
-
-    live_map_data.speedLimitValid = bool(MAX_SPEED_LIMIT > speed_limit > 0)
-    live_map_data.speedLimit = speed_limit
-    live_map_data.speedLimitAheadValid = bool(MAX_SPEED_LIMIT > next_speed_limit > 0)
-    live_map_data.speedLimitAhead = next_speed_limit
-    live_map_data.speedLimitAheadDistance = next_speed_limit_distance
-    live_map_data.roadName = self.get_current_road_name()
-
-    self.pm.send('liveMapDataSP', mapd_sp_send)
+    # Speed camera data is now published natively by Go mapd daemon
+    # via liveMapDataSP (no Python bridge required)
+    # Python no longer publishes to avoid conflicts with Go publisher
+    pass
 
   def tick(self) -> None:
     self.sm.update(0)

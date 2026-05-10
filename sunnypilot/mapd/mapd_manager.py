@@ -17,6 +17,7 @@ from openpilot.common.realtime import Ratekeeper, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.sunnypilot.mapd.live_map_data.osm_map_data import OsmMapData
+from openpilot.sunnypilot.mapd.mapd_installer import MapdInstallManager
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd import MAPD_PATH
 from openpilot.sunnypilot.mapd.mapd_installer import VERSION, update_installed_version
@@ -118,6 +119,15 @@ def update_osm_db() -> None:
   if not mem_params.get("LastGPSPosition"):
     mem_params.put("LastGPSPosition", "{}")
 
+  # Download radar database when OSM maps are downloaded
+  if params.get_bool("OsmDbUpdatesCheck"):
+    region_id = params.get("OsmRegionId", return_default=True) or "russia_krasnodar"
+    from openpilot.sunnypilot.mapd.mapd_installer import MapdInstallManager
+    try:
+      MapdInstallManager.download_radar_database(region_id)
+    except Exception as e:
+      cloudlog.exception(f"Failed to download radar database: {e}")
+
 
 def main_thread():
   update_installed_version(VERSION, params)
@@ -133,6 +143,16 @@ def main_thread():
     pass
   except PermissionError:
     cloudlog.exception(f"mapd: failed to make {Paths.mapd_root()}")
+
+  # Download radar database on first run if not exists
+  radar_path = os.path.join(Paths.mapd_root(), 'radars', 'Rus.radar.txt')
+  if not os.path.exists(radar_path):
+    region_id = params.get("OsmRegionId", return_default=True) or "russia_krasnodar"
+    cloudlog.info(f"Radar database not found, attempting download for region: {region_id}...")
+    try:
+      MapdInstallManager.download_radar_database(region_id)
+    except Exception as e:
+      cloudlog.exception(f"Failed to download radar database: {e}")
 
   while True:
     show_alert = get_files_for_cleanup() and params.get_bool("OsmLocal")

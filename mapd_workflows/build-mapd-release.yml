@@ -43,12 +43,19 @@ jobs:
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
           export GO_CAPNP_PATH=/tmp/go-capnp/std
+          # Fix module paths for fork
+          sed -i 's|pfeifer.dev/mapd|github.com/NikMoq/mapd|g' go.mod
+          find . -name '*.go' -exec sed -i 's|pfeifer.dev/mapd|github.com/NikMoq/mapd|g' {} +
+          find . -name '*.capnp' -exec sed -i 's|pfeifer.dev/mapd|github.com/NikMoq/mapd|g' {} +
+          # Force regenerate all capnp Go files
+          rm -f cereal/*/*.capnp.go
           make capnp
+          go mod tidy
 
       - name: Build native mapd
         run: |
           go build -ldflags="-s -w" -o mapd-native .
-          ./mapd-native version || true
+          file mapd-native
 
       - name: Upload native binary
         uses: actions/upload-artifact@v4
@@ -57,10 +64,10 @@ jobs:
           path: mapd-native
 
   # ============================================================================
-  # Job 2: Build ARM64 binary (for comma device) - FAST with cross-compile
+  # Job 2: Build ARM64 binary (for comma device) - native ARM64 runner
   # ============================================================================
   build-arm64:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -74,14 +81,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          key: ${{ runner.os }}-arm-go-${{ hashFiles('go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-arm-go-
 
       - name: Install capnproto
         run: |
           sudo apt-get update
-          sudo apt-get install -y capnproto gcc-aarch64-linux-gnu
+          sudo apt-get install -y capnproto libz-dev
           go install capnproto.org/go/capnp/v3/capnpc-go@v3.1.0-alpha.1
           git clone -b v3.1.0-alpha.1 --depth 1 https://github.com/capnproto/go-capnp /tmp/go-capnp
 
@@ -89,12 +96,18 @@ jobs:
         run: |
           export PATH=$PATH:$(go env GOPATH)/bin
           export GO_CAPNP_PATH=/tmp/go-capnp/std
+          # Fix module paths for fork
+          sed -i 's|pfeifer.dev/mapd|github.com/NikMoq/mapd|g' go.mod
+          find . -name '*.go' -exec sed -i 's|pfeifer.dev/mapd|github.com/NikMoq/mapd|g' {} +
+          find . -name '*.capnp' -exec sed -i 's|pfeifer.dev/mapd|github.com/NikMoq/mapd|g' {} +
+          # Force regenerate all capnp Go files
+          rm -f cereal/*/*.capnp.go
           make capnp
+          go mod tidy
 
-      - name: Build ARM64 mapd (cross-compile)
+      - name: Build ARM64 mapd (native)
         run: |
-          CC=aarch64-linux-gnu-gcc GOOS=linux GOARCH=arm64 CGO_ENABLED=1 \
-            go build -ldflags="-s -w" -o mapd-linux-arm64 .
+          go build -ldflags="-s -w" -o mapd-linux-arm64 .
           file mapd-linux-arm64
 
       - name: Upload ARM64 binary

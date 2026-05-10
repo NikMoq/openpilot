@@ -1,0 +1,116 @@
+{
+  "regions": [
+    {
+      "id": "russia_krasnodar",
+      "country": "Russia",
+      "state": "Krasnodar Krai",
+      "title": "Krasnodar Krai",
+      "bounds": {
+        "north": 47.0,
+        "south": 44.0,
+        "east": 41.5,
+        "west": 37.0
+      },
+      "radar_url": "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt",
+      "size_mb": 2400
+    },
+    {
+      "id": "russia_moscow",
+      "country": "Russia",
+      "state": "Moscow",
+      "title": "Moscow Region",
+      "bounds": {
+        "north": 56.0,
+        "south": 55.2,
+        "east": 38.0,
+        "west": 36.0
+      },
+      "radar_url": "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt",
+      "size_mb": 800
+    },
+    {
+      "id": "russia_sochi",
+      "country": "Russia",
+      "state": "Krasnodar Krai",
+      "title": "Sochi Region",
+      "bounds": {
+        "north": 44.1,
+        "south": 43.4,
+        "east": 40.0,
+        "west": 39.6
+      },
+      "radar_url": "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt",
+      "size_mb": 400
+    },
+    {
+      "id": "russia_crimea",
+      "country": "Russia",
+      "state": "Crimea",
+      "title": "Crimea",
+      "bounds": {
+        "north": 46.0,
+        "south": 44.4,
+        "east": 36.7,
+        "west": 33.2
+      },
+      "radar_url": "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt",
+      "size_mb": 600
+    },
+    {
+      "id": "russia_rostov",
+      "country": "Russia",
+      "state": "Rostov Oblast",
+      "title": "Rostov Oblast",
+      "bounds": {
+        "north": 48.5,
+        "south": 46.8,
+        "east": 41.0,
+        "west": 38.5
+      },
+      "radar_url": "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt",
+      "size_mb": 500
+    },
+    {
+      "id": "russia_stavropol",
+      "country": "Russia",
+      "state": "Stavropol Krai",
+      "title": "Stavropol Krai",
+      "bounds": {
+        "north": 45.5,
+        "south": 43.8,
+        "east": 44.0,
+        "west": 41.5
+      },
+      "radar_url": "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt",
+      "size_mb": 550
+    },
+    {
+      "id": "russia_adygea",
+      "country": "Russia",
+      "state": "Adygea",
+      "title": "Adygea",
+      "bounds": {
+        "north": 45.2,
+        "south": 44.5,
+        "east": 40.5,
+        "west": 39.5
+      },
+      "radar_url": "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt",
+      "size_mb": 200
+    },
+    {
+      "id": "russia_entire",
+      "country": "Russia",
+      "state": "All",
+      "title": "Entire Russia",
+      "bounds": {
+        "north": 82.0,
+        "south": 41.0,
+        "east": 190.0,
+        "west": 19.0
+      },
+      "radar_url": "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt",
+      "size_mb": 15000
+    }
+  ]
+}

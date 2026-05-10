@@ -7,6 +7,7 @@ See the LICENSE.md file in the root directory for more details.
 """
 import logging
 import os
+import json
 import stat
 import time
 import traceback
@@ -56,6 +57,47 @@ class MapdInstallManager:
       os.makedirs(Paths.mapd_root())
     if not os.path.exists(MAPD_BIN_DIR):
       os.makedirs(MAPD_BIN_DIR)
+    # Ensure camera database directory exists
+    camera_dir = os.path.join(Paths.mapd_root(), 'radars')
+    if not os.path.exists(camera_dir):
+      os.makedirs(camera_dir)
+
+  @staticmethod
+  def download_radar_database(region_id: str = None) -> bool:
+    """Download production radar database for selected region or default (Krasnodar Krai)."""
+    import urllib.request
+    import urllib.error
+
+    # Load regions metadata
+    regions_file = os.path.join(os.path.dirname(__file__), 'regions.json')
+    radar_url = None
+
+    if region_id and os.path.exists(regions_file):
+      try:
+        with open(regions_file, 'r') as f:
+          regions_data = json.load(f)
+        for region in regions_data.get('regions', []):
+          if region.get('id') == region_id:
+            radar_url = region.get('radar_url')
+            break
+      except Exception as e:
+        print(f"Failed to load regions metadata: {e}")
+
+    # Default radar URL if no region specified or not found
+    if not radar_url:
+      radar_url = "https://raw.githubusercontent.com/NikMoq/mapd/main/data/Rus.radar.txt"
+
+    radar_path = os.path.join(Paths.mapd_root(), 'radars', 'Rus.radar.txt')
+
+    try:
+      urllib.request.urlretrieve(radar_url, radar_path)
+      if os.path.exists(radar_path):
+        print(f"Radar database downloaded successfully: {radar_path}")
+        return True
+    except Exception as e:
+      print(f"Failed to download radar database: {e}")
+
+    return False
 
   @staticmethod
   def _safe_write_and_set_executable(file_path: Path, content: bytes) -> None:
@@ -134,12 +176,21 @@ class MapdInstallManager:
       if not self.download_needed():
         self._spinner.update("Mapd is good!")
         time.sleep(0.1)
-        return
+      else:
+        if self.wait_for_internet_connection(return_on_failure=True):
+          self._spinner.update(f"Downloading pfeiferj's mapd [{self.get_installed_version()}] => [{VERSION}].")
+          time.sleep(0.1)
+          self.check_and_download()
 
-      if self.wait_for_internet_connection(return_on_failure=True):
-        self._spinner.update(f"Downloading pfeiferj's mapd [{self.get_installed_version()}] => [{VERSION}].")
-        time.sleep(0.1)
-        self.check_and_download()
+      # Get selected region and download radar database
+      region_id = self._params.get("OsmRegionId", return_default=True) or "russia_krasnodar"
+      self._spinner.update("Downloading radar database...")
+      if self.download_radar_database(region_id):
+        self._spinner.update("Radar database installed.")
+      else:
+        self._spinner.update("Radar database download failed, continuing without cameras.")
+
+      time.sleep(0.1)
       self._spinner.close()
 
     except Exception:
