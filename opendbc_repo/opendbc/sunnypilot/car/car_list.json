@@ -3789,23 +3789,123 @@
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
-  "Volkswagen Caddy 2019": {
-    "platform": "VOLKSWAGEN_CADDY_MK3",
+  "Volkswagen Caddy 10-20": {
+    "platform": "VOLKSWAGEN_CADDY_10_20",
     "make": "Volkswagen",
     "brand": "volkswagen",
     "model": "Caddy",
     "year": [
-      "2019"
+      "2010",
+      "2011",
+      "2012",
+      "2013",
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020"
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
-  "Volkswagen Caddy Maxi 2019": {
-    "platform": "VOLKSWAGEN_CADDY_MK3",
+  "Volkswagen Caddy 10-20 CNG": {
+    "platform": "VOLKSWAGEN_CADDY_10_20_CNG",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Caddy CNG",
+    "year": [
+      "2010",
+      "2011",
+      "2012",
+      "2013",
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen Caddy 4Motion 10-20": {
+    "platform": "VOLKSWAGEN_CADDY_10_20_4MOTION",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Caddy 4Motion",
+    "year": [
+      "2010",
+      "2011",
+      "2012",
+      "2013",
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen Caddy Maxi 10-20": {
+    "platform": "VOLKSWAGEN_CADDY_MAXI_10_20",
     "make": "Volkswagen",
     "brand": "volkswagen",
     "model": "Caddy Maxi",
     "year": [
-      "2019"
+      "2010",
+      "2011",
+      "2012",
+      "2013",
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen Caddy Maxi 10-20 CNG": {
+    "platform": "VOLKSWAGEN_CADDY_MAXI_10_20_CNG",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Caddy Maxi CNG",
+    "year": [
+      "2010",
+      "2011",
+      "2012",
+      "2013",
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen Caddy Maxi 4Motion 10-20": {
+    "platform": "VOLKSWAGEN_CADDY_MAXI_10_20_4MOTION",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "Caddy Maxi 4Motion",
+    "year": [
+      "2010",
+      "2011",
+      "2012",
+      "2013",
+      "2014",
+      "2015",
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020"
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },

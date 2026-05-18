@@ -119,7 +119,62 @@ FW_VERSIONS = {
       b'\xf1\x875Q0907572S \xf1\x890780',
     ],
   },
-  CAR.VOLKSWAGEN_CADDY_MK3: {
+  CAR.VOLKSWAGEN_CADDY_10_20: {
+    (Ecu.engine, 0x7e0, None): [
+      b'\xf1\x8704E906027T \xf1\x892363',
+    ],
+    (Ecu.srs, 0x715, None): [
+      b'\xf1\x872K5959655E \xf1\x890018\xf1\x82\x05000P037605',
+    ],
+    (Ecu.fwdRadar, 0x757, None): [
+      b'\xf1\x877N0907572C \xf1\x890211\xf1\x82\x0155',
+    ],
+  },
+  CAR.VOLKSWAGEN_CADDY_10_20_CNG: {
+    (Ecu.engine, 0x7e0, None): [
+      b'\xf1\x8704E906027T \xf1\x892363',
+    ],
+    (Ecu.srs, 0x715, None): [
+      b'\xf1\x872K5959655E \xf1\x890018\xf1\x82\x05000P037605',
+    ],
+    (Ecu.fwdRadar, 0x757, None): [
+      b'\xf1\x877N0907572C \xf1\x890211\xf1\x82\x0155',
+    ],
+  },
+  CAR.VOLKSWAGEN_CADDY_10_20_4MOTION: {
+    (Ecu.engine, 0x7e0, None): [
+      b'\xf1\x8704E906027T \xf1\x892363',
+    ],
+    (Ecu.srs, 0x715, None): [
+      b'\xf1\x872K5959655E \xf1\x890018\xf1\x82\x05000P037605',
+    ],
+    (Ecu.fwdRadar, 0x757, None): [
+      b'\xf1\x877N0907572C \xf1\x890211\xf1\x82\x0155',
+    ],
+  },
+  CAR.VOLKSWAGEN_CADDY_MAXI_10_20: {
+    (Ecu.engine, 0x7e0, None): [
+      b'\xf1\x8704E906027T \xf1\x892363',
+    ],
+    (Ecu.srs, 0x715, None): [
+      b'\xf1\x872K5959655E \xf1\x890018\xf1\x82\x05000P037605',
+    ],
+    (Ecu.fwdRadar, 0x757, None): [
+      b'\xf1\x877N0907572C \xf1\x890211\xf1\x82\x0155',
+    ],
+  },
+  CAR.VOLKSWAGEN_CADDY_MAXI_10_20_CNG: {
+    (Ecu.engine, 0x7e0, None): [
+      b'\xf1\x8704E906027T \xf1\x892363',
+    ],
+    (Ecu.srs, 0x715, None): [
+      b'\xf1\x872K5959655E \xf1\x890018\xf1\x82\x05000P037605',
+    ],
+    (Ecu.fwdRadar, 0x757, None): [
+      b'\xf1\x877N0907572C \xf1\x890211\xf1\x82\x0155',
+    ],
+  },
+  CAR.VOLKSWAGEN_CADDY_MAXI_10_20_4MOTION: {
     (Ecu.engine, 0x7e0, None): [
       b'\xf1\x8704E906027T \xf1\x892363',
     ],

@@ -264,12 +264,51 @@ class CAR(Platforms):
     chassis_codes={"CA"},
     wmis={WMI.VOLKSWAGEN_USA_SUV, WMI.VOLKSWAGEN_EUROPE_SUV},
   )
-  VOLKSWAGEN_CADDY_MK3 = VolkswagenPQPlatformConfig(
+  VOLKSWAGEN_CADDY_10_20 = VolkswagenPQPlatformConfig(
     [
-      VWCarDocs("Volkswagen Caddy 2019"),
-      VWCarDocs("Volkswagen Caddy Maxi 2019"),
+      VWCarDocs("Volkswagen Caddy 10-20"),
     ],
-    VolkswagenCarSpecs(mass=1613, wheelbase=2.6, minSteerSpeed=0.0),
+    VolkswagenCarSpecs(mass=1390, wheelbase=2.682, minSteerSpeed=0.0),
+    chassis_codes={"2K"},
+    wmis={WMI.VOLKSWAGEN_COMMERCIAL_BUS_VAN},
+  )
+  VOLKSWAGEN_CADDY_MAXI_10_20 = VolkswagenPQPlatformConfig(
+    [
+      VWCarDocs("Volkswagen Caddy Maxi 10-20"),
+    ],
+    VolkswagenCarSpecs(mass=1480, wheelbase=3.006, minSteerSpeed=0.0),
+    chassis_codes={"2K"},
+    wmis={WMI.VOLKSWAGEN_COMMERCIAL_BUS_VAN},
+  )
+  VOLKSWAGEN_CADDY_10_20_CNG = VolkswagenPQPlatformConfig(
+    [
+      VWCarDocs("Volkswagen Caddy 10-20 CNG"),
+    ],
+    VolkswagenCarSpecs(mass=1445, wheelbase=2.682, minSteerSpeed=0.0),
+    chassis_codes={"2K"},
+    wmis={WMI.VOLKSWAGEN_COMMERCIAL_BUS_VAN},
+  )
+  VOLKSWAGEN_CADDY_MAXI_10_20_CNG = VolkswagenPQPlatformConfig(
+    [
+      VWCarDocs("Volkswagen Caddy Maxi 10-20 CNG"),
+    ],
+    VolkswagenCarSpecs(mass=1600, wheelbase=3.006, minSteerSpeed=0.0),
+    chassis_codes={"2K"},
+    wmis={WMI.VOLKSWAGEN_COMMERCIAL_BUS_VAN},
+  )
+  VOLKSWAGEN_CADDY_10_20_4MOTION = VolkswagenPQPlatformConfig(
+    [
+      VWCarDocs("Volkswagen Caddy 4Motion 10-20"),
+    ],
+    VolkswagenCarSpecs(mass=1590, wheelbase=2.682, minSteerSpeed=0.0),
+    chassis_codes={"2K"},
+    wmis={WMI.VOLKSWAGEN_COMMERCIAL_BUS_VAN},
+  )
+  VOLKSWAGEN_CADDY_MAXI_10_20_4MOTION = VolkswagenPQPlatformConfig(
+    [
+      VWCarDocs("Volkswagen Caddy Maxi 4Motion 10-20"),
+    ],
+    VolkswagenCarSpecs(mass=1665, wheelbase=3.006, minSteerSpeed=0.0),
     chassis_codes={"2K"},
     wmis={WMI.VOLKSWAGEN_COMMERCIAL_BUS_VAN},
   )
