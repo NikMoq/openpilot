@@ -187,10 +187,13 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
   }
 
   // FORCE CANCEL: ensuring that only the cancel button press is sent when controls are off.
-  // This avoids unintended engagements while still allowing resume spam
+  // This avoids unintended engagements while still allowing resume/speed button spam when engaged.
   if ((msg->addr == MSG_GRA_ACC_01) && !controls_allowed) {
-    // disallow resume and set: bits 16 and 19
-    if ((msg->data[2] & 0x9U) != 0U) {
+    // Signal: GRA_ACC_01.GRA_Tip_Setzen
+    // Signal: GRA_ACC_01.GRA_Tip_Hoch
+    // Signal: GRA_ACC_01.GRA_Tip_Runter
+    // Signal: GRA_ACC_01.GRA_Tip_Wiederaufnahme
+    if ((msg->data[2] & 0xFU) != 0U) {
       tx = false;
     }
   }

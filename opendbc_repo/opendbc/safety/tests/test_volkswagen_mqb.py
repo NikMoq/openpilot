@@ -80,8 +80,14 @@ class TestVolkswagenMqbSafetyBase(common.PandaCarSafetyTest, common.DriverTorque
     return self.packer.make_can_msg_panda("HCA_01", 0, values)
 
   # Cruise control buttons
-  def _gra_acc_01_msg(self, cancel=0, resume=0, _set=0, bus=2):
-    values = {"GRA_Abbrechen": cancel, "GRA_Tip_Setzen": _set, "GRA_Tip_Wiederaufnahme": resume}
+  def _gra_acc_01_msg(self, cancel=0, resume=0, _set=0, accel=0, decel=0, bus=2):
+    values = {
+      "GRA_Abbrechen": cancel,
+      "GRA_Tip_Setzen": _set,
+      "GRA_Tip_Hoch": accel,
+      "GRA_Tip_Runter": decel,
+      "GRA_Tip_Wiederaufnahme": resume,
+    }
     return self.packer.make_can_msg_panda("GRA_ACC_01", bus, values)
 
   # Acceleration request to drivetrain coordinator
@@ -142,9 +148,13 @@ class TestVolkswagenMqbStockSafety(TestVolkswagenMqbSafetyBase):
     self.assertTrue(self._tx(self._gra_acc_01_msg(cancel=1)))
     self.assertFalse(self._tx(self._gra_acc_01_msg(resume=1)))
     self.assertFalse(self._tx(self._gra_acc_01_msg(_set=1)))
-    # do not block resume if we are engaged already
+    self.assertFalse(self._tx(self._gra_acc_01_msg(accel=1)))
+    self.assertFalse(self._tx(self._gra_acc_01_msg(decel=1)))
+    # do not block resume or speed adjustments if we are engaged already
     self.safety.set_controls_allowed(1)
     self.assertTrue(self._tx(self._gra_acc_01_msg(resume=1)))
+    self.assertTrue(self._tx(self._gra_acc_01_msg(accel=1)))
+    self.assertTrue(self._tx(self._gra_acc_01_msg(decel=1)))
 
 
 class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):

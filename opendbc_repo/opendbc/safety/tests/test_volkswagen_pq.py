@@ -84,8 +84,14 @@ class TestVolkswagenPqSafetyBase(common.PandaCarSafetyTest, common.DriverTorqueS
     return self.packer.make_can_msg_panda("Motor_3", 0, values)
 
   # Cruise control buttons (GRA_Neu)
-  def _button_msg(self, _set=False, resume=False, cancel=False, bus=2):
-    values = {"GRA_Neu_Setzen": _set, "GRA_Recall": resume, "GRA_Abbrechen": cancel}
+  def _button_msg(self, _set=False, resume=False, cancel=False, accel=False, decel=False, bus=2):
+    values = {
+      "GRA_Neu_Setzen": _set,
+      "GRA_Recall": resume,
+      "GRA_Abbrechen": cancel,
+      "GRA_Up_kurz": accel,
+      "GRA_Down_kurz": decel,
+    }
     return self.packer.make_can_msg_panda("GRA_Neu", bus, values)
 
   def test_torque_measurements(self):
@@ -125,9 +131,13 @@ class TestVolkswagenPqStockSafety(TestVolkswagenPqSafetyBase):
     self.assertTrue(self._tx(self._button_msg(cancel=True)))
     self.assertFalse(self._tx(self._button_msg(resume=True)))
     self.assertFalse(self._tx(self._button_msg(_set=True)))
-    # do not block resume if we are engaged already
+    self.assertFalse(self._tx(self._button_msg(accel=True)))
+    self.assertFalse(self._tx(self._button_msg(decel=True)))
+    # do not block resume or speed adjustments if we are engaged already
     self.safety.set_controls_allowed(1)
     self.assertTrue(self._tx(self._button_msg(resume=True)))
+    self.assertTrue(self._tx(self._button_msg(accel=True)))
+    self.assertTrue(self._tx(self._button_msg(decel=True)))
 
 
 class TestVolkswagenPqLongSafety(TestVolkswagenPqSafetyBase, common.LongitudinalAccelSafetyTest):

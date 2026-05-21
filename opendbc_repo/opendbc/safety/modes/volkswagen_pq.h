@@ -198,11 +198,19 @@ static bool volkswagen_pq_tx_hook(const CANPacket_t *msg) {
   }
 
   // FORCE CANCEL: ensuring that only the cancel button press is sent when controls are off.
-  // This avoids unintended engagements while still allowing resume spam
+  // This avoids unintended engagements while still allowing resume/speed button spam when engaged.
   if ((msg->addr == MSG_GRA_NEU) && !controls_allowed) {
     // Signal: GRA_Neu.GRA_Neu_Setzen
-    // Signal: GRA_Neu.GRA_Neu_Recall
-    if (GET_BIT(msg, 16U) || GET_BIT(msg, 17U)) {
+    // Signal: GRA_Neu.GRA_Recall
+    // Signal: GRA_Neu.GRA_Down_kurz
+    // Signal: GRA_Neu.GRA_Up_kurz
+    // Signal: GRA_Neu.GRA_Down_lang
+    // Signal: GRA_Neu.GRA_Up_lang
+    // Signal: GRA_Neu.GRA_Tip_Down
+    // Signal: GRA_Neu.GRA_Tip_Up
+    bool speed_button = GET_BIT(msg, 10U) || GET_BIT(msg, 11U) || GET_BIT(msg, 12U) || GET_BIT(msg, 13U) ||
+                        GET_BIT(msg, 24U) || GET_BIT(msg, 25U);
+    if (GET_BIT(msg, 16U) || GET_BIT(msg, 17U) || speed_button) {
       tx = false;
     }
   }
