@@ -1,0 +1,30 @@
+{
+  "profile": "PANDA_1000_DEV",
+  "base_repository": "https://github.com/NikMoq/openpilot.git",
+  "base_branch": "pqplatform",
+  "base_commit": "42a6bb6cc389e54f0dbb6b26a8eb43e9f503ff33",
+  "dev_branch": "dev",
+  "artifact": "panda/board/obj/panda.bin.signed",
+  "source_stock_sha256": "ef8ea87c17f0802bec38f754d93a3fb2c9850c640b5ba95e01e661323545daba",
+  "dev_sha256": "42ab4e5731225fe029e2a3a725379e25fc93cdb3070f17846489d9587c90d15c",
+  "size": 57668,
+  "payload_change": {
+    "offsets": ["0x8B1C", "0x8B1D"],
+    "old_le_u32": 300,
+    "new_le_u32": 1000
+  },
+  "unchanged_limits": {
+    "max_rate_up": 6,
+    "max_rate_down": 10,
+    "max_rt_delta": 113,
+    "driver_torque_allowance": 80,
+    "driver_torque_multiplier": 3,
+    "type": "TorqueDriverLimited"
+  },
+  "signature": {
+    "algorithm": "Panda RSA-1024 custom SHA-1 encoding",
+    "verified": true
+  },
+  "flash_ready": false,
+  "bench_ready": false
+}
