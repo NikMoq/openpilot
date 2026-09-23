@@ -1,8 +1,11 @@
+import subprocess
+
 from openpilot.common.params import Params
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.widgets import Widget, DialogResult
 from openpilot.system.ui.widgets.confirm_dialog import confirm_dialog
 from openpilot.system.ui.widgets.list_view import button_item, text_item
+from openpilot.system.ui.widgets.option_dialog import MultiOptionDialog
 from openpilot.system.ui.widgets.scroller import Scroller
 
 
@@ -11,6 +14,7 @@ class SoftwareLayout(Widget):
     super().__init__()
 
     self._params = Params()
+    self._branch_dialog: MultiOptionDialog | None = None
     items = self._init_items()
     self._scroller = Scroller(items, line_separator=True, spacing=0)
 
@@ -29,7 +33,18 @@ class SoftwareLayout(Widget):
 
   def _on_download_update(self): pass
   def _on_install_update(self): pass
-  def _on_select_branch(self): pass
+
+  def _on_select_branch(self):
+    branches = [b for b in (self._params.get("UpdaterAvailableBranches") or "").split(",") if b]
+    current_target = self._params.get("UpdaterTargetBranch") or ""
+    self._branch_dialog = MultiOptionDialog("Select a branch", branches, current_target)
+    gui_app.set_modal_overlay(self._branch_dialog, callback=self._handle_branch_selection)
+
+  def _handle_branch_selection(self, result: int):
+    if result == DialogResult.CONFIRM and self._branch_dialog and self._branch_dialog.selection:
+      self._params.put("UpdaterTargetBranch", self._branch_dialog.selection)
+      subprocess.run("pkill -SIGUSR1 -f openpilot.system.updated.updated", shell=True)
+    self._branch_dialog = None
 
   def _on_uninstall(self):
     def handle_uninstall_confirmation(result):
