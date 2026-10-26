@@ -219,6 +219,7 @@ def test_file_param_through_longitudinal_into_real_camera_adapter(wired_planner,
   cs.cruiseState.enabled = True
   cs.cruiseState.speed = 110 / 3.6
   cs.gasPressed = cs.brakePressed = False
+  cs.buttonEvents = []
   cc = wired.sm["carControl"]
   cc.cruiseControl.cancel = cc.cruiseControl.resume = False
   wired.sm["gpsLocation"] = SimpleNamespace(

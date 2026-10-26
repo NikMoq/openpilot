@@ -92,18 +92,50 @@ stay unchanged on the wire. The offset applies only inside the camera planner;
 raising it during an active camera episode cannot raise the existing ceiling,
 while reducing it can lower that ceiling.
 
-Manual buttons/pedals hand over the current stock setpoint. Short inputs are
-latched at carState cadence before model planning. Passage needs two distinct
-fresh fixes behind the saved camera plus a fresh map generation before release.
-Manual intervention during the subsequent '+' return cannot restore an older
-higher virtual setpoint. Disengagement resets the episode.
+The confirmed driver-override contract preserves the driver's original cruise
+setting throughout a camera episode. Gas temporarily yields button authority;
+after release an ahead camera's ceiling applies again. Brake disengages stock
+ACC without erasing the setting or camera geometry. Resuming requires physical
+RES and engaged stock ACC; the controller does not automatically enable ACC.
+
+The user chose OPTION 1 for physical +/- during a camera episode: temporary
+native ACC correction, followed by return to the original setting after passage.
+The native increment is read through stock feedback, not assumed to be 1 or 10.
+A press begun during the episode remains temporary if released after passage.
+Outside the episode, ordinary speed-button and road Speed Limit Assist behavior
+is retained. Reengaging with SET takes a new base from valid native feedback
+after the button is released; RES keeps the remembered base. Main cruise off
+ends the remembered session. Explicit cancel is
+distinct from a temporary pedal or speed-button override.
+
+Short inputs are latched at carState cadence before model planning. Passage
+needs two distinct fresh fixes behind the saved camera plus a fresh map
+generation before release. Geometry continues during temporary overrides, and
+confirmed passage is retained if a pedal remains pressed beyond the passage
+window. Other lower planner constraints still bound the resulting target.
+Actual ICBM transmission stops directly on physical pedals or disengaged stock
+ACC, including when carControl is one frame late. During a temporary camera
+manual state, transmission remains suspended even if another planner constraint
+is below the driver's native correction. Automatic authority resumes through
+the existing 0.4-second activation delay when the temporary handover ends.
 
 ## Validation
 
-- Follow-up portable suite: 853 passed, including full external BKM, producer,
+- Driver-override follow-up: 986 portable tests passed, zero skipped, including
+  the full external BKM fixture and the updated helper/controller/planner/sender
+  scenarios. Linux native suite: 72 passed, zero skipped. Real helper -> decoded
+  carState -> planner -> decoded plan -> ICBM sender covers gas, brake/RES, SET,
+  temporary +/- corrections, held buttons across passage, +19 camera offset,
+  and a lower Vision constraint. Tests also check that a temporary manual
+  correction above the remembered base is not counteracted by ICBM.
+- Native source snapshots match all five changed production modules. Shared
+  helper/sender timers are now per-instance. Explicit SET after disengagement
+  takes fresh stock feedback; a brake before any camera does not create a false
+  RES requirement for the next camera. No device/CAN actuation was used.
+- Settings/selection follow-up portable suite: 853 passed, including full external BKM, producer,
   manifest fallback, HTTP transport, cache, replay, controller, planner,
   independent camera selection and offset wiring.
-- Follow-up Linux native suite: 50 passed, zero skipped; all original 40 tests
+- Settings/selection follow-up Linux native suite: 50 passed, zero skipped; all original 40 tests
   retained. Real Capnp/msgq/Params,
   OsmMapData publication and actual LongitudinalPlannerSP construction/update/
   arbitration/publication. MPC input is an explicitly supplied crash-counter
@@ -127,19 +159,32 @@ higher virtual setpoint. Disengagement resets the episode.
   proxy route. Read-only validation on Comma also passed: 43.103 seconds, 74,016 records, matching SHA256, no device cache writes.
 
 Evidence remains ignored under .native-build: ui-final-evidence,
-runtime-smoke/final, runtime-smoke/followup, warning-distance-fix, source-probe,
+runtime-smoke/final, runtime-smoke/followup, runtime-smoke/override-policy,
+warning-distance-fix, source-probe,
 speedcam-release. Do not commit keys, caches,
 user archives, downloaded databases or vendor runtime libraries.
 
 ## Remaining checks
 
-Install this follow-up through UI. A subsequent, separate user-requested change
-must preserve the driver's cruise setting across temporary gas/brake override;
-braking still requires explicit RES/ACC re-engagement. Only steering-wheel speed
-buttons set a new remembered target. This pedal-policy change is NOT part of
-the current tested follow-up; its present manual-takeover behavior is documented
-above. Do not claim the new pedal semantics are already implemented.
-A recorded vehicle trace is still required for physical ICBM acceptance and
+The settings/selection follow-up is published as fd454f15fbf247e2094d149c3456e8198e5af216.
+Its SpeedCamOnline producer CI run 40350871045 passed. Install through UI.
+The driver-override follow-up in this commit is NOT part of fd454f1. Its
+confirmed contract (implemented and tested above) is:
+
+- Gas/brake must retain the driver's original cruise setting (example: 130).
+- Brake still disengages stock ACC; the driver explicitly presses RES to resume.
+- Gas temporarily yields control; on release a still-ahead camera's ceiling
+  applies again. Passing the camera permits returning to the remembered setting.
+- User explicitly chose OPTION 1 for wheel +/− during a camera episode:
+  temporary native ACC correction, then return to the original 130 after passage.
+  Do not change the remembered maximum to 80/131/140 based on those presses.
+  Native button increments are not assumed to be 1 km/h or hardcoded to 10.
+- Outside a camera episode, speed buttons retain ordinary setpoint behavior.
+- User requires behavioral algorithm decisions to be discussed BEFORE choosing
+  and implementing them. The above choices are already confirmed; do not ask
+  again or substitute a different manual-override policy without agreement.
+Installation of this follow-up through UI is not yet confirmed. A recorded
+vehicle trace is still required for physical ICBM acceptance and
 behavior. Monitor a scheduled run after the successful initial push-triggered
 GitHub run; schedule dispatch can be delayed by GitHub.
 

@@ -100,14 +100,17 @@ def receive(sm, services):
   assert not pending, f'msgq receive timed out: {pending}'
 
 
-def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, model_yaw_rate=0.001, user_cruise=USER_SPEED):
+def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, model_yaw_rate=0.001, user_cruise=USER_SPEED,
+                  brake=False, buttons=(), cc_enabled=True, acc_enabled=True, cc_override=False, cc_cancel=False, cc_resume=False,
+                  north_m=-100, gps_time_s=None, cruise_helper=None, previous_plan=None):
   _, publisher, receiver, map_data = pipeline
+  ego_lat = LAT + math.degrees(north_m / 6_371_000.0)
   location = messaging.new_message('liveLocationKalman', valid=True)
   llk = location.liveLocationKalman
   llk.status = 'valid'
   llk.gpsOK = gps_ok
   llk.positionGeodetic.valid = True
-  llk.positionGeodetic.value = [EGO_LAT, LON, 0.0]
+  llk.positionGeodetic.value = [ego_lat, LON, 0.0]
   llk.calibratedOrientationNED.valid = True
   llk.calibratedOrientationNED.value = [0.0, 0.0, 0.0]
   publisher.send('liveLocationKalman', location)
@@ -120,20 +123,33 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
   cs.vCruise = user_cruise * 3.6
   cs.vCruiseCluster = user_cruise * 3.6
   cs.gasPressed = gas
-  cs.cruiseState.enabled = True
+  cs.brakePressed = brake
+  cs.buttonEvents = [dict(type=kind, pressed=pressed) for kind, pressed in buttons]
+  cs.cruiseState.available = True
+  cs.cruiseState.enabled = acc_enabled
   cs.cruiseState.speed = stock_speed
   cs.cruiseState.speedCluster = stock_speed
+  if cruise_helper is not None:
+    assert previous_plan is not None
+    # The same ordering as card: previous plan -> helper -> published virtual setpoint.
+    cruise_helper.update_speed_limit_assist(True, previous_plan)
+    cruise_helper.update_v_cruise(cs, cc_enabled, True)
+    cs.vCruise = float(cruise_helper.v_cruise_kph)
+    cs.vCruiseCluster = float(cruise_helper.v_cruise_cluster_kph)
   publisher.send('carState', cs_msg)
   cc_msg = messaging.new_message('carControl', valid=True)
-  cc_msg.carControl.enabled = True
+  cc_msg.carControl.enabled = cc_enabled
+  cc_msg.carControl.cruiseControl.override = cc_override
+  cc_msg.carControl.cruiseControl.cancel = cc_cancel
+  cc_msg.carControl.cruiseControl.resume = cc_resume
   publisher.send('carControl', cc_msg)
   gps_msg = messaging.new_message('gpsLocation', valid=True)
   gps = gps_msg.gpsLocation
   gps.hasFix = True
   gps.horizontalAccuracy = 3.0
   gps.bearingAccuracyDeg = 2.0
-  gps.unixTimestampMillis = int(time.time() * 1000)
-  gps.latitude, gps.longitude, gps.bearingDeg = EGO_LAT, LON, 0.0
+  gps.unixTimestampMillis = int((time.time() if gps_time_s is None else gps_time_s) * 1000)  # noqa: TID251 - GPS Unix timestamp
+  gps.latitude, gps.longitude, gps.bearingDeg = ego_lat, LON, 0.0
   publisher.send('gpsLocation', gps_msg)
   for service in ('controlsState', 'carStateSP', 'radarState', 'selfdriveState'):
     publisher.send(service, messaging.new_message(service, valid=True))
@@ -153,7 +169,7 @@ def plan(planner, sm):
     enabled=True, gps_valid=sm.valid['gpsLocation'], gps_alive=sm.alive['gpsLocation'],
     lmd_valid=sm.valid['liveMapDataSP'], lmd_alive=sm.alive['liveMapDataSP'],
     lmd_age_s=time.monotonic() - sm.recv_time['liveMapDataSP'],
-    lmd_generation=sm.recv_time['liveMapDataSP'], now_s=time.time(),
+    lmd_generation=sm.recv_time['liveMapDataSP'], now_s=time.time(),  # noqa: TID251 - compare Unix GPS fixes
     user_cruise_mps=USER_SPEED, minimum_speed_mps=30 / 3.6, adapt_accel_mps2=-1.0)
 
 
@@ -162,7 +178,7 @@ def write_camera(cache, kind, trusted):
   raw = f'2|Radars|65001\n{kind}|Synthetic runtime fixture|{LAT}|{LON}|1709|60{metadata}\n'
   cameras = tuple(parse_cityguide_snapshot(raw))
   assert len(cameras) == 1
-  save_database(str(cache), CameraDatabase('runtime-fixture', time.time(), cameras))
+  save_database(str(cache), CameraDatabase('runtime-fixture', time.time(), cameras))  # noqa: TID251 - persisted cache Unix time
 
 
 @pytest.mark.parametrize('kind,trusted,allowed', [
@@ -200,6 +216,7 @@ def test_production_invalid_map_holds_then_decoded_gas_takes_over(pipeline):
   manual = plan(planner, publish_frame(pipeline, gas=True))
   assert manual.manual_takeover and manual.reason == 'gas'
   assert manual.speed_cap_mps is None and not manual.restore_allowed
+  assert manual.state.value == 'manual' and planner.controller.episode_active
 
 
 @pytest.mark.parametrize('eligible', [False, True])
@@ -209,7 +226,7 @@ def test_production_nearest_warning_does_not_mask_independent_control_candidate(
   if eligible:
     raw += f'18059|control 500m|{next_lat}|{LON}|1709|60|1705|180|1713|1|\n'
   cameras = tuple(parse_cityguide_snapshot(raw))
-  save_database(str(pipeline[0]), CameraDatabase('runtime-selection', time.time(), cameras))
+  save_database(str(pipeline[0]), CameraDatabase('runtime-selection', time.time(), cameras))  # noqa: TID251 - persisted cache Unix time
   sm = publish_frame(pipeline)
   lmd = sm['liveMapDataSP']
   assert lmd.speedCameraAheadValid and lmd.speedCameraType == 'speedcamonline-cg77:18952'
@@ -240,9 +257,9 @@ def longitudinal(native_params):
   native_params.remove('ModelManager_ActiveBundle')
   mpc = GivenMpcState()
   with ExitStack() as stack:
-    def construct(*, vision=False):
+    def construct(*, vision=False, pcm_cruise=False):
       native_params.put_bool('SmartCruiseControlVision', vision)
-      cp = car.CarParams.new_message(brand='volkswagen', openpilotLongitudinalControl=False)
+      cp = car.CarParams.new_message(brand='volkswagen', pcmCruise=pcm_cruise, openpilotLongitudinalControl=False)
       cp_sp = custom.CarParamsSP.new_message(pcmCruiseSpeed=False, intelligentCruiseButtonManagementAvailable=True)
       cp_read = stack.enter_context(car.CarParams.from_bytes(cp.to_bytes()))
       cp_sp_read = stack.enter_context(custom.CarParamsSP.from_bytes(cp_sp.to_bytes()))
@@ -260,9 +277,9 @@ def plan_bus():
   yield publisher, receiver
 
 
-def run_longitudinal(planner, sm, plan_bus, *, user_cruise=USER_SPEED):
+def run_longitudinal(planner, sm, plan_bus, *, user_cruise=USER_SPEED, now_s=None):
   planner.sla.update_car_state(sm['carState'])
-  planner.camera.observe_car_state(sm['carState'], time.time())
+  planner.camera.observe_car_state(sm['carState'], time.time() if now_s is None else now_s)  # noqa: TID251 - latch shares Unix GPS clock
   planner.update(sm)
   assert planner.dec._mpc_fcw_crash_cnt == planner.dec._mpc.crash_cnt
   target = planner.update_targets(sm, USER_SPEED, 0.0, user_cruise)
@@ -317,8 +334,9 @@ def test_longitudinal_published_hold_and_manual_takeover(pipeline, longitudinal,
   target, manual = run_longitudinal(planner, publish_frame(pipeline, gas=True, stock_speed=18.0), plan_bus)
   assert target[0] == 18.0
   assert manual.speedCameraControl.manualTakeover and not manual.speedCameraControl.active
-  assert manual.speedCameraControl.state == 'cancelled' and manual.speedCameraControl.reason == 'gas'
+  assert manual.speedCameraControl.state == 'manual' and manual.speedCameraControl.reason == 'gas'
   assert manual.speedCameraControl.speedCap == 0.0
+  assert planner.camera.controller.episode_active
 
 
 def test_longitudinal_disabled_camera_publishes_inactive(pipeline, longitudinal, plan_bus, native_params):

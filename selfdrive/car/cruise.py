@@ -37,7 +37,7 @@ class VCruiseHelper(VCruiseHelperSP):
     self.v_cruise_cluster_kph = V_CRUISE_UNSET
     self.v_cruise_kph_last = 0
     self.button_timers = {ButtonType.decelCruise: 0, ButtonType.accelCruise: 0}
-    self.button_change_states = {btn: {"standstill": False, "enabled": False} for btn in self.button_timers}
+    self.button_change_states = {btn: {"standstill": False, "enabled": False, "camera": False} for btn in self.button_timers}
 
   @property
   def v_cruise_initialized(self):
@@ -49,16 +49,38 @@ class VCruiseHelper(VCruiseHelperSP):
     self.get_minimum_set_speed(is_metric)
 
     if CS.cruiseState.available:
+      if self.remember_stock_cruise:
+        self.update_stock_set_intent(CS, enabled)
+        if self._stock_set_pending:
+          self.update_enabled_state(CS, enabled)
+          stock_kph = CS.cruiseState.speed * CV.MS_TO_KPH
+          if (enabled and CS.cruiseState.enabled and not self._stock_set_held and
+              math.isfinite(stock_kph) and 0 < stock_kph <= V_CRUISE_MAX):
+            # Wait for released SET, stock engagement and valid native feedback;
+            # the old stock value on the disabled press edge is not the new base.
+            self.v_cruise_kph = stock_kph
+            cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
+            self.v_cruise_cluster_kph = cluster_kph if math.isfinite(cluster_kph) and cluster_kph > 0 else stock_kph
+            self._stock_virtual_cruise_initialized = True
+            self._stock_set_pending = False
+          self.update_button_timers(CS, enabled)
+          return
+      if self.remember_stock_cruise and self.camera_episode_active and self._stock_virtual_cruise_initialized:
+        # Preserve the driver's base throughout a camera episode. Temporary
+        # physical corrections use stock feedback in the planner, not virtual
+        # increments here; pedal disengagement and RES do not replace the base.
+        self.update_enabled_state(CS, enabled)
+        self.update_button_timers(CS, enabled)
+        return
       if self.camera_manual_takeover and not self.CP_SP.pcmCruiseSpeed:
-        # After cancelling a camera episode, hand the setpoint back to the
-        # physical ACC. Releasing the camera cap must not restore an older,
-        # higher virtual setpoint after a manual button or pedal override.
+        # Retain the existing stock handover outside a remembered camera episode.
         self.v_cruise_kph = CS.cruiseState.speed * CV.MS_TO_KPH
         self.v_cruise_cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
         self.update_button_timers(CS, enabled)
         return
       _enabled = self.update_enabled_state(CS, enabled)
-      if not self.CP.pcmCruise or (not self.CP_SP.pcmCruiseSpeed and _enabled):
+      keep_virtual = self.remember_stock_cruise and self._stock_virtual_cruise_initialized
+      if not self.CP.pcmCruise or (not self.CP_SP.pcmCruiseSpeed and (_enabled or keep_virtual)):
         # if stock cruise is completely disabled, then we can use our own set speed logic
         self._update_v_cruise_non_pcm(CS, _enabled, is_metric)
         self.update_speed_limit_assist_v_cruise_non_pcm()
@@ -73,9 +95,20 @@ class VCruiseHelper(VCruiseHelperSP):
         elif CS.cruiseState.speed == -1:
           self.v_cruise_kph = -1
           self.v_cruise_cluster_kph = -1
+      if (self.remember_stock_cruise and enabled and CS.cruiseState.enabled and
+          0 < self.v_cruise_kph <= V_CRUISE_MAX):
+        # Once engaged, preserve the driver's target across pedal disengagement
+        # and the guarded RES edge. This does not enable or resume stock ACC.
+        self._stock_virtual_cruise_initialized = True
     else:
       self.v_cruise_kph = V_CRUISE_UNSET
       self.v_cruise_cluster_kph = V_CRUISE_UNSET
+      if self.remember_stock_cruise:
+        # Turning the main cruise switch off ends this remembered session.
+        self._stock_virtual_cruise_initialized = False
+        self.camera_episode_active = False
+        self.enabled_prev = False
+        self._stock_set_pending = self._stock_set_held = self._stock_set_from_camera = False
 
   def _update_v_cruise_non_pcm(self, CS, enabled, is_metric):
     # handle button presses. TODO: this should be in state_control, but a decelCruise press
@@ -102,6 +135,11 @@ class VCruiseHelper(VCruiseHelperSP):
           break
 
     if button_type is None:
+      return
+
+    # A press made during camera control remains a native correction even if
+    # its release or long-press timer arrives after the camera has been passed.
+    if self.button_change_states[button_type]["camera"]:
       return
 
     # Don't adjust speed when pressing resume to exit standstill
@@ -136,12 +174,16 @@ class VCruiseHelper(VCruiseHelperSP):
     for k in self.button_timers:
       if self.button_timers[k] > 0:
         self.button_timers[k] += 1
+        if self.remember_stock_cruise and self.camera_episode_active:
+          self.button_change_states[k]["camera"] = True
 
     for b in CS.buttonEvents:
       if b.type.raw in self.button_timers:
         # Start/end timer and store current state on change of button pressed
         self.button_timers[b.type.raw] = 1 if b.pressed else 0
-        self.button_change_states[b.type.raw] = {"standstill": CS.cruiseState.standstill, "enabled": enabled}
+        camera = (self.remember_stock_cruise and self.camera_episode_active if b.pressed else
+                  self.button_change_states[b.type.raw]["camera"])
+        self.button_change_states[b.type.raw] = {"standstill": CS.cruiseState.standstill, "enabled": enabled, "camera": camera}
 
   def initialize_v_cruise(self, CS, experimental_mode: bool, dynamic_experimental_control: bool) -> None:
     # initializing is handled by the PCM

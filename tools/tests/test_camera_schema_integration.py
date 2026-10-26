@@ -81,7 +81,7 @@ def test_plan_control_roundtrip_in_event(wire, state, reason, cap, manual):
 
 
 def frame(wire, *, north_m=-100, time_s=0, kind=1, location_valid=True,
-          gas=False, button=False, camera_valid=True, auto_allowed=None, control_values=None, **options):
+          gas=False, button=False, button_type='accelCruise', camera_valid=True, auto_allowed=None, control_values=None, **options):
   now = EPOCH + time_s
   cs = car.CarState.new_message(vEgo=USER_SPEED, gasPressed=gas)
   cs.cruiseState.enabled = True
@@ -89,7 +89,7 @@ def frame(wire, *, north_m=-100, time_s=0, kind=1, location_valid=True,
   cs.cruiseState.speedCluster = USER_SPEED
   if button:
     event = cs.init('buttonEvents', 1)[0]
-    event.type = 'accelCruise'
+    event.type = button_type
     event.pressed = True
   cc = car.CarControl.new_message(enabled=True)
   gps = log.GpsLocationData.new_message(
@@ -171,15 +171,16 @@ def test_decoded_loss_of_location_holds_existing_ceiling(wire):
 
 
 @pytest.mark.parametrize('action,reason', [('gas', 'gas'), ('button', 'manual_button')])
-def test_decoded_manual_action_cancels_and_roundtrips_output(wire, action, reason):
+def test_decoded_temporary_manual_action_retains_geometry_and_roundtrips(wire, action, reason):
   planner = SpeedCameraPlanner()
-  update(planner, frame(wire))
+  initial = update(planner, frame(wire))
   data = frame(wire, time_s=1, **{action: True})
   planner.observe_car_state(data[0][0], EPOCH + 1)
   output = update(planner, data)
-  assert output.state.value == 'cancelled'
+  assert output.state.value == 'manual'
   assert output.manual_takeover and output.speed_cap_mps is None
   assert output.reason == reason and not output.restore_allowed
+  assert planner.controller.episode_active and output.camera_id == initial.camera_id
   message = custom.LongitudinalPlanSP.new_message()
   message.speedCameraControl.state = output.state.value
   message.speedCameraControl.speedCap = output.speed_cap_mps or 0.0
@@ -187,7 +188,19 @@ def test_decoded_manual_action_cancels_and_roundtrips_output(wire, action, reaso
   message.speedCameraControl.manualTakeover = output.manual_takeover
   result = wire(custom.LongitudinalPlanSP, message).speedCameraControl
   assert (result.state, result.reason, result.manualTakeover, result.speedCap) == (
-    'cancelled', reason, True, 0.0)
+    'manual', reason, True, 0.0)
+
+
+def test_decoded_explicit_cancel_remains_permanent(wire):
+  planner = SpeedCameraPlanner()
+  initial = update(planner, frame(wire))
+  output = update(planner, frame(wire, time_s=1, button=True, button_type='cancel'))
+  assert output.state.value == 'cancelled' and output.manual_takeover
+  assert output.camera_id == initial.camera_id and output.reason == 'manual_button'
+  assert not planner.controller.episode_active and not output.restore_allowed
+  later = update(planner, frame(wire, time_s=2))
+  assert later.manual_takeover and later.speed_cap_mps is None
+  assert not later.restore_allowed
 
 
 def test_decoded_pass_requires_two_fixes_then_new_map_generation(wire):

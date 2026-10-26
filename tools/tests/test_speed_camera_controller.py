@@ -61,7 +61,7 @@ def test_approach_ceiling_follows_kinematics_and_holds_until_geometric_pass():
   assert not update(controller, sample(north_m=60, time_s=6)).restore_allowed
 
 
-@pytest.mark.parametrize("action", ["manual_button", "gas_pressed", "brake_pressed", "override"])
+@pytest.mark.parametrize("action", ["manual_button", "override"])
 def test_manual_cancel_removes_authority_without_restoring_or_rearming_same_camera(action):
   controller = SpeedCameraController()
   update(controller, sample(north_m=-10))
@@ -197,10 +197,91 @@ def test_out_of_order_fix_does_not_confirm_pass():
 def test_manual_cancel_does_not_block_a_different_camera():
   controller = SpeedCameraController()
   update(controller, sample())
-  update(controller, sample(time_s=1, gas_pressed=True))
+  update(controller, sample(time_s=1, manual_button=True))
   new_camera = replace(CAMERA, camera_id="point-2", latitude=55.001)
   result = update(controller, sample(time_s=2, camera=new_camera))
   assert result.camera_id == "point-2" and result.speed_cap_mps is not None and not result.manual_takeover
+
+
+def test_gas_temporarily_suspends_without_suppressing_saved_camera():
+  controller = SpeedCameraController()
+  initial = update(controller, sample(north_m=-10, user_cruise_mps=130 / 3.6))
+  suspended = update(controller, sample(north_m=-5, time_s=1, gas_pressed=True, user_cruise_mps=130 / 3.6))
+  assert suspended.state == CameraControlState.manual
+  assert suspended.camera_id == initial.camera_id and suspended.speed_cap_mps is None
+  assert suspended.manual_takeover and not suspended.restore_allowed
+  resumed = update(controller, sample(north_m=-1, time_s=2, camera=None, user_cruise_mps=130 / 3.6))
+  assert resumed.camera_id == initial.camera_id and resumed.speed_cap_mps <= initial.speed_cap_mps
+  assert not resumed.manual_takeover and not resumed.restore_allowed
+
+
+@pytest.mark.parametrize('action', ['gas_pressed', 'brake_pressed', 'speed_button'])
+def test_pass_is_observed_during_manual_authority_and_remembered_beyond_pass_window(action):
+  controller = SpeedCameraController()
+  initial = update(controller, sample(north_m=-10, user_cruise_mps=130 / 3.6))
+  for time_s, north in ((1, -5), (2, 20), (3, 40), (4, 400), (5, 1000)):
+    data = sample(north_m=north, time_s=time_s, camera=None, user_cruise_mps=130 / 3.6,
+                  acc_engaged=action != 'brake_pressed', **{action: True})
+    out = update(controller, data)
+    assert out.state == CameraControlState.manual and out.manual_takeover
+    assert out.camera_id == initial.camera_id and out.speed_cap_mps is None and not out.restore_allowed
+    assert data.user_cruise_mps == 130 / 3.6
+  if action == 'brake_pressed':
+    still_off = update(controller, sample(north_m=1100, time_s=6, acc_engaged=False))
+    assert still_off.reason == 'brake_waiting_resume' and not still_off.restore_allowed
+    not_res = update(controller, sample(north_m=1200, time_s=7))
+    assert not_res.reason == 'brake_waiting_resume' and not not_res.restore_allowed
+  passed = update(controller, sample(north_m=1300, time_s=8, camera=None,
+                                     resume_requested=action == 'brake_pressed', user_cruise_mps=130 / 3.6))
+  assert passed.state == CameraControlState.passed and passed.restore_allowed
+  assert passed.camera_id == initial.camera_id and not passed.manual_takeover and passed.speed_cap_mps is None
+  assert not update(controller, sample(north_m=1400, time_s=9)).restore_allowed
+
+
+def test_brake_release_requires_physical_resume_and_engagement_then_reapplies_saved_geometry():
+  controller = SpeedCameraController()
+  initial = update(controller, sample(north_m=-100))
+  update(controller, sample(north_m=-90, time_s=1, brake_pressed=True, acc_engaged=False))
+  for time_s, engaged, resume in ((2, False, False), (3, False, True), (4, True, False)):
+    waiting = update(controller, sample(north_m=-80, time_s=time_s, acc_engaged=engaged, resume_requested=resume))
+    assert waiting.state == CameraControlState.manual and waiting.reason == 'brake_waiting_resume'
+    assert waiting.speed_cap_mps is None and not waiting.restore_allowed
+  resumed = update(controller, sample(north_m=-70, time_s=5, resume_requested=True, camera=None))
+  assert resumed.camera_id == initial.camera_id and resumed.speed_cap_mps is not None
+  assert not resumed.manual_takeover and not resumed.restore_allowed
+
+
+def test_missing_or_duplicate_fixes_during_gas_do_not_invent_pass():
+  controller = SpeedCameraController()
+  update(controller, sample(north_m=-10))
+  update(controller, sample(north_m=20, time_s=1, gas_pressed=True))
+  duplicate = update(controller, sample(north_m=40, time_s=1.1, gas_pressed=True, gps_fix_time_s=EPOCH + 1))
+  assert not duplicate.restore_allowed
+  update(controller, sample(north_m=50, time_s=2, gas_pressed=True, gps_valid=False))
+  released = update(controller, sample(north_m=400, time_s=3, camera=None))
+  assert released.state == CameraControlState.hold and not released.restore_allowed
+  assert released.speed_cap_mps is not None
+
+
+def test_manual_speed_override_does_not_change_saved_geometry_when_map_selects_another_camera():
+  controller = SpeedCameraController()
+  initial = update(controller, sample(north_m=-10))
+  update(controller, sample(north_m=-5, time_s=1, speed_button=True))
+  another = replace(CAMERA, camera_id='other', latitude=54.999)
+  for time_s in (2, 3, 4):
+    out = update(controller, sample(north_m=-5, time_s=time_s, camera=another))
+    assert out.camera_id == initial.camera_id and out.state == CameraControlState.manual
+    assert out.speed_cap_mps is None and not out.restore_allowed
+
+
+@pytest.mark.parametrize('enabled_at_brake', [False, True])
+def test_brake_without_camera_episode_does_not_require_res_for_first_camera(enabled_at_brake):
+  controller = SpeedCameraController()
+  update(controller, sample(camera=None, brake_pressed=True, acc_engaged=False, enabled=enabled_at_brake))
+  assert not controller.waiting_for_resume and not controller.episode_active
+  first = update(controller, sample(time_s=2))
+  assert first.state == CameraControlState.approach and first.speed_cap_mps is not None
+  assert not first.manual_takeover and not first.restore_allowed
 
 
 @pytest.mark.parametrize("overrides", [{"gps_max_age_s": 0}, {"heading_tolerance_deg": 90},

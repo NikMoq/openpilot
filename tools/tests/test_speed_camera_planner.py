@@ -196,7 +196,7 @@ def test_map_receipt_age_is_converted_to_same_unix_clock_as_gps(frame):
   assert stale.speed_cap_mps is None and not stale.restore_allowed
 
 
-@pytest.mark.parametrize('button', ['accelCruise', 'decelCruise', 'cancel', 'resumeCruise', 'setCruise'])
+@pytest.mark.parametrize('button', ['cancel', 'mainCruise', 'resumeCruise', 'setCruise'])
 def test_short_carstate_button_pulse_is_latched_between_planning_frames(frame, button):
   planner = SpeedCameraPlanner()
   assert update(planner, frame()).speed_cap_mps is not None
@@ -222,7 +222,7 @@ def test_button_latch_is_effective_near_half_second_boundary(frame):
   assert out.manual_takeover and not out.restore_allowed
 
 
-@pytest.mark.parametrize('field', ['override', 'cancel', 'resume'])
+@pytest.mark.parametrize('field', ['override', 'cancel'])
 def test_carcontrol_manual_flags_cancel_without_later_restore(frame, field):
   planner = SpeedCameraPlanner()
   update(planner, frame())
@@ -236,14 +236,21 @@ def test_carcontrol_manual_flags_cancel_without_later_restore(frame, field):
 
 
 @pytest.mark.parametrize('pedal', ['gasPressed', 'brakePressed'])
-def test_manual_pedal_cancels_and_never_restores_saved_cruise(frame, pedal):
+def test_pedal_hands_over_temporarily_and_preserves_camera_episode(frame, pedal):
   planner = SpeedCameraPlanner()
   update(planner, frame())
   manual = frame(time_s=1, cs_values={pedal: True})
   out = update(planner, manual)
-  assert out.manual_takeover and out.speed_cap_mps is None and not out.restore_allowed
+  assert out.state == CameraControlState.manual and out.manual_takeover
+  assert out.speed_cap_mps is None and not out.restore_allowed
   assert manual.cs.cruiseState.speed == USER_MPS
-  assert update(planner, frame(time_s=2, north_m=40)).manual_takeover
+  after = update(planner, frame(time_s=2, north_m=-5))
+  if pedal == 'gasPressed':
+    assert after.speed_cap_mps is not None and not after.manual_takeover
+  else:
+    assert after.reason == 'brake_waiting_resume' and after.manual_takeover
+    assert after.speed_cap_mps is None
+  assert after.camera_id == out.camera_id and not after.restore_allowed
 
 
 @pytest.mark.parametrize('source', ['carState', 'carControl'])
@@ -461,7 +468,7 @@ def test_p1_restoration_completion_uses_speed_cluster_and_half_mps_tolerance(fra
 
 
 @pytest.mark.parametrize('pedal', ['gasPressed', 'brakePressed'])
-def test_p1_short_pedal_pulse_observed_between_model_frames_cancels_active_cap(frame, pedal):
+def test_short_pedal_pulse_observed_between_model_frames_temporarily_suspends_active_cap(frame, pedal):
   planner = SpeedCameraPlanner()
   assert update(planner, frame(north_m=-10)).speed_cap_mps is not None
   pulse = frame(time_s=0.01, cs_values={pedal: True})
@@ -470,10 +477,13 @@ def test_p1_short_pedal_pulse_observed_between_model_frames_cancels_active_cap(f
     planner.observe_car_state(frame(time_s=tick / 100).cs, EPOCH + tick / 100)
   out = update(planner, frame(north_m=-5, time_s=0.2))
   assert out.manual_takeover, 'a 100 Hz pedal pulse must survive until the next planning frame'
+  assert out.state == CameraControlState.manual
   assert out.speed_cap_mps is None and not out.restore_allowed
-  for time_s, north_m in ((1, 20), (2, 40)):
+  for time_s, north_m in ((1, -4), (2, -3)):
     after = update(planner, frame(time_s=time_s, north_m=north_m))
-    assert after.manual_takeover and after.speed_cap_mps is None and not after.restore_allowed
+    assert after.manual_takeover is (pedal == 'brakePressed')
+    assert (after.speed_cap_mps is None) is (pedal == 'brakePressed')
+    assert not after.restore_allowed
 
 
 @pytest.mark.parametrize('version,valid,allowed', [(1, False, True), (1, True, False), (2, True, True)])
@@ -538,3 +548,230 @@ def test_increased_offset_applies_to_next_camera_after_confirmed_pass(frame):
   final = update(planner, frame(time_s=4, north_m=100, camera_north_m=100, camera_speed_offset_kph=19))
   assert final.camera_id == second.camera_id and final.speed_cap_mps * 3.6 == pytest.approx(79)
   assert not final.restore_allowed and not final.manual_takeover
+
+
+def camera130_frame(frame, *, stock_kph=79, engaged=True, **kwargs):
+  data = frame(user_cruise_mps=130 / 3.6, camera_speed_offset_kph=19, **kwargs)
+  data.cs.cruiseState.speed = data.cs.cruiseState.speedCluster = stock_kph / 3.6
+  data.cs.cruiseState.enabled = data.cc.enabled = engaged
+  return data
+
+
+@pytest.mark.parametrize('button,stock_kph', [('accelCruise', 89), ('decelCruise', 69), ('accelCruise', 84)])
+def test_native_speed_button_is_temporary_until_pass_and_never_changes_original130(frame, button, stock_kph):
+  planner = SpeedCameraPlanner()
+  initial = update(planner, camera130_frame(frame, north_m=-10))
+  pulse = camera130_frame(frame, time_s=0.01, stock_kph=stock_kph,
+                          cs_values={'buttonEvents': [NS(type=button, pressed=True)]})
+  planner.observe_car_state(pulse.cs, EPOCH + 0.01)
+  release = camera130_frame(frame, time_s=0.02, stock_kph=stock_kph,
+                            cs_values={'buttonEvents': [NS(type=button, pressed=False)]})
+  planner.observe_car_state(release.cs, EPOCH + 0.02)
+  for time_s, north in ((0.2, -5), (1, -1), (2, 20), (3, 40)):
+    data = camera130_frame(frame, time_s=time_s, north_m=north, stock_kph=stock_kph)
+    out = update(planner, data)
+    assert out.state == CameraControlState.manual and out.reason == 'manual_button'
+    assert out.manual_takeover and out.speed_cap_mps is None and not out.restore_allowed
+    assert out.camera_id == initial.camera_id
+    assert data.cs.cruiseState.speed == stock_kph / 3.6 and data.options['user_cruise_mps'] == 130 / 3.6
+  # Release original authority only after the next map message passes the barrier.
+  passed = update(planner, camera130_frame(frame, time_s=4, north_m=50, stock_kph=stock_kph,
+                                           lmd_values={'speedCameraAheadValid': False}))
+  assert passed.state == CameraControlState.passed and passed.restore_allowed
+  assert not passed.manual_takeover and passed.speed_cap_mps is None
+
+
+@pytest.mark.parametrize('button', ['accelCruise', 'decelCruise'])
+def test_speed_button_outside_camera_episode_does_not_take_over_or_mutate_native_target(frame, button):
+  planner = SpeedCameraPlanner()
+  data = frame(user_cruise_mps=140 / 3.6, lmd_values={'speedCameraAheadValid': False},
+               cs_values={'buttonEvents': [NS(type=button, pressed=False)]})
+  data.cs.cruiseState.speed = data.cs.cruiseState.speedCluster = 140 / 3.6
+  out = update(planner, data)
+  assert out.state == CameraControlState.inactive and not out.manual_takeover and not out.restore_allowed
+  assert data.options['user_cruise_mps'] == data.cs.cruiseState.speed == 140 / 3.6
+
+
+def test_gas_with_software_override_releases_back_to_camera79_and_keeps_user130(frame):
+  planner = SpeedCameraPlanner()
+  initial = update(planner, camera130_frame(frame, north_m=-10))
+  gas = camera130_frame(frame, time_s=1, north_m=-5, cs_values={'gasPressed': True})
+  gas.cc.cruiseControl.override = gas.cc.cruiseControl.resume = True
+  out = update(planner, gas)
+  assert out.state == CameraControlState.manual and out.reason == 'gas'
+  assert out.manual_takeover and out.speed_cap_mps is None and not out.restore_allowed
+  resumed_data = camera130_frame(frame, time_s=2, north_m=0)
+  resumed = update(planner, resumed_data)
+  assert resumed.camera_id == initial.camera_id and resumed.speed_cap_mps * 3.6 == pytest.approx(79)
+  assert not resumed.manual_takeover and not resumed.restore_allowed
+  assert resumed_data.options['user_cruise_mps'] == 130 / 3.6
+
+
+@pytest.mark.parametrize('pedal', ['gasPressed', 'brakePressed'])
+def test_long_pedal_override_tracks_pass_before_250m_and_releases_only_after_human_authority_returns(frame, pedal):
+  planner = SpeedCameraPlanner()
+  initial = update(planner, camera130_frame(frame, north_m=-10))
+  for time_s, north in ((1, -5), (2, 20), (3, 40), (4, 400), (5, 1000)):
+    data = camera130_frame(frame, time_s=time_s, north_m=north, engaged=pedal != 'brakePressed',
+                           cs_values={pedal: True}, lmd_values={'speedCameraAheadValid': False})
+    data.cc.cruiseControl.override = pedal == 'gasPressed'
+    data.cc.cruiseControl.cancel = pedal == 'brakePressed'  # Automatic brake-disengage request.
+    out = update(planner, data)
+    assert out.state == CameraControlState.manual and out.manual_takeover
+    assert out.camera_id == initial.camera_id and not out.restore_allowed and out.speed_cap_mps is None
+  if pedal == 'brakePressed':
+    for time_s, engaged in ((6, False), (7, True)):
+      data = camera130_frame(frame, time_s=time_s, north_m=1100, engaged=engaged)
+      data.cc.cruiseControl.resume = True  # Software resume must not unlock the episode.
+      held = update(planner, data)
+      assert held.reason == 'brake_waiting_resume' and not held.restore_allowed
+    res = camera130_frame(frame, time_s=8, north_m=1200,
+                           cs_values={'buttonEvents': [NS(type='resumeCruise', pressed=False)]})
+  else:
+    res = camera130_frame(frame, time_s=8, north_m=1200)
+  barrier = update(planner, res)
+  assert barrier.reason == 'awaiting_map_update' and not barrier.restore_allowed
+  assert barrier.speed_cap_mps * 3.6 == pytest.approx(79)
+  passed = update(planner, camera130_frame(frame, time_s=9, north_m=1300,
+                                           lmd_values={'speedCameraAheadValid': False}))
+  assert passed.state == CameraControlState.passed and passed.restore_allowed
+  assert not passed.manual_takeover and passed.speed_cap_mps is None
+
+
+def test_brake_short_pulse_survives_delayed_model_update_and_requires_physical_res_with_acc_on(frame):
+  planner = SpeedCameraPlanner()
+  initial = update(planner, camera130_frame(frame, north_m=-100))
+  pulse = camera130_frame(frame, time_s=0.01, engaged=False, cs_values={'brakePressed': True})
+  planner.observe_car_state(pulse.cs, EPOCH + 0.01)
+  off = update(planner, camera130_frame(frame, time_s=2, north_m=-90, engaged=False))
+  assert off.state == CameraControlState.manual and not off.restore_allowed
+  res_off = camera130_frame(frame, time_s=3, north_m=-80, engaged=False,
+                            cs_values={'buttonEvents': [NS(type='resumeCruise', pressed=False)]})
+  assert update(planner, res_off).reason == 'brake_waiting_resume'
+  # The event is latched across asynchronous ACC engagement, but never enables it.
+  resumed = update(planner, camera130_frame(frame, time_s=3.1, north_m=-70))
+  assert resumed.camera_id == initial.camera_id and resumed.speed_cap_mps is not None
+  assert not resumed.manual_takeover and not resumed.restore_allowed
+  assert not res_off.cs.cruiseState.enabled and not res_off.cc.enabled
+
+
+def test_resume_press_and_release_are_one_physical_resume_not_a_later_permanent_cancel(frame):
+  planner = SpeedCameraPlanner()
+  initial = update(planner, camera130_frame(frame, north_m=-100))
+  update(planner, camera130_frame(frame, time_s=1, engaged=False, cs_values={'brakePressed': True}))
+  for time_s, pressed in ((2, True), (2.1, False)):
+    data = camera130_frame(frame, time_s=time_s, north_m=-80,
+                           cs_values={'buttonEvents': [NS(type='resumeCruise', pressed=pressed)]})
+    output = update(planner, data)
+    assert output.camera_id == initial.camera_id and output.speed_cap_mps is not None
+    assert not output.manual_takeover and not output.restore_allowed
+
+
+@pytest.mark.parametrize('button', ['cancel', 'mainCruise'])
+@pytest.mark.parametrize('engaged', [False, True])
+def test_real_cancel_or_main_off_during_pedal_override_is_permanent_cancelled_not_manual(frame, button, engaged):
+  planner = SpeedCameraPlanner()
+  update(planner, camera130_frame(frame, north_m=-10))
+  update(planner, camera130_frame(frame, time_s=1, cs_values={'gasPressed': True}))
+  data = camera130_frame(frame, time_s=2, engaged=engaged,
+                         cs_values={'gasPressed': True, 'buttonEvents': [NS(type=button, pressed=True)]})
+  out = update(planner, data)
+  assert out.state == CameraControlState.cancelled and out.manual_takeover and out.speed_cap_mps is None
+  for time_s, north in ((3, 20), (4, 40)):
+    out = update(planner, camera130_frame(frame, time_s=time_s, north_m=north))
+    assert out.state == CameraControlState.cancelled and out.manual_takeover and not out.restore_allowed
+
+
+def test_gas_during_pending_pass_cannot_release_saved_ceiling_or_consume_map_barrier(frame):
+  planner = SpeedCameraPlanner()
+  update(planner, camera130_frame(frame, north_m=-1, lmd_generation=0))
+  update(planner, camera130_frame(frame, time_s=1, north_m=20, lmd_generation=1))
+  pending = update(planner, camera130_frame(frame, time_s=2, north_m=40, lmd_generation=2))
+  assert pending.reason == 'awaiting_map_update'
+  held = update(planner, camera130_frame(frame, time_s=3, north_m=50, lmd_generation=3,
+                                         cs_values={'gasPressed': True}, lmd_values={'speedCameraAheadValid': False}))
+  assert held.state == CameraControlState.manual and held.reason == 'gas' and not held.restore_allowed
+  stale = update(planner, camera130_frame(frame, time_s=4, north_m=60, lmd_generation=3, gps_valid=False,
+                                          lmd_values={'speedCameraAheadValid': False}))
+  assert stale.reason == 'awaiting_map_update' and stale.speed_cap_mps == pending.speed_cap_mps
+  passed = update(planner, camera130_frame(frame, time_s=5, north_m=70, lmd_generation=4,
+                                           lmd_values={'speedCameraAheadValid': False}))
+  assert passed.restore_allowed and not passed.manual_takeover
+
+
+@pytest.mark.parametrize('button', ['accelCruise', 'decelCruise'])
+@pytest.mark.parametrize('new_action_pressed', [True, False])
+def test_camera_origin_button_release_after_long_hold_and_pass_never_becomes_permanent_cancel(frame, button, new_action_pressed):
+  planner = SpeedCameraPlanner()
+  update(planner, camera130_frame(frame, north_m=-10))
+  press = camera130_frame(frame, time_s=0.01,
+                          cs_values={'buttonEvents': [NS(type=button, pressed=True)]})
+  planner.observe_car_state(press.cs, EPOCH + 0.01)
+  for time_s, north in ((1, -1), (2, 20), (3, 40), (4, 50)):
+    out = update(planner, camera130_frame(frame, time_s=time_s, north_m=north,
+                                           lmd_values={'speedCameraAheadValid': False}))
+    assert out.state == CameraControlState.manual and out.reason == 'manual_button'
+    assert out.manual_takeover and out.speed_cap_mps is None and not out.restore_allowed
+  release = camera130_frame(frame, time_s=5, north_m=60,
+                            cs_values={'buttonEvents': [NS(type=button, pressed=False)]},
+                            lmd_values={'speedCameraAheadValid': False})
+  # Production may observe the same release at carState rate and again during planning.
+  planner.observe_car_state(release.cs, EPOCH + 5)
+  results = [update(planner, release)]
+  for time_s in (5.1, 5.4, 5.6, 6, 7):
+    results.append(update(planner, camera130_frame(frame, time_s=time_s, north_m=70,
+                                                    lmd_values={'speedCameraAheadValid': False})))
+  assert all(result.state != CameraControlState.cancelled for result in results)
+  assert any(result.restore_allowed for result in results)
+  assert not results[-1].manual_takeover and results[-1].speed_cap_mps is None
+  assert release.options['user_cruise_mps'] == 130 / 3.6
+  # A new press (or unpaired later release) keeps the existing ordinary policy.
+  new_press = camera130_frame(frame, time_s=8, north_m=80,
+                              cs_values={'buttonEvents': [NS(type=button, pressed=new_action_pressed)]},
+                              lmd_values={'speedCameraAheadValid': False})
+  outside = update(planner, new_press)
+  assert outside.state == CameraControlState.cancelled and outside.manual_takeover
+  assert not outside.restore_allowed
+
+
+@pytest.mark.parametrize('enabled_at_brake', [False, True])
+@pytest.mark.parametrize('set_in_planning_frame', [False, True])
+def test_ordinary_set_after_brake_outside_episode_does_not_require_res_for_first_camera(
+    frame, enabled_at_brake, set_in_planning_frame):
+  planner = SpeedCameraPlanner()
+  braking = camera130_frame(frame, enabled=enabled_at_brake, engaged=False,
+                            cs_values={'brakePressed': True}, lmd_values={'speedCameraAheadValid': False})
+  assert update(planner, braking).speed_cap_mps is None
+  assert not planner.controller.waiting_for_resume
+  ordinary_set = camera130_frame(frame, time_s=1, enabled=enabled_at_brake,
+                                 cs_values={'buttonEvents': [NS(type='setCruise', pressed=False)]},
+                                 lmd_values={'speedCameraAheadValid': False})
+  if set_in_planning_frame:
+    assert not update(planner, ordinary_set).manual_takeover
+  else:
+    planner.observe_car_state(ordinary_set.cs, EPOCH + 1)
+  for time_s in (2, 3):
+    first = update(planner, camera130_frame(frame, time_s=time_s, north_m=-10))
+    assert first.state == CameraControlState.approach and first.speed_cap_mps is not None
+    assert not first.manual_takeover and not first.restore_allowed
+    assert not planner.controller.waiting_for_resume
+
+
+def test_brake_while_pass_map_barrier_pending_still_requires_res(frame):
+  planner = SpeedCameraPlanner()
+  update(planner, camera130_frame(frame, north_m=-1))
+  update(planner, camera130_frame(frame, time_s=1, north_m=20))
+  pending = update(planner, camera130_frame(frame, time_s=2, north_m=40))
+  assert pending.reason == 'awaiting_map_update'
+  braking = update(planner, camera130_frame(frame, time_s=3, north_m=50, engaged=False,
+                                             cs_values={'brakePressed': True}, lmd_values={'speedCameraAheadValid': False}))
+  assert braking.state == CameraControlState.manual and braking.reason == 'brake'
+  off = update(planner, camera130_frame(frame, time_s=4, north_m=60, engaged=False,
+                                         lmd_values={'speedCameraAheadValid': False}))
+  assert off.reason == 'brake_waiting_resume' and not off.restore_allowed
+  res = camera130_frame(frame, time_s=5, north_m=70,
+                         cs_values={'buttonEvents': [NS(type='resumeCruise', pressed=False)]},
+                         lmd_values={'speedCameraAheadValid': False})
+  passed = update(planner, res)
+  assert passed.state == CameraControlState.passed and passed.restore_allowed
+  assert not passed.manual_takeover and passed.speed_cap_mps is None

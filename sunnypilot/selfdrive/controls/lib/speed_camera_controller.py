@@ -2,9 +2,10 @@
 
 The caller owns the driver's cruise setpoint and combines this ceiling with
 other planner constraints using min(). Never write the ceiling back into that
-setpoint. On manual_takeover, stop this episode's automatic button authority;
-do not restore a saved setpoint. Only restore_allowed permits a post-pass
-return, still bounded by user_cruise_mps and all other planner constraints.
+setpoint. A manual state temporarily hands button authority to the driver while
+retaining the episode and original user setpoint; cancelled is a permanent
+handover for this camera. Only restore_allowed permits a post-pass return,
+still bounded by user_cruise_mps and all other planner constraints.
 
 All timestamps are seconds on the SAME Unix clock. LMD time is its reception
 time recorded on that clock, not SubMaster's monotonic recv_time. Acquisition
@@ -32,6 +33,7 @@ class CameraControlState(StrEnum):
   inactive = "inactive"
   approach = "approach"
   hold = "hold"
+  manual = "manual"
   cancelled = "cancelled"
   passed = "passed"
 
@@ -69,6 +71,9 @@ class CameraControlInput:
   user_cruise_mps: float = 0.0
   camera: CameraObservation | None = None
   manual_button: bool = False
+  speed_button: bool = False  # Physical +/-; never infer the native step.
+  resume_requested: bool = False  # Physical RES observed by the adapter, not CC.resume.
+  pass_pending: bool = False  # The adapter still owns the completed episode's map barrier.
   gas_pressed: bool = False
   brake_pressed: bool = False
   override: bool = False
@@ -141,12 +146,35 @@ class SpeedCameraController:
     self._behind_fixes = 0
     self._suppressed_ids: set[str] = set()
     self._manual_takeover = False
+    self._button_override = False
+    self._brake_waiting_resume = False
+    self._pass_confirmed = False
+
+  @property
+  def episode_active(self) -> bool:
+    return self._camera is not None
+
+  @property
+  def waiting_for_resume(self) -> bool:
+    return self._brake_waiting_resume
+
+  @property
+  def button_override(self) -> bool:
+    return self._button_override
+
+  @property
+  def speed_cap_mps(self) -> float | None:
+    """Retained ceiling, including while automatic button authority is paused."""
+    return self._cap_mps
 
   def _clear_track(self) -> None:
     self._camera = None
     self._cap_mps = None
     self._last_fix_time_s = None
     self._behind_fixes = 0
+    self._button_override = False
+    self._brake_waiting_resume = False
+    self._pass_confirmed = False
 
   def _cancel(self, data: CameraControlInput, reason: str) -> CameraControlOutput:
     camera = self._camera or data.camera
@@ -166,25 +194,48 @@ class SpeedCameraController:
     return CameraControlOutput(state=CameraControlState.hold, speed_cap_mps=self._cap_mps,
                                camera_id=self._camera.key, reason=reason)
 
+  def _hold_or_manual(self, reason: str, manual_reason: str) -> CameraControlOutput:
+    if self._camera is None:
+      return self._idle(reason)
+    if manual_reason:
+      return CameraControlOutput(state=CameraControlState.manual, camera_id=self._camera.key,
+                                 manual_takeover=True, reason=manual_reason)
+    return self._hold(reason)
+
   def update(self, data: CameraControlInput, *, adapt_accel_mps2: float) -> CameraControlOutput:
     """Return a ceiling, never an acceleration command.
 
     Pass the existing planner LIMIT_ADAPT_ACC unchanged as adapt_accel_mps2
-    (finite and negative). Caller-provided manual actions cancel this camera
-    for this controller's lifetime; a different camera may start a new episode.
+    (finite and negative). Cancel/unattributed override suppress this camera;
+    pedals and physical +/- keep its geometry and original target authority.
+    Physical RES plus engaged ACC is required after braking. This module never
+    enables ACC. Continue observing fresh fixes during every temporary override.
     Construct a new controller for a new trip. A cleared camera observation,
     loss of GPS/LMD, or elapsed time alone never completes an active episode.
     """
-    for action, reason in ((data.manual_button, "manual_button"), (data.gas_pressed, "gas"),
-                           (data.brake_pressed, "brake"), (data.override, "override")):
+    for action, reason in ((data.manual_button, "manual_button"), (data.override, "override")):
       if action:
         return self._cancel(data, reason)
 
-    if not data.enabled or not data.acc_engaged:
-      reason = "disabled" if not data.enabled else "acc_disengaged"
-      return self._cancel(data, reason) if self._camera is not None else self._idle(reason)
+    if not data.enabled:
+      return self._cancel(data, "disabled") if self._camera is not None else self._idle("disabled")
+
+    if data.brake_pressed and (self._camera is not None or data.pass_pending):
+      self._brake_waiting_resume = True
+    elif self._brake_waiting_resume and data.resume_requested and data.acc_engaged:
+      self._brake_waiting_resume = False
+    if data.speed_button and self._camera is not None:
+      self._button_override = True
+    pedal_reason = ("brake" if data.brake_pressed else "brake_waiting_resume" if self._brake_waiting_resume else
+                    "gas" if data.gas_pressed else "")
+    manual_reason = pedal_reason or ("manual_button" if self._button_override else "")
+
+    if not data.acc_engaged and not self._brake_waiting_resume:
+      return self._cancel(data, "acc_disengaged") if self._camera is not None else self._idle("acc_disengaged")
 
     if not _finite(data.user_cruise_mps) or data.user_cruise_mps <= 0:
+      if manual_reason:
+        return self._hold_or_manual("user_cruise_invalid", manual_reason)
       return self._cancel(data, "user_cruise_invalid") if self._camera is not None else self._idle("user_cruise_invalid")
 
     if self._cap_mps is not None:
@@ -198,13 +249,15 @@ class SpeedCameraController:
       # A stale interval breaks consecutive passage confirmations, not the cap.
       self._behind_fixes = 0
       reason = "gps_unreliable" if not gps_ok else "lmd_unreliable"
-      return self._hold(reason) if self._camera is not None else self._idle(reason)
+      return self._hold_or_manual(reason, manual_reason)
 
     if not _finite(adapt_accel_mps2) or adapt_accel_mps2 >= 0:
-      return self._hold("adapt_accel_invalid") if self._camera is not None else self._idle("adapt_accel_invalid")
+      return self._hold_or_manual("adapt_accel_invalid", manual_reason)
 
     camera = data.camera
     if self._camera is None:
+      if pedal_reason or data.speed_button:
+        return self._idle(pedal_reason or "manual_control")
       if camera is None or not _position_valid(camera.latitude, camera.longitude):
         return self._idle("camera_missing")
       if camera.key in self._suppressed_ids:
@@ -238,21 +291,24 @@ class SpeedCameraController:
     # Keep the original coordinates and approach axis until passage. A nearest
     # camera change or new heading cannot turn an ahead point into a passed one.
     along, cross = _camera_geometry(self._camera, data.latitude, data.longitude, self._heading_deg)
-    if (abs(cross) > self.config.corridor_half_width_m or
-        _heading_delta(data.heading_deg, self._heading_deg) > self.config.heading_tolerance_deg):
+    if not self._pass_confirmed and (abs(cross) > self.config.corridor_half_width_m or
+                                     _heading_delta(data.heading_deg, self._heading_deg) > self.config.heading_tolerance_deg):
       self._behind_fixes = 0
-      return self._hold("path_ambiguous")
+      return self._hold_or_manual("path_ambiguous", manual_reason)
 
     if self._last_fix_time_s is not None and data.gps_fix_time_s < self._last_fix_time_s:
       self._behind_fixes = 0
-      return self._hold("gps_out_of_order")
+      return self._hold_or_manual("gps_out_of_order", manual_reason)
 
     if data.gps_fix_time_s != self._last_fix_time_s:
       self._last_fix_time_s = data.gps_fix_time_s
       behind = self.config.pass_margin_m <= -along <= self.config.pass_window_m
       self._behind_fixes = self._behind_fixes + 1 if behind else 0
 
-    if self._behind_fixes >= 2:
+    self._pass_confirmed |= self._behind_fixes >= 2
+    # Do not lose an observed passage if the driver holds gas/brake beyond the
+    # passage window. Do not restore or oppose a currently pressed +/- either.
+    if self._pass_confirmed and not pedal_reason and not data.speed_button:
       camera_id = self._camera.key
       self._suppressed_ids.add(camera_id)
       self._clear_track()
@@ -268,6 +324,8 @@ class SpeedCameraController:
     allowed_mps = math.sqrt(self._limit_mps ** 2 - 2.0 * adapt_accel_mps2 * max(0.0, along))
     previous_cap = self._cap_mps if self._cap_mps is not None else data.user_cruise_mps
     self._cap_mps = min(previous_cap, allowed_mps, data.user_cruise_mps)
+    if manual_reason:
+      return self._hold_or_manual("", manual_reason)
     state = CameraControlState.approach if along > 0 else CameraControlState.hold
     return CameraControlOutput(state=state, speed_cap_mps=self._cap_mps, camera_id=self._camera.key,
                                reason="kinematic_ceiling" if along > 0 else "pass_unconfirmed")
