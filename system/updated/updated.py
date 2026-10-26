@@ -376,12 +376,19 @@ class Updater:
     setup_git_options(OVERLAY_MERGED)
 
     branch = self.target_branch
-    git_fetch_output = run(["git", "fetch", "origin", branch], OVERLAY_MERGED)
+    # Do not rely on the checkout's remote.fetch refspec or on FETCH_HEAD.
+    # Device images can have a minimal remote configuration; an explicit refspec
+    # makes every branch selectable through the UI, including names containing '/'.
+    remote_ref = f"refs/remotes/origin/{branch}"
+    git_fetch_output = run([
+      "git", "fetch", "--no-tags", "origin",
+      f"refs/heads/{branch}:{remote_ref}",
+    ], OVERLAY_MERGED)
     cloudlog.info("git fetch success: %s", git_fetch_output)
 
     cloudlog.info("git reset in progress")
     cmds = [
-      ["git", "checkout", "--force", "--no-recurse-submodules", "-B", branch, "FETCH_HEAD"],
+      ["git", "checkout", "--force", "--no-recurse-submodules", "-B", branch, remote_ref],
       ["git", "reset", "--hard"],
       ["git", "clean", "-xdff"],
       ["git", "submodule", "sync"],
