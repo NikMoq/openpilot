@@ -341,7 +341,10 @@ class Updater:
       self._has_internet = False
 
     setup_git_options(OVERLAY_MERGED)
-    output = run(["git", "ls-remote", "--heads"], OVERLAY_MERGED)
+    # Always name the configured remote explicitly.  Relying on Git's implicit
+    # remote selection is ambiguous on device checkouts that have more than one
+    # remote (and can make branch checking fail before the fetch stage).
+    output = run(["git", "ls-remote", "--heads", "origin"], OVERLAY_MERGED)
 
     self.branches = defaultdict(lambda: None)
     for line in output.split('\n'):
@@ -353,6 +356,8 @@ class Updater:
     cur_branch = self.get_branch(OVERLAY_MERGED)
     cur_commit = self.get_commit_hash(OVERLAY_MERGED)
     new_branch = self.target_branch
+    if new_branch not in self.branches:
+      raise RuntimeError(f"target branch '{new_branch}' is not present on origin")
     new_commit = self.branches[new_branch]
     if (cur_branch, cur_commit) != (new_branch, new_commit):
       cloudlog.info(f"update available, {cur_branch} ({str(cur_commit)[:7]}) -> {new_branch} ({str(new_commit)[:7]})")
