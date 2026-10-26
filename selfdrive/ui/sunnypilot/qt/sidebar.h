@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 
 #include "selfdrive/ui/qt/sidebar.h"
@@ -28,8 +29,9 @@ private:
   void drawSidebar(QPainter &p) override;
 
   Params params;
-  QString sidebar_temp = "0";
   QString sidebar_temp_str = "0";
+  int temperature_mode = 0;
+  uint64_t temperature_mode_read_time = 0;
 
 protected:
   const QColor progress_color = QColor(3, 132, 252);

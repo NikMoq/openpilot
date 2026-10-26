@@ -681,6 +681,13 @@ Steering lag calibration is complete.</source><translation>
 
     <message><source>Onroad Screen: Reduced Brightness</source><translation>Затемнение экрана в поездке</translation></message>
     <message><source>Turn off device screen or reduce brightness after driving starts. It automatically brightens again when screen is touched or a visible alert is displayed.</source><translation>Выключать экран устройства или снижать яркость после начала поездки. При касании экрана или появлении видимого предупреждения яркость автоматически восстанавливается.</translation></message>
+    <message><source>Sidebar Temperature</source><translation>Температура в боковой панели</translation></message>
+    <message><source>Choose what the sidebar temperature field displays.</source><translation>Выберите, что показывать в поле температуры боковой панели.</translation></message>
+    <message><source>Status</source><translation>Статус</translation></message>
+    <message><source>CPU</source><translation>CPU</translation></message>
+    <message><source>GPU</source><translation>GPU</translation></message>
+    <message><source>RAM</source><translation>RAM</translation></message>
+    <message><source>Maximum</source><translation>Максимум</translation></message>
     <message><source>Interactivity Timeout</source><translation>Тайм-аут бездействия</translation></message>
     <message><source>Apply a custom timeout for settings UI.
 This is the time after which settings UI closes automatically if user is not interacting with the screen.</source><translation>Задать время ожидания в настройках.
@@ -951,7 +958,7 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
 
     <message><source>Device will automatically shutdown after set time once the engine is turned off.&lt;br/&gt;(30h is the default)</source><translation>Устройство автоматически выключится через заданное время после выключения двигателя.&lt;br/&gt;(По умолчанию — 30 ч)</translation></message>
     <message><source>h</source><translation>ч</translation></message>
-    <message><source> (default)</source><translation> (по умолчанию)</translation></message>
+    <message><source> (default)</source><translation> (стандарт)</translation></message>
 </context>
 <context>
     <name>MonitoringPanel</name>
@@ -2073,6 +2080,10 @@ Reboot Required.</source>
 </context>
 <context>
     <name>SidebarSP</name>
+    <message><source>CPU</source><translation>CPU</translation></message>
+    <message><source>GPU</source><translation>GPU</translation></message>
+    <message><source>RAM</source><translation>RAM</translation></message>
+    <message><source>MAX</source><translation>МАКС.</translation></message>
     <message>
         <source>TEMP</source>
         <translation>ТЕМП.</translation>
@@ -2091,7 +2102,7 @@ Reboot Required.</source>
     </message>
     <message>
         <source>DISABLED</source>
-        <translation>ОТКЛЮЧЕНО</translation>
+        <translation>ВЫКЛ.</translation>
     </message>
     <message>
         <source>OFFLINE</source>

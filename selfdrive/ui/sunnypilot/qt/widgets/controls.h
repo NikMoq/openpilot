@@ -397,11 +397,10 @@ public:
                      const std::vector<QString> &button_texts, const int minimum_button_width = 380, const bool inline_layout = false, bool advancedControl = false) : MultiButtonControlSP(title, desc, icon,
                                                                                                                           button_texts, minimum_button_width, inline_layout, advancedControl) {
     key = param.toStdString();
-    int value = atoi(params.get(key).c_str());
-
-    if (value > 0 && value < button_group->buttons().size()) {
-      button_group->button(value)->setChecked(true);
-    }
+    bool valid = false;
+    int value = QString::fromStdString(params.get(key)).toInt(&valid);
+    if (!valid || value < 0 || value >= button_group->buttons().size()) value = 0;
+    button_group->button(value)->setChecked(true);
 
     QObject::connect(this, QOverload<int>::of(&MultiButtonControlSP::buttonClicked), [=](int id) {
       params.put(key, std::to_string(id));
@@ -409,7 +408,9 @@ public:
   }
 
   void refresh() {
-    int value = atoi(params.get(key).c_str());
+    bool valid = false;
+    int value = QString::fromStdString(params.get(key)).toInt(&valid);
+    if (!valid || value < 0 || value >= button_group->buttons().size()) value = 0;
     button_group->button(value)->setChecked(true);
   }
 
@@ -557,7 +558,10 @@ public:
     label.setFixedWidth(inline_layout ? 350 : 300);
     label.setAlignment(Qt::AlignCenter);
 
-    const std::vector<QString> button_texts{"－", "＋"};
+    // Inter does not contain the fullwidth glyphs (U+FF0D/U+FF0B). Use the
+    // supported mathematical minus and ordinary plus so the controls render
+    // consistently in the native UI and Qt previews.
+    const std::vector<QString> button_texts{"−", "+"};
 
     key = param.toStdString();
     value = use_float_scaling ? getParamValueScaled() : getParamValue();

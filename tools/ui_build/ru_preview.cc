@@ -3,6 +3,7 @@
 #include <QApplication>
 #include <QAbstractScrollArea>
 #include <QAbstractButton>
+#include <QButtonGroup>
 #include <QScrollArea>
 #include <QDir>
 #include <QFile>
@@ -33,9 +34,12 @@
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/settings.h"
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal_panel.h"
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h"
+#include "selfdrive/ui/sunnypilot/qt/sidebar.h"
 
 static void seedFixtures() {
   Params params;
+  const QByteArray scenario=qgetenv("PQ35_PREVIEW_SCENARIO");
+  const std::string maxTime=scenario=="device-zero"?"0":scenario=="device-max"?"1800":"1800";
   for (const auto &pair : std::vector<std::pair<std::string,std::string>>{
       {"LanguageSetting","main_ru"},{"IsMetric","1"},{"IsOffroad","1"},{"IsOnroad","0"},
       {"OpenpilotEnabledToggle","1"},{"ShowAdvancedControls","1"},{"IntelligentCruiseButtonManagement","1"},
@@ -44,7 +48,9 @@ static void seedFixtures() {
       {"SpeedCameraDatabaseStatus","ready"},{"SpeedCameraDatabaseCount","74016"},
       {"SpeedCameraDatabaseUpdatedAt","1793020000"},{"SpeedCameraDatabaseVersion","fixture-ru-preview"},
       {"SpeedCameraDatabaseError",""},{"Version","0.9.8-fixture"},{"GitBranch","dev"},
+      {"MaxTimeOffroad",maxTime},
       {"GitCommit","fd454f15fbf247e2094d149c3456e8198e5af216"},{"DongleId","0123456789abcdef"}}) params.put(pair.first,pair.second);
+  params.put("SidebarTemperatureMode",scenario=="display-invalid"?"2junk":"0");
   capnp::MallocMessageBuilder message;
   auto cp=message.initRoot<cereal::CarParams>();
   cp.setBrand("volkswagen"); cp.setCarFingerprint("VOLKSWAGEN GOLF");
@@ -332,6 +338,25 @@ int main(int argc,char **argv) {
   if(!QDir().mkpath(output)) return 5;
   SettingsWindowSP window;
   window.resize(2160,1080); window.show();
+  const QString requestedScenario=QString::fromLocal8Bit(qgetenv("PQ35_PREVIEW_SCENARIO"));
+  if(requestedScenario=="sidebar") {
+    window.hide();
+    SidebarSP sidebar;
+    sidebar.resize(300,1080);sidebar.show();
+    QTimer::singleShot(250,[&](){
+      const std::vector<std::pair<QString,QString>> cases{{"sidebar-cpu",QString::fromUtf8("CPU|43°C")},
+        {"sidebar-ram",QString::fromUtf8("RAM|100°C")},{"sidebar-unavailable",QString::fromUtf8("RAM|—")}};
+      for(const auto &entry:cases) {
+        const auto parts=entry.second.split('|');
+        sidebar.setProperty("tempStatus",QVariant::fromValue(ItemStatus{{parts.at(0),parts.at(1)},QColor(255,255,255)}));
+        sidebar.repaint();
+        if(entry.first=="sidebar-cpu"&&!sidebar.grab().save(output+"/sidebar-full-cpu.png")) {app.exit(8);return;}
+        if(!sidebar.grab(QRect(0,300,300,140)).save(output+"/"+entry.first+".png")) {app.exit(8);return;}
+      }
+      app.exit(0);
+    });
+    return app.exec();
+  }
   struct Page {QString name;int panel;double fraction;bool descriptions;bool speed;QString nestedClass;int scrollY=-1;};
   std::vector<Page> pages{
     {"01-device-top",0,0,false,false},{"02-device-bottom",0,1,false,false},
@@ -363,6 +388,12 @@ int main(int argc,char **argv) {
     page.nestedClass=entry.second;
     pages.push_back(page);
   }
+  const QString scenario=QString::fromLocal8Bit(qgetenv("PQ35_PREVIEW_SCENARIO"));
+  const bool displayOnly=!scenario.isEmpty();
+  if(scenario=="display"||scenario=="display-invalid") pages={{scenario+"-top",9,0,false,false},
+                                  {scenario+"-bottom",9,1,false,false}};
+  else if(scenario.startsWith("device-")) pages={{scenario+"-top",0,0,false,false},
+                                                {scenario+"-bottom",0,1,false,false}};
   QSet<QString> sweepPlanned;
   QJsonArray captures, unreachableContexts, sweepCoverage;
   QJsonObject cruiseHelpInteraction;
@@ -384,6 +415,7 @@ int main(int argc,char **argv) {
       // Late height-for-width/layout updates can grow a page after its first show.
       verifiedCoverage=QJsonArray();
       for(auto &entry:observedIntervals) {
+        if(displayOnly) break;
         auto intervals=entry.second;std::sort(intervals.begin(),intervals.end());
         int end=0,missing=-1;
         QJsonArray ranges;
@@ -407,7 +439,7 @@ int main(int argc,char **argv) {
       if(!report.open(QIODevice::WriteOnly)) {app.exit(6);return;}
       report.write(QJsonDocument(QJsonObject{{"kind","ACTUAL_QT_WIDGET_HOST_PREVIEW"},{"language","main_ru"},
         {"paramsRoot",paramsRoot},{"vehicleFixture","VW/ICBM available; fixture only"},{"deviceActions",false},
-        {"settingsMutationsByClicks",false},{"fonts",fonts},{"captures",captures},{"unreachableContexts",unreachableContexts},{"sweepCoverage",sweepCoverage},{"cruiseHelpInteraction",cruiseHelpInteraction},{"fullMainScrollCoverageVerified",true},{"coverageRepairCount",coverageRepairs},{"verifiedCoverage",verifiedCoverage}}).toJson());
+        {"settingsMutationsByClicks",false},{"fonts",fonts},{"captures",captures},{"unreachableContexts",unreachableContexts},{"sweepCoverage",sweepCoverage},{"cruiseHelpInteraction",cruiseHelpInteraction},{"fullMainScrollCoverageVerified",!displayOnly},{"coverageRepairCount",coverageRepairs},{"verifiedCoverage",verifiedCoverage}}).toJson());
       app.exit(0);return;
     }
     const Page page=pages[index++];
@@ -458,7 +490,7 @@ int main(int argc,char **argv) {
         int scrollMaximum=mainArea?mainArea->verticalScrollBar()->maximum():0;
         int viewportHeight=mainArea?mainArea->viewport()->height():window.height();
         const QString profile=QString::number(page.panel)+"/"+(page.speed?"speed":page.nestedClass)+"/"+(page.descriptions?"descriptions":"normal");
-        if(page.scrollY<0&&!sweepPlanned.contains(profile)) {
+        if(!displayOnly&&page.scrollY<0&&!sweepPlanned.contains(profile)) {
           sweepPlanned.insert(profile);
           const int step=qMax(1,viewportHeight-100);
           QJsonArray positions;
@@ -498,8 +530,16 @@ int main(int argc,char **argv) {
             {"horizontalScrollMaximum",area->horizontalScrollBar()->maximum()},
             {"verticalScrollValue",area->verticalScrollBar()->value()},{"verticalScrollMaximum",area->verticalScrollBar()->maximum()}});
         }
+        int sidebarTemperatureCheckedId=-1;
+        if(page.panel==9) for(auto *control:scope->findChildren<ButtonParamControlSP *>()) {
+          const auto buttons=control->findChildren<QPushButton *>();
+          bool temperatureChoices=false;
+          for(auto *button:buttons) if(button->text()==QCoreApplication::translate("DisplayPanel","Maximum")) temperatureChoices=true;
+          if(temperatureChoices) if(auto *group=control->findChild<QButtonGroup *>()) sidebarTemperatureCheckedId=group->checkedId();
+        }
         captures.append(QJsonObject{{"file",path},{"width",window.width()},{"height",window.height()},
           {"panelIndex",page.panel},{"nestedClass",page.nestedClass},{"scrollFraction",page.fraction},{"descriptionsExpanded",page.descriptions},
+          {"sidebarTemperatureCheckedId",sidebarTemperatureCheckedId},{"sidebarTemperatureParamRaw",QString::fromStdString(Params().get("SidebarTemperatureMode"))},
           {"profile",profile},{"sweep",page.scrollY>=0},{"scrollY",actualScrollY},{"scrollMaximum",scrollMaximum},{"viewportHeight",viewportHeight},
           {"visibleLabels",labels},{"captions",captions},{"scrollAreas",scrollAreas}});
         next();
@@ -507,10 +547,10 @@ int main(int argc,char **argv) {
     });
   };
   QTimer::singleShot(400,[&](){
-    cruiseHelpInteraction=checkCruiseHelpInteraction(window);
+    if(!displayOnly) cruiseHelpInteraction=checkCruiseHelpInteraction(window);
     QFile proof(output+"/cruise_help_interaction.json");
     if(proof.open(QIODevice::WriteOnly)) proof.write(QJsonDocument(cruiseHelpInteraction).toJson());
-    if(!cruiseHelpInteraction.value("passed").toBool()) {app.exit(9);return;}
+    if(!displayOnly&&!cruiseHelpInteraction.value("passed").toBool()) {app.exit(9);return;}
     next();
   });
   return app.exec();

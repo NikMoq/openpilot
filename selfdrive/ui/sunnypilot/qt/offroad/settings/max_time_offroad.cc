@@ -30,6 +30,7 @@ MaxTimeOffroad::MaxTimeOffroad() : OptionControlSP(
   "../assets/offroad/icon_blank.png",
   {0, 11}, 1, true, &offroad_time_options) {
 
+  setFixedWidth(420);
   refresh();
 }
 

@@ -9,7 +9,10 @@
 
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/sunnypilot/qt/util.h"
+#include "selfdrive/ui/sunnypilot/qt/sidebar_temperature.h"
 #include "common/params.h"
+
+#include <cmath>
 
 SidebarSP::SidebarSP(QWidget *parent) : Sidebar(parent) {
   // Redirect uiUpdate signal to SidebarSP::updateState instead of Sidebar::updateState
@@ -20,6 +23,42 @@ SidebarSP::SidebarSP(QWidget *parent) : Sidebar(parent) {
 void SidebarSP::updateState(const UIStateSP &s) {
   if (!isVisible()) return;
   Sidebar::updateState(s);
+
+  const uint64_t now = nanos_since_boot();
+  if (temperature_mode_read_time == 0 || now - temperature_mode_read_time >= 1000000000ULL) {
+    bool valid_mode = false;
+    const int mode = QString::fromStdString(params.get("SidebarTemperatureMode")).toInt(&valid_mode);
+    temperature_mode = valid_mode && mode >= 0 && mode <= 4 ? mode : 0;
+    temperature_mode_read_time = now;
+  }
+
+  if (temperature_mode != 0) {
+    static constexpr const char *device_state = "deviceState";
+    const auto &sm = *s.sm;
+    const uint64_t received = sm.rcv_time(device_state);
+    const bool fresh = received != 0 && now >= received && now - received <= 5000000000ULL;
+    float value = std::numeric_limits<float>::quiet_NaN();
+    QString label;
+    if (temperature_mode == 1) label = tr("CPU");
+    if (temperature_mode == 2) label = tr("GPU");
+    if (temperature_mode == 3) label = tr("RAM");
+    if (temperature_mode == 4) label = tr("MAX");
+    if (sm.valid(device_state) && sm.alive(device_state) && fresh) {
+      const auto state = sm[device_state].getDeviceState();
+      const auto reading = sidebar_temperature::select(temperature_mode, state);
+      value = reading.value;
+      if (temperature_mode == 4) {
+        if (reading.source == sidebar_temperature::Source::CPU) label = tr("CPU");
+        if (reading.source == sidebar_temperature::Source::GPU) label = tr("GPU");
+        if (reading.source == sidebar_temperature::Source::MEMORY) label = tr("RAM");
+      }
+    }
+    const QString reading = sidebar_temperature::usable(value)
+      ? QString::number(std::lround(value)) + QString::fromUtf8("°C")
+      : QString::fromUtf8("—");
+    // Sidebar::updateState already selected the thermal-status colour.
+    setProperty("tempStatus", QVariant::fromValue(ItemStatus{{label, reading}, temp_status.second}));
+  }
 
   ItemStatus sunnylinkStatus;
   auto sl_dongle_id = getSunnylinkDongleId();

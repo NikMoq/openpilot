@@ -32,6 +32,14 @@ DisplayPanel::DisplayPanel(QWidget *parent) : QWidget(parent) {
   list->addItem(brightness);
   list->addItem(horizontal_line());
 
+  // Sidebar temperature field
+  auto *sidebarTemperatureMode = new ButtonParamControlSP(
+    "SidebarTemperatureMode", tr("Sidebar Temperature"),
+    tr("Choose what the sidebar temperature field displays."), "",
+    {tr("Status"), tr("CPU"), tr("GPU"), tr("RAM"), tr("Maximum")}, 210);
+  list->addItem(sidebarTemperatureMode);
+  list->addItem(horizontal_line());
+
   // Interactivity Timeout
   interactivityTimeout =  new OptionControlSP("InteractivityTimeout", tr("Interactivity Timeout"),
                                    tr("Apply a custom timeout for settings UI."
