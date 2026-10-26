@@ -56,7 +56,16 @@ def _camera_from_mapping(item: dict[str, Any]) -> SpeedCamera | None:
     return None
 
   speed_limit = item.get("speed_limit_kph", item.get("speedLimit", item.get("speed")))
-  direction = item.get("direction_deg", item.get("direction", item.get("bearing")))
+  if speed_limit is None:
+    controls = item.get("speedControls")
+    if isinstance(controls, list):
+      current = next((control for control in controls
+                      if isinstance(control, dict) and control.get("type") == "current"), None)
+      if current is None:
+        current = next((control for control in controls if isinstance(control, dict)), None)
+      if isinstance(current, dict):
+        speed_limit = current.get("speed")
+  direction = item.get("direction_deg", item.get("direction", item.get("bearing", item.get("dir"))))
   return SpeedCamera(
     latitude=latitude,
     longitude=longitude,
@@ -88,7 +97,7 @@ def parse_camera_snapshot(payload: str | bytes | dict[str, Any] | list[Any]) -> 
       normalized.append(item)
     items = normalized
   elif isinstance(payload, dict):
-    items = payload.get("cameras", payload.get("items", []))
+    items = payload.get("objects", payload.get("cameras", payload.get("items", [])))
   else:
     items = payload
 

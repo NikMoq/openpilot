@@ -27,6 +27,7 @@ from openpilot.sunnypilot.mapd.mapd_installer import VERSION, update_installed_v
 params = Params()
 mem_params = Params("/dev/shm/params") if platform.system() != "Darwin" else params
 SPEED_CAMERA_UPDATE_PERIOD_S = 24 * 3600
+DEFAULT_SPEED_CAMERA_URL = "https://radarbase.info/export/cache/RU/main_extended.json"
 # }} PFEIFER - MAPD
 
 
@@ -123,19 +124,14 @@ def update_osm_db() -> None:
 
 
 def update_speed_camera_db() -> None:
-  """Refresh an explicitly configured camera snapshot once per day.
-
-  No endpoint is enabled by default. The URL and version are supplied through
-  Params so deployments can choose a permitted source and record provenance.
-  A failed refresh leaves the last valid local snapshot untouched.
-  """
-  url = params.get("SpeedCameraDatabaseUrl", return_default=True)
-  version = params.get("SpeedCameraDatabaseVersion", return_default=True)
-  if not url or not version:
-    return
+  """Refresh the configured camera snapshot and preserve the last valid copy."""
+  url = params.get("SpeedCameraDatabaseUrl", return_default=True) or DEFAULT_SPEED_CAMERA_URL
+  version = params.get("SpeedCameraDatabaseVersion", return_default=True) or "radarbase-main-extended-RU"
 
   last_update = float(params.get("SpeedCameraDatabaseUpdatedAt", return_default=True) or 0)
-  if time.time() - last_update < SPEED_CAMERA_UPDATE_PERIOD_S:
+  period_hours = float(params.get("SpeedCameraDatabaseUpdatePeriodHours", return_default=True) or 24)
+  period_s = max(900, period_hours * 3600)
+  if time.time() - last_update < period_s:
     return
 
   database_path = params.get("SpeedCameraDatabasePath", return_default=True)
