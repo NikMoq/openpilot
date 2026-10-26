@@ -138,9 +138,15 @@ def update_speed_camera_db() -> None:
   if not database_path:
     database_path = os.path.join(Paths.mapd_root(), "speed_cameras.json")
   try:
+    params.put("SpeedCameraDatabaseStatus", "downloading")
+    params.remove("SpeedCameraDatabaseError")
     download_database(url, database_path, version)
     params.put("SpeedCameraDatabaseUpdatedAt", str(time.time()))
-  except Exception:
+    params.put("SpeedCameraDatabaseVersion", version)
+    params.put("SpeedCameraDatabaseStatus", "ready")
+  except Exception as e:
+    params.put("SpeedCameraDatabaseStatus", "error")
+    params.put("SpeedCameraDatabaseError", str(e))
     cloudlog.exception("mapd: speed-camera database refresh failed")
 
 
