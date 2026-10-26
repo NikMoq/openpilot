@@ -58,6 +58,24 @@ deployment is distributed.
 5. Review the external Radarbase terms and availability before enabling the
    default endpoint in a distributable build.
 
+## Next controlled bench evidence
+
+Use a stationary, safe setup with the vehicle secured and no public-road
+operation. Capture a short before/after trace while publishing a synthetic
+`liveMapDataSP` camera event:
+
+1. Confirm `speedCameraAheadValid`, `speedCameraAheadDistance`,
+   `speedCameraSpeedLimit`, and `speedCameraType` on the subscriber side.
+2. Confirm the existing SLC resolver selects the map source and produces the
+   expected target speed without changing Panda safety limits.
+3. Confirm the existing PQ35 IBCM layer emits only the already-supported ACC
+   button frames when the target is changed; record CAN ID, bus, counter, and
+   checksum from the trace.
+4. Confirm clearing the camera event restores the prior map/car speed-limit
+   behavior and does not leave a stale target.
+
+This evidence must be reviewed before any hardware installation or road test.
+
 ## DragonPilot reference rule
 
 DragonPilot remains a reference for user-visible behavior and update flow. Its
