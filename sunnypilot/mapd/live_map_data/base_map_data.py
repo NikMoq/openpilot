@@ -47,6 +47,7 @@ class BaseMapData(ABC):
 
   def publish(self) -> None:
     speed_limit = self.get_current_speed_limit()
+    camera = self.get_speed_camera()
     next_speed_limit, next_speed_limit_distance = self.get_next_speed_limit_and_distance()
 
     mapd_sp_send = messaging.new_message('liveMapDataSP')
@@ -60,7 +61,6 @@ class BaseMapData(ABC):
     live_map_data.speedLimitAheadDistance = next_speed_limit_distance
     live_map_data.roadName = self.get_current_road_name()
 
-    camera = self.get_speed_camera()
     if camera is not None:
       live_map_data.speedCameraAheadValid = True
       live_map_data.speedCameraAheadDistance = camera.distance_m

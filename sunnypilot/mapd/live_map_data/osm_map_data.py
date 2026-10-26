@@ -82,7 +82,11 @@ class OsmMapData(BaseMapData):
     return str(self.mem_params.get("RoadName") or "")
 
   def get_next_speed_limit_and_distance(self) -> tuple[float, float]:
-    camera_match = self.get_speed_camera()
+    # BaseMapData.publish() resolves the camera once per tick. Reuse that
+    # match so the speed-limit and HUD fields cannot disagree.
+    camera_match = self.camera_match
+    if camera_match is None:
+      camera_match = self.get_speed_camera()
     if camera_match is not None and camera_match.camera.speed_limit_kph is not None:
       return camera_match.camera.speed_limit_kph / 3.6, camera_match.distance_m
 
