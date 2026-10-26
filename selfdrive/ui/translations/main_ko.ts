@@ -940,7 +940,7 @@ DEPARTING</source>
         <translation>차량 호환성을 확인하려면 차량 시동을 걸어주세요.</translation>
     </message>
     <message>
-        <source>Intelligent Cruise Button Management (ICBM) (Alpha)</source>
+        <source>Intelligent Cruise Button Management (ICBM)</source>
         <translation>지능형 크루즈 버튼 관리 (ICBM) (알파)</translation>
     </message>
     <message>

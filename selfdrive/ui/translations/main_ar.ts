@@ -938,7 +938,7 @@ DEPARTING</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Intelligent Cruise Button Management (ICBM) (Alpha)</source>
+        <source>Intelligent Cruise Button Management (ICBM)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

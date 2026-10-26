@@ -6,7 +6,7 @@ from openpilot.selfdrive.ui.layouts.settings.developer import DeveloperLayout
 from openpilot.selfdrive.ui.layouts.settings.device import DeviceLayout
 from openpilot.selfdrive.ui.layouts.settings.firehose import FirehoseLayout
 from openpilot.selfdrive.ui.layouts.settings.software import SoftwareLayout
-from openpilot.selfdrive.ui.layouts.settings.speed_cameras import SpeedCameraLayout
+from openpilot.selfdrive.ui.layouts.settings.speed_limit import SpeedLimitLayout
 from openpilot.selfdrive.ui.layouts.settings.toggles import TogglesLayout
 from openpilot.system.ui.lib.application import gui_app, FontWeight, MousePos
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -40,7 +40,7 @@ class PanelType(IntEnum):
   SOFTWARE = 3
   FIREHOSE = 4
   DEVELOPER = 5
-  SPEED_CAMERAS = 6
+  SPEED_LIMIT = 6
 
 
 @dataclass
@@ -66,7 +66,7 @@ class SettingsLayout(Widget):
       PanelType.SOFTWARE: PanelInfo("Software", SoftwareLayout()),
       PanelType.FIREHOSE: PanelInfo("Firehose", FirehoseLayout()),
       PanelType.DEVELOPER: PanelInfo("Developer", DeveloperLayout()),
-      PanelType.SPEED_CAMERAS: PanelInfo("Speed Cameras", SpeedCameraLayout()),
+      PanelType.SPEED_LIMIT: PanelInfo("Speed Limit", SpeedLimitLayout()),
     }
 
     self._font_medium = gui_app.font(FontWeight.MEDIUM)

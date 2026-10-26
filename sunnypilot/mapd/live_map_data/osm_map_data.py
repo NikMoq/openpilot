@@ -91,7 +91,10 @@ class OsmMapData(BaseMapData):
       return camera_match.camera.speed_limit_kph / 3.6, camera_match.distance_m
 
     next_speed_limit_section_str = self.mem_params.get("NextMapSpeedLimit")
-    next_speed_limit_section = next_speed_limit_section_str if next_speed_limit_section_str else {}
+    try:
+      next_speed_limit_section = json.loads(next_speed_limit_section_str) if next_speed_limit_section_str else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+      next_speed_limit_section = {}
     next_speed_limit = next_speed_limit_section.get('speedlimit', 0.0)
     next_speed_limit_latitude = next_speed_limit_section.get('latitude')
     next_speed_limit_longitude = next_speed_limit_section.get('longitude')
