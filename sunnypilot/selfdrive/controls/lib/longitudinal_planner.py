@@ -49,6 +49,7 @@ class LongitudinalPlannerSP:
                               not CP.openpilotLongitudinalControl)
     self.camera_control_enabled = False
     self.camera_minimum_speed = 30 * CV.KPH_TO_MS
+    self.camera_speed_offset_kph = 0.0
     self._camera_config_frame = 0
 
   @property
@@ -100,6 +101,12 @@ class LongitudinalPlannerSP:
         self.resolver.params.get("SpeedLimitMode", return_default=True) == Mode.assist)
       is_metric = self.resolver.params.get_bool("IsMetric")
       self.camera_minimum_speed = get_minimum_set_speed(is_metric) * (CV.KPH_TO_MS if is_metric else CV.MPH_TO_MS)
+      try:
+        camera_offset = float(self.camera_params.get("SpeedCameraSpeedOffsetKph"))
+      except (TypeError, ValueError):
+        camera_offset = 0.0
+      self.camera_speed_offset_kph = (camera_offset if math.isfinite(camera_offset) and
+                                     0.0 <= camera_offset <= 30.0 and camera_offset.is_integer() else 0.0)
     self._camera_config_frame += 1
     gps_service = self.resolver._gps_location_service
     output = self.camera.update(
@@ -109,6 +116,7 @@ class LongitudinalPlannerSP:
       lmd_age_s=time.monotonic() - sm.recv_time['liveMapDataSP'],
       lmd_generation=sm.recv_time['liveMapDataSP'],
       user_cruise_mps=v_cruise, minimum_speed_mps=self.camera_minimum_speed,
+      camera_speed_offset_kph=self.camera_speed_offset_kph,
       now_s=time.time(), adapt_accel_mps2=LIMIT_ADAPT_ACC,  # noqa: TID251 - GPS fixes carry Unix timestamps
     )
     cap = output.speed_cap_mps

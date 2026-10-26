@@ -38,7 +38,7 @@ inline void drawCameraOverlay(QPainter &p, const QRect &surface, bool valid,
                         : QString::number(distance_m / 1609.344f, 'f', 1) + " mi")) : QString();
   const QColor color = distance_m <= 100 ? QColor(255, 80, 80)
                         : (distance_m <= 300 ? QColor(255, 190, 60) : QColor(Qt::white));
-  const QRect rect(surface.right() - 395, surface.top() + 45, 360, waiting_for_map ? 180 : 155);
+  const QRect rect(surface.right() - 395, surface.top() + 45, 360, waiting_for_map ? 180 : (show_target ? 165 : 155));
   p.save();
   p.setPen(QPen(show_position_hold ? QColor(255, 190, 60) : color, 3));
   p.setBrush(QColor(0, 0, 0, 190));
@@ -55,20 +55,27 @@ inline void drawCameraOverlay(QPainter &p, const QRect &surface, bool valid,
     if (show_target) {
       p.setFont(InterFont(25, QFont::Normal));
       p.drawText(rect.adjusted(16, 130, -16, 0), Qt::AlignTop | Qt::AlignLeft,
-                 QString("TARGET %1%2").arg(qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f)))
+                 QObject::tr("ACC TARGET %1 %2").arg(qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f)))
                                         .arg(metric ? "km/h" : "mph"));
     }
   } else {
     p.setFont(InterFont(27, QFont::Normal));
-    const QString target = show_target
-      ? QString("TARGET %1%2").arg(qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f)))
-                              .arg(metric ? "km/h" : "mph")
-      : (limit > 0 ? QString::number(qRound(limit)) + (metric ? " km/h" : " mph") : QString());
-    if (!target.isEmpty()) {
-      p.drawText(rect.adjusted(16, 52, -16, 0), Qt::AlignTop | Qt::AlignLeft, target);
+    const QString camera_limit = valid_distance && std::isfinite(limit) && limit > 0
+      ? QString::number(qRound(limit)) + (metric ? " km/h" : " mph") : QString();
+    if (!camera_limit.isEmpty()) {
+      p.drawText(rect.adjusted(16, 52, -16, 0), Qt::AlignTop | Qt::AlignLeft, camera_limit);
     }
     if (valid_distance) {
-      p.drawText(rect.adjusted(16, 91, -16, 0), Qt::AlignTop | Qt::AlignLeft, distance);
+      p.drawText(rect.adjusted(16, show_target ? 52 : 91, -16, 0),
+                 Qt::AlignTop | (show_target ? Qt::AlignRight : Qt::AlignLeft), distance);
+    }
+    if (show_target) {
+      // The active ACC target may belong to a different camera than the nearest warning above.
+      p.drawLine(rect.left() + 16, rect.top() + 99, rect.right() - 16, rect.top() + 99);
+      p.setFont(InterFont(25, QFont::Normal));
+      p.drawText(rect.adjusted(16, 113, -16, 0), Qt::AlignTop | Qt::AlignLeft,
+                 QObject::tr("ACC TARGET %1 %2").arg(qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f)))
+                                            .arg(metric ? "km/h" : "mph"));
     }
   }
   p.restore();

@@ -11,13 +11,15 @@ import platform
 import time
 
 from cereal import log
+from openpilot.common.constants import CV
 from openpilot.common.params import Params
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import load_database
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
-from openpilot.sunnypilot.mapd.speed_cameras import find_nearest_camera
+from openpilot.sunnypilot.mapd.speed_cameras import find_nearest_camera, find_nearest_control_camera
 from openpilot.sunnypilot.navd.helpers import Coordinate
+from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.helpers import get_minimum_set_speed
 
 
 class OsmMapData(BaseMapData):
@@ -30,6 +32,7 @@ class OsmMapData(BaseMapData):
     self.camera_database = None
     self.camera_database_mtime = None
     self.camera_match = None
+    self.camera_control_match = None
     self.camera_enabled = True
     self.camera_alert_distance_m = 1_000.0
 
@@ -63,7 +66,8 @@ class OsmMapData(BaseMapData):
 
   def get_speed_camera(self):
     self._load_camera_database()
-    if self.camera_database is not None and time.time() - self.camera_database.fetched_at > 7 * 24 * 3600:
+    self.camera_control_match = None
+    if self.camera_database is not None and time.time() - self.camera_database.fetched_at > 7 * 24 * 3600:  # noqa: TID251 - persisted Unix time
       self.camera_database = None
     if not self.localizer_valid or not self.camera_enabled or self.camera_database is None or self.last_position is None:
       self.camera_match = None
@@ -78,7 +82,18 @@ class OsmMapData(BaseMapData):
         max_distance_m=max(self.camera_alert_distance_m,
                            5_000.0 if self.camera_params.get("SpeedCameraControlEnabled") == "1" else 0.0),
       )
+      if self.camera_params.get("SpeedCameraControlEnabled") == "1":
+        is_metric = self.params.get_bool("IsMetric")
+        minimum_speed_kph = get_minimum_set_speed(is_metric) * (1.0 if is_metric else CV.MPH_TO_MS / CV.KPH_TO_MS)
+        self.camera_control_match = find_nearest_control_camera(
+          self.camera_database.cameras, self.last_position.latitude, self.last_position.longitude,
+          heading_deg=self.last_bearing, minimum_speed_kph=minimum_speed_kph,
+        )
     return self.camera_match
+
+  def get_speed_camera_control(self):
+    # BaseMapData.publish refreshes both selections once through get_speed_camera.
+    return self.camera_control_match
 
   def update_location(self) -> None:
     location = self.sm['liveLocationKalman']

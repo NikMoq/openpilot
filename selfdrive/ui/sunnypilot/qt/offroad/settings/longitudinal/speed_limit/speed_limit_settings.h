@@ -47,6 +47,7 @@ private:
   ButtonControlSP *speed_camera_source;
   LabelControlSP *speed_camera_error;
   OptionControlSP *speed_camera_alert_distance;
+  OptionControlSP *speed_camera_speed_offset;
   PushButtonSP *speed_camera_update;
   QTimer *speed_camera_refresh_timer;
   bool speed_camera_control_available = false;

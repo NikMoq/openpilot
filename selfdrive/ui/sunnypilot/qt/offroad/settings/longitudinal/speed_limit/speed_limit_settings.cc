@@ -17,6 +17,14 @@
 namespace {
 constexpr const char *SPEED_CAMERA_DEFAULT_URL = "https://speedcamonline.ru/cg77/Rus/comment/";
 
+void cameraButtonSymbols(OptionControlSP *control) {
+  // Inter contains these glyphs; the full-width variants need a system fallback font.
+  for (auto *button : control->findChildren<QPushButton *>()) {
+    if (button->text() == "－") button->setText("−");
+    if (button->text() == "＋") button->setText("+");
+  }
+}
+
 QString cameraTimestamp(const std::string &value) {
   bool ok = false;
   const double seconds = QString::fromStdString(value).toDouble(&ok);
@@ -29,6 +37,7 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
   if (params.get("SpeedCameraEnabled").empty()) params.putBool("SpeedCameraEnabled", true);
   if (params.get("SpeedCameraControlEnabled").empty()) params.putBool("SpeedCameraControlEnabled", false);
   if (params.get("SpeedCameraAlertDistanceMeters").empty()) params.put("SpeedCameraAlertDistanceMeters", "1000");
+  if (params.get("SpeedCameraSpeedOffsetKph").empty()) params.put("SpeedCameraSpeedOffsetKph", "0");
   if (params.get("SpeedCameraDatabaseUpdatePeriodHours").empty()) params.put("SpeedCameraDatabaseUpdatePeriodHours", "24");
   const std::string camera_url = params.get("SpeedCameraDatabaseUrl");
   if (camera_url.empty() || camera_url == "https://speedcamonline.ru/igo/Rus/" ||
@@ -169,8 +178,22 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
     "SpeedCameraAlertDistanceMeters",
     tr("Warning Distance"),
     tr("Show camera warnings up to this distance ahead."), "",
-    {100, 2000}, 100);
+    {100, 2000}, 50);
+  cameraButtonSymbols(speed_camera_alert_distance);
+  connect(speed_camera_alert_distance, &OptionControlSP::updateLabels, this, [this]() {
+    speed_camera_alert_distance->setLabel(tr("%1 m").arg(QString::fromStdString(params.get("SpeedCameraAlertDistanceMeters"))));
+  });
   list->addItem(speed_camera_alert_distance);
+
+  speed_camera_speed_offset = new OptionControlSP(
+    "SpeedCameraSpeedOffsetKph", tr("Camera Speed Offset"),
+    tr("Add this offset to the camera limit for automatic camera speed control, up to your selected cruise speed. Always stored in km/h."), "",
+    {0, 30}, 1);
+  cameraButtonSymbols(speed_camera_speed_offset);
+  connect(speed_camera_speed_offset, &OptionControlSP::updateLabels, this, [this]() {
+    speed_camera_speed_offset->setLabel(tr("+%1 km/h").arg(QString::fromStdString(params.get("SpeedCameraSpeedOffsetKph"))));
+  });
+  list->addItem(speed_camera_speed_offset);
 
   speed_camera_status = new LabelControlSP(tr("Database Status"));
   speed_camera_count = new LabelControlSP(tr("Camera Count"));
@@ -281,6 +304,8 @@ void SpeedLimitSettings::refresh() {
   speed_limit_offset->showDescription();
 
   const QString status = QString::fromStdString(params.get("SpeedCameraDatabaseStatus"));
+  speed_camera_alert_distance->setLabel(tr("%1 m").arg(QString::fromStdString(params.get("SpeedCameraAlertDistanceMeters"))));
+  speed_camera_speed_offset->setLabel(tr("+%1 km/h").arg(QString::fromStdString(params.get("SpeedCameraSpeedOffsetKph"))));
   speed_camera_status->setText(status.isEmpty() ? tr("not downloaded") : status);
   const QString count = QString::fromStdString(params.get("SpeedCameraDatabaseCount"));
   speed_camera_count->setText(count.isEmpty() ? "0" : count);

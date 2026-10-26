@@ -317,3 +317,13 @@ def find_nearest_camera(cameras: Iterable[SpeedCamera], latitude: float, longitu
           continue
     matches.append(CameraMatch(camera, distance, bearing))
   return min(matches, key=lambda match: match.distance_m, default=None)
+
+
+def find_nearest_control_camera(cameras: Iterable[SpeedCamera], latitude: float, longitude: float,
+                                heading_deg: float | None, minimum_speed_kph: float,
+                                max_distance_m: float = 5_000) -> CameraMatch | None:
+  """Select independently of warnings, using raw eligibility before any offset."""
+  if heading_deg is None or not math.isfinite(heading_deg) or not math.isfinite(minimum_speed_kph) or minimum_speed_kph <= 0:
+    return None
+  candidates = (camera for camera in cameras if camera.allowed_auto_control and camera.speed_limit_kph >= minimum_speed_kph)
+  return find_nearest_camera(candidates, latitude, longitude, heading_deg, max_distance_m)

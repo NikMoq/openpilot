@@ -9,6 +9,8 @@
 #include <QCommandLineParser>
 #include <QDateTime>
 #include <QElapsedTimer>
+#include <QEventLoop>
+#include <QFontDatabase>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -20,6 +22,129 @@
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h"
 #include "selfdrive/ui/sunnypilot/qt/onroad/camera_warning.h"
 #include "selfdrive/ui/sunnypilot/qt/onroad/hud.h"
+
+static bool verifyCameraSetting(SpeedLimitSettings &panel, const QString &output, const QString &title,
+                                const char *key, const QString &format, int minimum, int maximum, int step,
+                                const QString &prefix, int sample) {
+  auto findControl = [&](SpeedLimitSettings &settings) -> OptionControlSP * {
+    for (auto *control : settings.findChildren<OptionControlSP *>()) {
+      for (auto *button : control->findChildren<QPushButton *>()) {
+        if (button->text() == title) return control;
+      }
+    }
+    return nullptr;
+  };
+  auto settle = []() {
+    QEventLoop loop;
+    QTimer::singleShot(150, &loop, &QEventLoop::quit);
+    loop.exec();
+  };
+  auto visibleValue = [&](OptionControlSP *control, int value) {
+    const QString expected = format.arg(value);
+    for (auto *label : control->findChildren<QLabel *>()) {
+      if (label->isVisible() && label->text() == expected &&
+          label->fontMetrics().horizontalAdvance(expected) <= label->contentsRect().width()) return true;
+    }
+    return false;
+  };
+  QJsonArray steps;
+  bool passed = true;
+  auto capture = [&](SpeedLimitSettings &settings, OptionControlSP *control, const QString &name, int expected) {
+    // Check the binding before processing a timer, then allow layout and paint before evidence capture.
+    const bool immediate = visibleValue(control, expected);
+    settle();
+    for (auto *scroll : settings.findChildren<QScrollArea *>()) {
+      if (scroll->isVisible()) scroll->ensureWidgetVisible(control, 0, 30);
+    }
+    settle();
+    const QString persisted = QString::fromStdString(Params().get(key));
+    const bool shown = visibleValue(control, expected);
+    const QString screenshot = output + "/" + prefix + "-" + name + ".png";
+    const bool saved = settings.grab().save(screenshot);
+    QStringList labels;
+    for (auto *label : control->findChildren<QLabel *>()) {
+      if (label->isVisible()) labels.append(label->text());
+    }
+    const bool ok = immediate && shown && persisted == QString::number(expected) && saved;
+    passed &= ok;
+    steps.append(QJsonObject{{"step", name}, {"expected_value", expected}, {"persisted", persisted},
+                             {"immediate_label", immediate}, {"visible_value_fits", shown},
+                             {"labels", QJsonArray::fromStringList(labels)}, {"screenshot", screenshot}, {"passed", ok}});
+    std::printf("%s %s: expected=%d persisted=%s immediate-label=%d visible-fit=%d\n",
+                qPrintable(title), qPrintable(name), expected, qPrintable(persisted), immediate, shown);
+  };
+  auto *control = findControl(panel);
+  QPushButton *plus = nullptr, *minus = nullptr;
+  if (control) {
+    for (auto *button : control->findChildren<QPushButton *>()) {
+      if (button->text() == "+") plus = button;
+      if (button->text() == "−") minus = button;
+    }
+  }
+  bool valid = false;
+  const int initial = QString::fromStdString(Params().get(key)).toInt(&valid);
+  if (!control || !plus || !minus || !valid || initial < minimum || initial > maximum || (initial - minimum) % step) {
+    std::fprintf(stderr, "%s control/buttons/initial Params missing or invalid\n", qPrintable(title));
+    return false;
+  }
+  capture(panel, control, "initial", initial);
+  const bool increase_first = initial < maximum;
+  const int changed = increase_first ? std::min(initial + step, maximum) : initial - step;
+  (increase_first ? plus : minus)->click();
+  capture(panel, control, increase_first ? "plus" : "minus", changed);
+  (increase_first ? minus : plus)->click();
+  capture(panel, control, "restored", initial);
+  auto reopen = [&](int expected, const QString &name) {
+    SpeedLimitSettings reopened;
+    reopened.resize(panel.size());
+    reopened.show();
+    auto *reopened_control = findControl(reopened);
+    if (reopened_control) capture(reopened, reopened_control, name, expected);
+    else passed = false;
+  };
+  auto moveTo = [&](int target) {
+    int current = QString::fromStdString(Params().get(key)).toInt();
+    for (int clicks = 0; current != target && clicks <= (maximum - minimum) / step; ++clicks) {
+      const int next = std::clamp(current + (current < target ? step : -step), minimum, maximum);
+      (current < target ? plus : minus)->click();
+      current = QString::fromStdString(Params().get(key)).toInt();
+      if (current != next || !visibleValue(control, next)) {
+        passed = false;
+        return;
+      }
+    }
+    passed &= current == target;
+  };
+  moveTo(minimum);
+  minus->click();
+  const bool minimum_disabled = !minus->isEnabled();
+  passed &= minimum_disabled;
+  capture(panel, control, QString("minimum-%1").arg(minimum), minimum);
+  plus->click();
+  capture(panel, control, QString("plus-%1").arg(minimum + step), minimum + step);
+  reopen(minimum + step, QString("reopened-%1").arg(minimum + step));
+  plus->click();
+  capture(panel, control, QString("plus-%1").arg(minimum + 2 * step), minimum + 2 * step);
+  moveTo(sample);
+  capture(panel, control, QString("selected-%1").arg(sample), sample);
+  reopen(sample, QString("reopened-selected-%1").arg(sample));
+  moveTo(maximum);
+  plus->click();
+  const bool maximum_disabled = !plus->isEnabled();
+  passed &= maximum_disabled;
+  capture(panel, control, QString("maximum-%1").arg(maximum), maximum);
+  moveTo(initial);
+  capture(panel, control, "final-restored", initial);
+  reopen(initial, "reopened");
+  std::printf("%s limits: min-disabled=%d max-disabled=%d original-restored=%d\n",
+              qPrintable(title), minimum_disabled, maximum_disabled, Params().get(key) == std::to_string(initial));
+  QFile report(output + "/" + prefix + "-result.json");
+  if (!report.open(QIODevice::WriteOnly)) return false;
+  report.write(QJsonDocument(QJsonObject{{"passed", passed}, {"param", key},
+                                       {"minimum_disabled", minimum_disabled}, {"maximum_disabled", maximum_disabled},
+                                       {"steps", steps}}).toJson());
+  return passed;
+}
 
 // Feed the real HUD in memory; do not publish messages or run a vehicle stack.
 static bool verifyCameraControlFreshness(UIState &state, const QString &output) {
@@ -245,6 +370,10 @@ int main(int argc, char **argv) {
     return 2;
   }
   QApplication app(argc, argv);
+  const QDir fonts("selfdrive/assets/fonts");
+  for (const auto &font : fonts.entryList({"*.ttf"}, QDir::Files)) {
+    QFontDatabase::addApplicationFont(fonts.filePath(font));
+  }
   QCommandLineParser parser;
   parser.setApplicationDescription("Native settings/HUD preview; optional real UI-to-updater integration test.");
   parser.addHelpOption();
@@ -269,7 +398,7 @@ int main(int argc, char **argv) {
     return 2;
   }
   app.setStyleSheet(
-    "QWidget { background: #20252b; color: #f2f4f7; font-size: 34px; }"
+    "QWidget { background: #20252b; color: #f2f4f7; font-family: Inter; font-size: 34px; }"
     "QStackedWidget, QScrollArea, QScrollArea > QWidget > QWidget { background: #20252b; }"
     "QLabel { background: transparent; color: #f2f4f7; }"
     "QPushButton { background: #303b49; color: #f2f4f7; border: 1px solid #526274;"
@@ -322,6 +451,27 @@ int main(int argc, char **argv) {
     painter.end();
     image.save(output + "/camera-target-60mph-display.png");
   }
+  CameraControlOverlay offsetTarget = target60;
+  offsetTarget.speedCapMps = 79.0f / 3.6f;
+  auto offsetImage = [&](float warning_limit_kph, bool metric) {
+    QImage image(1700, 1080, QImage::Format_ARGB32_Premultiplied);
+    image.fill(QColor(23, 51, 73));
+    QPainter painter(&image);
+    drawCameraOverlay(painter, image.rect(), true, 150,
+                       metric ? warning_limit_kph : warning_limit_kph / 3.6f * 2.23694f, metric, offsetTarget);
+    painter.end();
+    return image;
+  };
+  const QImage offset_metric = offsetImage(60, true);
+  const QImage other_warning = offsetImage(40, true);
+  const QRect warning_line(1320, 97, 328, 35), target_line(1320, 158, 328, 40);
+  const bool separate_limit_target = offset_metric.copy(warning_line) != other_warning.copy(warning_line) &&
+                                      offset_metric.copy(target_line) == other_warning.copy(target_line) &&
+                                      QFontMetrics(InterFont(25, QFont::Normal)).horizontalAdvance("ACC TARGET 79 km/h") <= 328;
+  offset_metric.save(output + "/camera-limit60-target79-150m.png");
+  offsetImage(60, false).save(output + "/camera-limit60-target79-150m-imperial.png");
+  other_warning.save(output + "/camera-other-warning40-target79.png");
+  std::printf("Camera HUD: warning-limit-separate-from-ACC-target=%d\n", separate_limit_target);
   CameraControlOverlay heldPosition;
   heldPosition.enabled = true;
   heldPosition.active = true;
@@ -388,7 +538,12 @@ int main(int argc, char **argv) {
     const bool requested = Params().get("SpeedCameraDatabaseStatus") == "update requested";
     std::printf("SCO default=%d attribution=%d camera-control-toggle=%d update-visible=%d request-persisted=%d\n",
                 sco_default, sco_attribution_visible, camera_control_toggle_visible, found, requested);
-    app.exit(hud_freshness_ok && sco_default && sco_attribution_visible && camera_control_toggle_visible && found && requested ? 0 : 1);
+    const bool warning_distance_ok = verifyCameraSetting(panel, output, "Warning Distance",
+      "SpeedCameraAlertDistanceMeters", "%1 m", 100, 2000, 50, "warning-distance", 150);
+    const bool camera_offset_ok = verifyCameraSetting(panel, output, "Camera Speed Offset",
+      "SpeedCameraSpeedOffsetKph", "+%1 km/h", 0, 30, 1, "camera-offset", 19);
+    app.exit(hud_freshness_ok && sco_default && sco_attribution_visible && camera_control_toggle_visible && found &&
+             requested && warning_distance_ok && camera_offset_ok && separate_limit_target ? 0 : 1);
   });
   return app.exec();
 }

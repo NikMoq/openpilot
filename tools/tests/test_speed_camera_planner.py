@@ -5,6 +5,7 @@ python -B -m pytest -c tools/tests/camera_replay_pytest.ini -p no:cacheprovider 
 """
 
 import math
+import struct
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace as NS
@@ -54,8 +55,18 @@ def sco_map_data(kind=1, speed_kph=60, north_m=0):
             speedCameraAheadDistance=100.0, locationValid=True)
 
 
-@pytest.fixture
-def frame():
+def explicit_control_candidate(lmd):
+  lmd.speedCameraControlVersion = 1
+  lmd.speedCameraControlValid = lmd.speedCameraAheadValid
+  for suffix in ('Type', 'SpeedLimit', 'Latitude', 'Longitude'):
+    setattr(lmd, 'speedCameraControl' + suffix, getattr(lmd, 'speedCamera' + suffix))
+  lmd.speedCameraControlAutoControlAllowed = getattr(
+    lmd, 'speedCameraAutoControlAllowed', lmd.speedCameraType in ('speedcamonline:1', 'speedcamonline:2', 'speedcamonline:5'))
+  return lmd
+
+
+@pytest.fixture(params=[0, 1], ids=['legacy-map', 'explicit-control-map'])
+def frame(request):
   def make(*, north_m=-100, time_s=0, kind=1, speed_kph=60, camera_north_m=0,
            fix_offset_s=0, cs_values=None, cc_values=None, gps_values=None, lmd_values=None, **kwargs):
     now = EPOCH + time_s
@@ -69,6 +80,8 @@ def frame():
     for message, values in ((cs, cs_values), (cc, cc_values), (gps, gps_values), (lmd, lmd_values)):
       for key, value in (values or {}).items():
         setattr(message, key, value)
+    if request.param == 1 and not hasattr(lmd, 'speedCameraControlVersion'):
+      explicit_control_candidate(lmd)
     options = dict(enabled=True, gps_valid=True, gps_alive=True, lmd_valid=True, lmd_alive=True,
                    lmd_age_s=0.1, user_cruise_mps=USER_MPS, minimum_speed_mps=30 / 3.6,
                    now_s=now, adapt_accel_mps2=-1.0)
@@ -461,3 +474,67 @@ def test_p1_short_pedal_pulse_observed_between_model_frames_cancels_active_cap(f
   for time_s, north_m in ((1, 20), (2, 40)):
     after = update(planner, frame(time_s=time_s, north_m=north_m))
     assert after.manual_takeover and after.speed_cap_mps is None and not after.restore_allowed
+
+
+@pytest.mark.parametrize('version,valid,allowed', [(1, False, True), (1, True, False), (2, True, True)])
+def test_explicit_empty_untrusted_or_unknown_contract_never_uses_eligible_warning(frame, version, valid, allowed):
+  data = frame(lmd_values={'speedCameraControlVersion': version, 'speedCameraControlValid': valid,
+                          'speedCameraControlAutoControlAllowed': allowed,
+                          'speedCameraControlType': 'speedcamonline:1', 'speedCameraControlSpeedLimit': LIMIT_MPS,
+                          'speedCameraControlLatitude': LATITUDE, 'speedCameraControlLongitude': LONGITUDE})
+  assert data.lmd.speedCameraAheadValid and data.lmd.speedCameraType == 'speedcamonline:1'
+  assert update(SpeedCameraPlanner(), data).speed_cap_mps is None
+
+
+@pytest.mark.parametrize('offset,user_kph,expected_kph', [
+  (0, 120, 60), (3, 120, 63), (19, 120, 79), (30, 120, 90), (19, 70, 70),
+  (-1, 120, 60), (31, 120, 60), (1.5, 120, 60), (float('nan'), 120, 60),
+  (float('inf'), 120, 60), (None, 120, 60), ('19', 120, 60), (True, 120, 60),
+])
+def test_camera_offset_target_is_validated_and_capped_by_user_without_changing_raw_limit(frame, offset, user_kph, expected_kph):
+  planner = SpeedCameraPlanner()
+  options = dict(camera_speed_offset_kph=offset, user_cruise_mps=user_kph / 3.6)
+  update(planner, frame(north_m=-1, **options))
+  data = frame(north_m=0, time_s=1, **options)
+  output = update(planner, data)
+  effective = min(user_kph / 3.6, output.speed_cap_mps if output.speed_cap_mps is not None else user_kph / 3.6)
+  assert effective * 3.6 == pytest.approx(expected_kph)
+  assert data.lmd.speedCameraSpeedLimit == LIMIT_MPS
+  if hasattr(data.lmd, 'speedCameraControlSpeedLimit'):
+    assert data.lmd.speedCameraControlSpeedLimit == LIMIT_MPS
+
+
+@pytest.mark.parametrize('raw_kph,eligible', [(20, False), (29, False), (30, True)])
+def test_offset_cannot_lift_raw_camera_limit_above_existing_30kph_eligibility_minimum(frame, raw_kph, eligible):
+  output = update(SpeedCameraPlanner(), frame(north_m=-1, speed_kph=raw_kph, camera_speed_offset_kph=30))
+  assert (output.speed_cap_mps is not None) is eligible
+
+
+@pytest.mark.parametrize('raw_kph,eligible', [(29, False), (30, True)])
+def test_raw_minimum_eligibility_survives_capnp_float32_precision(frame, raw_kph, eligible):
+  wire_speed = struct.unpack('<f', struct.pack('<f', raw_kph / 3.6))[0]
+  data = frame(north_m=-1, lmd_values={'speedCameraSpeedLimit': wire_speed}, camera_speed_offset_kph=19)
+  assert (update(SpeedCameraPlanner(), data).speed_cap_mps is not None) is eligible
+
+
+@pytest.mark.parametrize('first_offset,next_offset,expected_kph', [(19, 3, 63), (3, 19, 63), (19, 31, 60)])
+def test_offset_change_during_active_episode_only_lowers_existing_limit(frame, first_offset, next_offset, expected_kph):
+  planner = SpeedCameraPlanner()
+  initial = update(planner, frame(north_m=-1, camera_speed_offset_kph=first_offset))
+  final = update(planner, frame(north_m=0, time_s=1, camera_speed_offset_kph=next_offset))
+  assert final.camera_id == initial.camera_id
+  assert final.speed_cap_mps * 3.6 == pytest.approx(expected_kph)
+  assert final.speed_cap_mps <= initial.speed_cap_mps and not final.restore_allowed
+
+
+def test_increased_offset_applies_to_next_camera_after_confirmed_pass(frame):
+  planner = SpeedCameraPlanner()
+  update(planner, frame(north_m=-1, camera_speed_offset_kph=3))
+  for time_s, north_m in ((1, 20), (2, 40)):
+    output = update(planner, frame(time_s=time_s, north_m=north_m,
+                                  lmd_values={'speedCameraAheadValid': False}, camera_speed_offset_kph=19))
+    assert not output.restore_allowed and output.speed_cap_mps is not None
+  second = update(planner, frame(time_s=3, north_m=99, camera_north_m=100, camera_speed_offset_kph=19))
+  final = update(planner, frame(time_s=4, north_m=100, camera_north_m=100, camera_speed_offset_kph=19))
+  assert final.camera_id == second.camera_id and final.speed_cap_mps * 3.6 == pytest.approx(79)
+  assert not final.restore_allowed and not final.manual_takeover

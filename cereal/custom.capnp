@@ -460,6 +460,15 @@ struct LiveMapDataSP @0xf416ec09499d9d19 {
   speedCameraLongitude @11 :Float64;
   locationValid @12 :Bool;
   speedCameraAutoControlAllowed @13 :Bool;
+  # Independent control selection; version 0 is a legacy warning-only publisher.
+  speedCameraControlVersion @14 :UInt8;
+  speedCameraControlValid @15 :Bool;
+  speedCameraControlDistance @16 :Float32;
+  speedCameraControlSpeedLimit @17 :Float32;  # Raw m/s, before the user's offset.
+  speedCameraControlType @18 :Text;
+  speedCameraControlLatitude @19 :Float64;
+  speedCameraControlLongitude @20 :Float64;
+  speedCameraControlAutoControlAllowed @21 :Bool;
 }
 
 struct ModelDataV2SP @0xa1680744031fdb2d {

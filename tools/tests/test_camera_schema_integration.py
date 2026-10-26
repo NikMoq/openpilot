@@ -81,7 +81,7 @@ def test_plan_control_roundtrip_in_event(wire, state, reason, cap, manual):
 
 
 def frame(wire, *, north_m=-100, time_s=0, kind=1, location_valid=True,
-          gas=False, button=False, camera_valid=True, auto_allowed=None, **options):
+          gas=False, button=False, camera_valid=True, auto_allowed=None, control_values=None, **options):
   now = EPOCH + time_s
   cs = car.CarState.new_message(vEgo=USER_SPEED, gasPressed=gas)
   cs.cruiseState.enabled = True
@@ -102,6 +102,8 @@ def frame(wire, *, north_m=-100, time_s=0, kind=1, location_valid=True,
     speedCameraType=kind if isinstance(kind, str) else f'speedcamonline:{kind}', speedCameraSpeedLimit=LIMIT)
   if auto_allowed is not None:
     lmd.speedCameraAutoControlAllowed = auto_allowed
+  for key, value in (control_values or {}).items():
+    setattr(lmd, key, value)
   kwargs = dict(enabled=True, gps_valid=True, gps_alive=True, lmd_valid=True,
                 lmd_alive=True, lmd_age_s=0.1, lmd_generation=time_s,
                 user_cruise_mps=USER_SPEED, minimum_speed_mps=30 / 3.6,
@@ -201,3 +203,37 @@ def test_decoded_pass_requires_two_fixes_then_new_map_generation(wire):
   assert output.state.value == 'passed'
   assert output.reason == 'geometric_pass'
   assert output.restore_allowed and output.speed_cap_mps is None
+
+
+@pytest.mark.parametrize('raw_kph,eligible', [(29, False), (30, True), (60, True)])
+def test_decoded_independent_control_candidate_raw_minimum_and_offset(wire, raw_kph, eligible):
+  values = dict(speedCameraControlVersion=1, speedCameraControlValid=True,
+                speedCameraControlAutoControlAllowed=True, speedCameraControlDistance=500,
+                speedCameraControlType='speedcamonline-cg77:18059',
+                speedCameraControlLatitude=latitude(400), speedCameraControlLongitude=LON,
+                speedCameraControlSpeedLimit=raw_kph / 3.6)
+  data = frame(wire, kind='speedcamonline-cg77:18952', control_values=values, camera_speed_offset_kph=19)
+  lmd = data[0][3]
+  assert lmd.speedCameraType == 'speedcamonline-cg77:18952'
+  assert lmd.speedCameraLatitude == LAT and lmd.speedCameraSpeedLimit == pytest.approx(LIMIT)
+  assert lmd.speedCameraControlVersion == 1 and lmd.speedCameraControlValid
+  assert lmd.speedCameraControlDistance == 500
+  assert lmd.speedCameraControlSpeedLimit == pytest.approx(raw_kph / 3.6)
+  output = update(SpeedCameraPlanner(), data)
+  assert (output.speed_cap_mps is not None) is eligible
+  if eligible:
+    assert output.camera_id == f'{latitude(400):.7f},{LON:.7f}:speedcamonline-cg77:18059'
+
+
+@pytest.mark.parametrize('version', [1, 2])
+def test_decoded_new_contract_without_candidate_cannot_fall_back_to_warning(wire, version):
+  data = frame(wire, control_values={'speedCameraControlVersion': version})
+  assert data[0][3].speedCameraAheadValid
+  assert update(SpeedCameraPlanner(), data).speed_cap_mps is None
+
+
+def test_decoded_old_contract_version_defaults_to_zero(wire):
+  data = frame(wire)
+  assert data[0][3].speedCameraControlVersion == 0
+  assert not data[0][3].speedCameraControlValid
+  assert update(SpeedCameraPlanner(), data).speed_cap_mps is not None

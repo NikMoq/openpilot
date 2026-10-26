@@ -4,9 +4,12 @@
 
 Active source: SpeedCamOnline, all camera types/all Russian regions,
 https://speedcamonline.ru/cg77/Rus/comment/ . This replaces the old APK source.
-Code and ARM UI are published on dev in NikMoq/openpilot at
-a5efa5767191cb077814e563651326bc900f599e. Installation remains a user action
-through the device Software UI; publication does not confirm installation.
+Code and ARM UI were published on dev in NikMoq/openpilot at
+a5efa5767191cb077814e563651326bc900f599e, followed by documentation commit
+3f5c326197fec45c5520bded76ff1cdc9c147c59. Read-only device inspection confirmed
+3f5c326 running, a clean checkout, the expected running UI SHA256, and the full
+74,016-record cache with matching source hash. The user confirmed the new menu
+and a successful Update Database action through UI.
 
 SSH remains diagnostics-only. User installs code through Software UI. No
 Panda/EPS firmware, safety-limit or stable-branch changes are included.
@@ -52,6 +55,13 @@ stamp. Automatic retry timing is separate and monotonic. Failures preserve cache
 - Native Qt Cruise -> Speed Limit settings below offsets: warnings, automatic
   camera control (default OFF), source, Manual/6/24/168-hour updates, warning
   distance, status/count/date/hash/error and Update Database.
+- Warning Distance is 100..2,000 metres in 50-metre steps,
+  with immediate visible value updates and persistent selection. The user found
+  the old missing label; read-only device Params proved its buttons did save.
+- Camera Speed Offset is 0..30 km/h in 1-km/h steps,
+  default zero. It adds to the camera target without raising the driver's cruise
+  setting or other planner constraints. The raw camera limit remains distinct.
+  This user preference does not establish a legal exemption from penalties.
 - Native HUD displays camera distance/limit and temporary target/hold. Stale
   map/planner messages suppress stale display details.
 - Camera data does not require downloaded OSM road maps. Mapd starts in a clean
@@ -74,6 +84,14 @@ supported type, fresh GPS/map data, stock ACC minimum speed and a straight
 approach corridor. Camera targets pass through existing ICBM/Volkswagen ACC
 button messages. No direct throttle/brake actuation is introduced.
 
+LiveMapDataSP @14..@21 separately carries the eligible control candidate. A
+warning-only record at 100 metres no longer masks an eligible camera at 500
+metres. An explicitly empty version-1 selection cannot fall back to the warning;
+legacy version 0 retains its previous type/eligibility checks. Raw camera limits
+stay unchanged on the wire. The offset applies only inside the camera planner;
+raising it during an active camera episode cannot raise the existing ceiling,
+while reducing it can lower that ceiling.
+
 Manual buttons/pedals hand over the current stock setpoint. Short inputs are
 latched at carState cadence before model planning. Passage needs two distinct
 fresh fixes behind the saved camera plus a fresh map generation before release.
@@ -82,32 +100,51 @@ higher virtual setpoint. Disengagement resets the episode.
 
 ## Validation
 
-- Final portable suite: 633 passed, including full external BKM, producer,
-  manifest fallback, HTTP transport, cache, replay, controller and planner.
-- Final Linux native suite: 40 passed, zero skipped. Real Capnp/msgq/Params,
+- Follow-up portable suite: 853 passed, including full external BKM, producer,
+  manifest fallback, HTTP transport, cache, replay, controller, planner,
+  independent camera selection and offset wiring.
+- Follow-up Linux native suite: 50 passed, zero skipped; all original 40 tests
+  retained. Real Capnp/msgq/Params,
   OsmMapData publication and actual LongitudinalPlannerSP construction/update/
   arbitration/publication. MPC input is an explicitly supplied crash-counter
   fixture; no MPC solver, model inference or complete plannerd loop ran.
+- Native offset cases prove raw 60 km/h remains on the wire; +19 creates the
+  expected kinematic approach ceiling and a 70 km/h user setting stays at 70.
+  Native Params was rebuilt with the new key and 0/19/30 roundtrips passed.
+- Actual Qt controls verify immediate labels, 100/150/200/2,000 metre steps and
+  0/1/2/19/30 km/h offsets, boundary buttons and selection after reopening.
+  Saved 1,500 metres and +19 survive construction/reopening. Preview also shows
+  the raw 60 km/h camera separately from ACC TARGET 79 km/h at 150 metres.
 - Qt button -> real Python updater -> loopback full download -> cache -> native
   labels: cold and cached refresh both passed, 74,016/hash/date visibly drawn.
-- ARM64 UI built with Qt 5.12.8; all 20 NEEDED libraries matched device inventory;
-  maximum GLIBC2.29/GLIBCXX3.4.26. Final tracked UI SHA256:
-  4545afe1028f7a493a03ce282d74006a0795b48525d9c8c0687790516192b221.
+- Follow-up ARM64 UI built with Qt 5.12.8; all 20 NEEDED libraries match the
+  prior device-compatible build; maximum GLIBC2.29/GLIBCXX3.4.26. Tracked UI SHA256:
+  d36447230a2947d1070dd227a5364ee836f8ba95da4d761d2805d00d1f79538b.
+  The earlier 4545afe1028f... build was the one confirmed running on the device.
+  Follow-up build input hashes match the current workspace, including schema and
+  native Params registry; the exact ABCM title is present without Alpha.
 - Production Python live SCO transfer validated on PC through the diagnostic
   proxy route. Read-only validation on Comma also passed: 43.103 seconds, 74,016 records, matching SHA256, no device cache writes.
 
 Evidence remains ignored under .native-build: ui-final-evidence,
-runtime-smoke/final, source-probe, speedcam-release. Do not commit keys, caches,
+runtime-smoke/final, runtime-smoke/followup, warning-distance-fix, source-probe,
+speedcam-release. Do not commit keys, caches,
 user archives, downloaded databases or vendor runtime libraries.
 
 ## Remaining checks
 
-User installs through UI and verifies the actual menu/status/notifications.
-The native UI binary has not yet been confirmed running on the device in this
-checkpoint. A recorded vehicle trace is still required for physical ICBM
-acceptance and behavior. Monitor a scheduled run after the successful initial
-push-triggered GitHub run; schedule dispatch can be delayed by GitHub.
+Install this follow-up through UI. A subsequent, separate user-requested change
+must preserve the driver's cruise setting across temporary gas/brake override;
+braking still requires explicit RES/ACC re-engagement. Only steering-wheel speed
+buttons set a new remembered target. This pedal-policy change is NOT part of
+the current tested follow-up; its present manual-takeover behavior is documented
+above. Do not claim the new pedal semantics are already implemented.
+A recorded vehicle trace is still required for physical ICBM acceptance and
+behavior. Monitor a scheduled run after the successful initial push-triggered
+GitHub run; schedule dispatch can be delayed by GitHub.
 
 Average-speed sections and full road-graph association are not implemented;
-parallel-road ambiguity remains a validation limitation. Do not rename Alpha
-to stable based on compilation or synthetic tests. No hardware readiness claim.
+parallel-road ambiguity remains a validation limitation. The user explicitly
+requested the display title Intelligent Cruise Button Management (ABCM),
+without Alpha/Stable. This cosmetic title change does not certify hardware
+readiness; internal ICBM parameter and protocol names remain unchanged.

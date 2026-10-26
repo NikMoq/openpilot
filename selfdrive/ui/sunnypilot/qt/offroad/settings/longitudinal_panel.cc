@@ -37,7 +37,7 @@ LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
 
   intelligentCruiseButtonManagement = new ParamControlSP(
     "IntelligentCruiseButtonManagement",
-    tr("Intelligent Cruise Button Management (ICBM) (Alpha)"),
+    tr("Intelligent Cruise Button Management (ABCM)"),
     "",
     "",
     this

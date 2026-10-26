@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import struct
 
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_camera_controller import (
   CameraControlInput, CameraControlOutput, CameraControlState, CameraObservation, SpeedCameraController,
@@ -33,7 +34,7 @@ class SpeedCameraPlanner:
   def update(self, cs, cc, gps, lmd, *, enabled: bool, gps_valid: bool, gps_alive: bool,
              lmd_valid: bool, lmd_alive: bool, lmd_age_s: float, user_cruise_mps: float,
              minimum_speed_mps: float, now_s: float, adapt_accel_mps2: float,
-             lmd_generation: float | None = None) -> CameraControlOutput:
+             lmd_generation: float | None = None, camera_speed_offset_kph: float = 0) -> CameraControlOutput:
     engaged = bool(cc.enabled and cs.cruiseState.enabled)
     if not engaged:
       self.controller = SpeedCameraController()
@@ -59,17 +60,34 @@ class SpeedCameraPlanner:
       self.output = CameraControlOutput(state=CameraControlState.inactive, reason="manual_control")
       return self.output
 
-    kind = lmd.speedCameraType
+    version = getattr(lmd, "speedCameraControlVersion", 0)
+    prefix = "speedCameraControl" if version == 1 else "speedCamera"
+    kind = getattr(lmd, prefix + "Type", "")
+    allowed = bool(getattr(lmd, prefix + "AutoControlAllowed", False))
     eligible = kind in ("speedcamonline:1", "speedcamonline:2", "speedcamonline:5")
-    # CityGuide needs the parser's direction/type validation as well as an
-    # eligible point-camera type. Older map publishers default this flag false.
-    eligible |= (kind in ("speedcamonline-cg77:18059", "speedcamonline-cg77:18950", "speedcamonline-cg77:18958") and
-                 bool(getattr(lmd, "speedCameraAutoControlAllowed", False)))
+    eligible |= (kind in ("speedcamonline-cg77:18059", "speedcamonline-cg77:18950", "speedcamonline-cg77:18958") and allowed)
+    # Version 1 requires explicit validated selection; an empty selection or
+    # unknown version must never fall back to the nearest warning. Version 0
+    # retains the older iGo/type and CityGuide/parser-flag contract.
+    valid = (bool(getattr(lmd, "speedCameraControlValid", False)) and allowed if version == 1 else
+             version == 0 and bool(lmd.speedCameraAheadValid))
+    raw_limit = getattr(lmd, prefix + "SpeedLimit", 0.0)
     camera = None
-    if lmd.speedCameraAheadValid and eligible and minimum_speed_mps <= lmd.speedCameraSpeedLimit <= 300 / 3.6:
-      camera = CameraObservation(latitude=lmd.speedCameraLatitude, longitude=lmd.speedCameraLongitude,
-                                 speed_limit_mps=lmd.speedCameraSpeedLimit,
-                                 camera_id=f"{lmd.speedCameraLatitude:.7f},{lmd.speedCameraLongitude:.7f}:{kind}")
+    # Compare the unchanged stock minimum in the same Float32 representation
+    # as LiveMapDataSP, so a raw 30 km/h limit survives wire round-off.
+    wire_minimum = (struct.unpack('<f', struct.pack('<f', minimum_speed_mps))[0]
+                    if 0 < minimum_speed_mps <= 300 / 3.6 else math.inf)
+    if valid and eligible and math.isfinite(raw_limit) and wire_minimum <= raw_limit <= 300 / 3.6:
+      offset = camera_speed_offset_kph
+      if (isinstance(offset, bool) or not isinstance(offset, (int, float)) or
+          not math.isfinite(offset) or not 0 <= offset <= 30 or offset != int(offset)):
+        offset = 0
+      target = min(user_cruise_mps, raw_limit + offset / 3.6)
+      lat, lon = getattr(lmd, prefix + "Latitude"), getattr(lmd, prefix + "Longitude")
+      # Stable identity excludes offset. The controller may lower an active
+      # episode's limit, but never raises it before confirmed passage/reset.
+      camera = CameraObservation(latitude=lat, longitude=lon, speed_limit_mps=target,
+                                 camera_id=f"{lat:.7f},{lon:.7f}:{kind}")
 
     # Message receipt time is monotonic; GPS time is Unix. The caller supplies
     # the receipt AGE, which can be safely converted to this Unix clock.

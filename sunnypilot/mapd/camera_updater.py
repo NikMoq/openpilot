@@ -36,6 +36,7 @@ CAMERA_PARAM_KEYS = frozenset({
   "SpeedCameraDatabaseError",
   "SpeedCameraDatabaseCount",
   "SpeedCameraControlEnabled",
+  "SpeedCameraSpeedOffsetKph",
   "SpeedCameraEnabled",
   "SpeedCameraAlertDistanceMeters",
 })

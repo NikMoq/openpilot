@@ -100,7 +100,7 @@ def receive(sm, services):
   assert not pending, f'msgq receive timed out: {pending}'
 
 
-def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, model_yaw_rate=0.001):
+def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, model_yaw_rate=0.001, user_cruise=USER_SPEED):
   _, publisher, receiver, map_data = pipeline
   location = messaging.new_message('liveLocationKalman', valid=True)
   llk = location.liveLocationKalman
@@ -117,8 +117,8 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
   cs_msg = messaging.new_message('carState', valid=True)
   cs = cs_msg.carState
   cs.vEgo = USER_SPEED
-  cs.vCruise = USER_SPEED * 3.6
-  cs.vCruiseCluster = USER_SPEED * 3.6
+  cs.vCruise = user_cruise * 3.6
+  cs.vCruiseCluster = user_cruise * 3.6
   cs.gasPressed = gas
   cs.cruiseState.enabled = True
   cs.cruiseState.speed = stock_speed
@@ -202,6 +202,27 @@ def test_production_invalid_map_holds_then_decoded_gas_takes_over(pipeline):
   assert manual.speed_cap_mps is None and not manual.restore_allowed
 
 
+@pytest.mark.parametrize('eligible', [False, True])
+def test_production_nearest_warning_does_not_mask_independent_control_candidate(pipeline, eligible):
+  next_lat = LAT + math.degrees(400 / 6_371_000)
+  raw = f'2|Radars|65001\n18952|warning 100m|{LAT}|{LON}|1709|60|\n'
+  if eligible:
+    raw += f'18059|control 500m|{next_lat}|{LON}|1709|60|1705|180|1713|1|\n'
+  cameras = tuple(parse_cityguide_snapshot(raw))
+  save_database(str(pipeline[0]), CameraDatabase('runtime-selection', time.time(), cameras))
+  sm = publish_frame(pipeline)
+  lmd = sm['liveMapDataSP']
+  assert lmd.speedCameraAheadValid and lmd.speedCameraType == 'speedcamonline-cg77:18952'
+  assert lmd.speedCameraAheadDistance == pytest.approx(100, abs=0.001)
+  assert lmd.speedCameraControlVersion == 1 and lmd.speedCameraControlValid is eligible
+  output = plan(SpeedCameraPlanner(), sm)
+  assert (output.speed_cap_mps is not None) is eligible
+  if eligible:
+    assert lmd.speedCameraControlDistance == pytest.approx(500, abs=0.001)
+    assert lmd.speedCameraControlSpeedLimit == pytest.approx(LIMIT)
+    assert output.camera_id == f'{next_lat:.7f},{LON:.7f}:speedcamonline-cg77:18059'
+
+
 @dataclass
 class GivenMpcState:
   """Explicit supplied-state boundary: DEC reads this counter; no solver runs."""
@@ -239,12 +260,12 @@ def plan_bus():
   yield publisher, receiver
 
 
-def run_longitudinal(planner, sm, plan_bus):
+def run_longitudinal(planner, sm, plan_bus, *, user_cruise=USER_SPEED):
   planner.sla.update_car_state(sm['carState'])
   planner.camera.observe_car_state(sm['carState'], time.time())
   planner.update(sm)
   assert planner.dec._mpc_fcw_crash_cnt == planner.dec._mpc.crash_cnt
-  target = planner.update_targets(sm, USER_SPEED, 0.0, USER_SPEED)
+  target = planner.update_targets(sm, USER_SPEED, 0.0, user_cruise)
   publisher, receiver = plan_bus
   planner.publish_longitudinal_plan_sp(sm, publisher)
   receive(receiver, ['longitudinalPlanSP'])
@@ -309,3 +330,44 @@ def test_longitudinal_disabled_camera_publishes_inactive(pipeline, longitudinal,
   camera = published.speedCameraControl
   assert not camera.enabled and not camera.active and not camera.manualTakeover
   assert camera.speedCap == 0.0 and camera.state == 'inactive' and camera.reason == 'disabled'
+
+
+@pytest.mark.parametrize('cruise_kph', [108.0, 70.0])
+def test_longitudinal_native_offset_preserves_raw_limit_and_user_cruise(pipeline, longitudinal, plan_bus, native_params, cruise_kph):
+  key = 'SpeedCameraSpeedOffsetKph'
+  previous_offset = native_params.get(key)
+  native_params.put(key, '19')
+  try:
+    assert Params().get(key) == '19'
+    write_camera(pipeline[0], '18059', True)
+    planner = longitudinal()
+    cruise = cruise_kph / 3.6
+    sm = publish_frame(pipeline, stock_speed=cruise, user_cruise=cruise)
+    target, published = run_longitudinal(planner, sm, plan_bus, user_cruise=cruise)
+    assert planner.camera_speed_offset_kph == 19.0
+    lmd = sm['liveMapDataSP']
+    assert lmd.speedCameraControlVersion == 1 and lmd.speedCameraControlValid
+    assert lmd.speedCameraSpeedLimit == pytest.approx(60 / 3.6)
+    assert lmd.speedCameraControlSpeedLimit == pytest.approx(60 / 3.6)
+    assert lmd.speedCameraControlDistance == pytest.approx(100, abs=0.001)
+    assert sm['carState'].vCruiseCluster == pytest.approx(cruise_kph)
+    camera = published.speedCameraControl
+    assert camera.enabled and not camera.manualTakeover
+    if cruise_kph == 108.0:
+      # At 100 m and the existing -1 m/s^2, 60 + 19 km/h sets this ceiling.
+      expected = math.sqrt((79 / 3.6) ** 2 + 200)
+      assert target[0] == pytest.approx(expected, abs=1e-5)
+      assert published.vTarget == pytest.approx(expected, abs=1e-5)
+      assert camera.active and camera.speedCap == pytest.approx(expected, abs=1e-5)
+      assert camera.state == 'approach' and camera.reason == 'kinematic_ceiling'
+      assert published.longitudinalPlanSource == 'speedLimitAssist'
+    else:
+      assert target[0] == pytest.approx(cruise) and published.vTarget == pytest.approx(cruise)
+      assert published.longitudinalPlanSource == 'cruise'
+      assert not camera.active and camera.speedCap == 0.0
+      assert camera.state == 'inactive' and camera.reason == 'below_camera_limit'
+  finally:
+    if previous_offset is None:
+      native_params.remove(key)
+    else:
+      native_params.put(key, previous_offset)
