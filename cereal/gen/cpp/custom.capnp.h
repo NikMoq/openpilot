@@ -8,7 +8,7 @@
 
 #ifndef CAPNP_VERSION
 #error "CAPNP_VERSION is not defined, is capnp/generated-header-support.h missing?"
-#elif CAPNP_VERSION != 1000002
+#elif CAPNP_VERSION != 1001000
 #error "Version mismatch between generated code and library headers.  You must use the same version of the Cap'n Proto compiler and library."
 #endif
 
@@ -798,7 +798,7 @@ struct LiveMapDataSP {
   class Pipeline;
 
   struct _capnpPrivate {
-    CAPNP_DECLARE_STRUCT_HEADER(f416ec09499d9d19, 2, 1)
+    CAPNP_DECLARE_STRUCT_HEADER(f416ec09499d9d19, 3, 2)
     #if !CAPNP_LITE
     static constexpr ::capnp::_::RawBrandedSchema const* brand() { return &schema->defaultBrand; }
     #endif  // !CAPNP_LITE
@@ -4331,6 +4331,15 @@ public:
   inline bool hasRoadName() const;
   inline  ::capnp::Text::Reader getRoadName() const;
 
+  inline bool getSpeedCameraAheadValid() const;
+
+  inline float getSpeedCameraAheadDistance() const;
+
+  inline float getSpeedCameraSpeedLimit() const;
+
+  inline bool hasSpeedCameraType() const;
+  inline  ::capnp::Text::Reader getSpeedCameraType() const;
+
 private:
   ::capnp::_::StructReader _reader;
   template <typename, ::capnp::Kind>
@@ -4380,6 +4389,22 @@ public:
   inline  ::capnp::Text::Builder initRoadName(unsigned int size);
   inline void adoptRoadName(::capnp::Orphan< ::capnp::Text>&& value);
   inline ::capnp::Orphan< ::capnp::Text> disownRoadName();
+
+  inline bool getSpeedCameraAheadValid();
+  inline void setSpeedCameraAheadValid(bool value);
+
+  inline float getSpeedCameraAheadDistance();
+  inline void setSpeedCameraAheadDistance(float value);
+
+  inline float getSpeedCameraSpeedLimit();
+  inline void setSpeedCameraSpeedLimit(float value);
+
+  inline bool hasSpeedCameraType();
+  inline  ::capnp::Text::Builder getSpeedCameraType();
+  inline void setSpeedCameraType( ::capnp::Text::Reader value);
+  inline  ::capnp::Text::Builder initSpeedCameraType(unsigned int size);
+  inline void adoptSpeedCameraType(::capnp::Orphan< ::capnp::Text>&& value);
+  inline ::capnp::Orphan< ::capnp::Text> disownSpeedCameraType();
 
 private:
   ::capnp::_::StructBuilder _builder;
@@ -8635,6 +8660,82 @@ inline void LiveMapDataSP::Builder::adoptRoadName(
 inline ::capnp::Orphan< ::capnp::Text> LiveMapDataSP::Builder::disownRoadName() {
   return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
       ::capnp::bounded<0>() * ::capnp::POINTERS));
+}
+
+inline bool LiveMapDataSP::Reader::getSpeedCameraAheadValid() const {
+  return _reader.getDataField<bool>(
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
+}
+
+inline bool LiveMapDataSP::Builder::getSpeedCameraAheadValid() {
+  return _builder.getDataField<bool>(
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS);
+}
+inline void LiveMapDataSP::Builder::setSpeedCameraAheadValid(bool value) {
+  _builder.setDataField<bool>(
+      ::capnp::bounded<2>() * ::capnp::ELEMENTS, value);
+}
+
+inline float LiveMapDataSP::Reader::getSpeedCameraAheadDistance() const {
+  return _reader.getDataField<float>(
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS);
+}
+
+inline float LiveMapDataSP::Builder::getSpeedCameraAheadDistance() {
+  return _builder.getDataField<float>(
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS);
+}
+inline void LiveMapDataSP::Builder::setSpeedCameraAheadDistance(float value) {
+  _builder.setDataField<float>(
+      ::capnp::bounded<4>() * ::capnp::ELEMENTS, value);
+}
+
+inline float LiveMapDataSP::Reader::getSpeedCameraSpeedLimit() const {
+  return _reader.getDataField<float>(
+      ::capnp::bounded<5>() * ::capnp::ELEMENTS);
+}
+
+inline float LiveMapDataSP::Builder::getSpeedCameraSpeedLimit() {
+  return _builder.getDataField<float>(
+      ::capnp::bounded<5>() * ::capnp::ELEMENTS);
+}
+inline void LiveMapDataSP::Builder::setSpeedCameraSpeedLimit(float value) {
+  _builder.setDataField<float>(
+      ::capnp::bounded<5>() * ::capnp::ELEMENTS, value);
+}
+
+inline bool LiveMapDataSP::Reader::hasSpeedCameraType() const {
+  return !_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline bool LiveMapDataSP::Builder::hasSpeedCameraType() {
+  return !_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS).isNull();
+}
+inline  ::capnp::Text::Reader LiveMapDataSP::Reader::getSpeedCameraType() const {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_reader.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline  ::capnp::Text::Builder LiveMapDataSP::Builder::getSpeedCameraType() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::get(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
+}
+inline void LiveMapDataSP::Builder::setSpeedCameraType( ::capnp::Text::Reader value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::set(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), value);
+}
+inline  ::capnp::Text::Builder LiveMapDataSP::Builder::initSpeedCameraType(unsigned int size) {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::init(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), size);
+}
+inline void LiveMapDataSP::Builder::adoptSpeedCameraType(
+    ::capnp::Orphan< ::capnp::Text>&& value) {
+  ::capnp::_::PointerHelpers< ::capnp::Text>::adopt(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS), kj::mv(value));
+}
+inline ::capnp::Orphan< ::capnp::Text> LiveMapDataSP::Builder::disownSpeedCameraType() {
+  return ::capnp::_::PointerHelpers< ::capnp::Text>::disown(_builder.getPointerField(
+      ::capnp::bounded<1>() * ::capnp::POINTERS));
 }
 
 inline  ::cereal::ModelDataV2SP::TurnDirection ModelDataV2SP::Reader::getLaneTurnDirection() const {
