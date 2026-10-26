@@ -30,6 +30,7 @@ class FontSizes:
   speed_unit: int = 66
   max_speed: int = 40
   set_speed: int = 90
+  camera_info: int = 42
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,10 @@ class HudRenderer(Widget):
     self.set_speed: float = SET_SPEED_NA
     self.speed: float = 0.0
     self.v_ego_cluster_seen: bool = False
+    self.speed_camera_valid: bool = False
+    self.speed_camera_distance_m: float = 0.0
+    self.speed_camera_limit: float = 0.0
+    self.speed_camera_type: str = ""
 
     self._font_semi_bold: rl.Font = gui_app.font(FontWeight.SEMI_BOLD)
     self._font_bold: rl.Font = gui_app.font(FontWeight.BOLD)
@@ -78,6 +83,7 @@ class HudRenderer(Widget):
       self.is_cruise_set = False
       self.set_speed = SET_SPEED_NA
       self.speed = 0.0
+      self.speed_camera_valid = False
       return
 
     controls_state = sm['controlsState']
@@ -99,6 +105,15 @@ class HudRenderer(Widget):
     speed_conversion = CV.MS_TO_KPH if ui_state.is_metric else CV.MS_TO_MPH
     self.speed = max(0.0, v_ego * speed_conversion)
 
+    if sm.recv_frame["liveMapDataSP"] >= ui_state.started_frame:
+      map_data = sm["liveMapDataSP"]
+      self.speed_camera_valid = bool(map_data.speedCameraAheadValid and map_data.speedCameraSpeedLimit > 0)
+      self.speed_camera_distance_m = max(0.0, map_data.speedCameraAheadDistance)
+      self.speed_camera_limit = map_data.speedCameraSpeedLimit * (CV.MS_TO_KPH if ui_state.is_metric else CV.MS_TO_MPH)
+      self.speed_camera_type = map_data.speedCameraType
+    else:
+      self.speed_camera_valid = False
+
   def _render(self, rect: rl.Rectangle) -> None:
     """Render HUD elements to the screen."""
     # Draw the header background
@@ -115,6 +130,9 @@ class HudRenderer(Widget):
       self._draw_set_speed(rect)
 
     self._draw_current_speed(rect)
+
+    if self.speed_camera_valid:
+      self._draw_speed_camera(rect)
 
     button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
     button_y = rect.y + UI_CONFIG.border_size
@@ -177,3 +195,12 @@ class HudRenderer(Widget):
     unit_text_size = measure_text_cached(self._font_medium, unit_text, FONT_SIZES.speed_unit)
     unit_pos = rl.Vector2(rect.x + rect.width / 2 - unit_text_size.x / 2, 290 - unit_text_size.y / 2)
     rl.draw_text_ex(self._font_medium, unit_text, unit_pos, FONT_SIZES.speed_unit, 0, COLORS.white_translucent)
+
+  def _draw_speed_camera(self, rect: rl.Rectangle) -> None:
+    """Show the next matched camera; target speed remains owned by SLC/IBCM."""
+    distance = f"{round(self.speed_camera_distance_m)} m"
+    limit = f"{round(self.speed_camera_limit)}"
+    label = f"CAM {limit}  {distance}"
+    text_size = measure_text_cached(self._font_semi_bold, label, FONT_SIZES.camera_info)
+    x = rect.x + rect.width / 2 - text_size.x / 2
+    rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(x, 330), FONT_SIZES.camera_info, 0, COLORS.white_translucent)
