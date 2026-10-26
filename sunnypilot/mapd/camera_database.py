@@ -43,6 +43,7 @@ def save_database(path: str, database: CameraDatabase) -> None:
       "longitude": camera.longitude,
       "speed_limit_kph": camera.speed_limit_kph,
       "direction_deg": camera.direction_deg,
+      "direction_type": camera.direction_type,
       "camera_type": camera.camera_type,
       "end_latitude": camera.end_latitude,
       "end_longitude": camera.end_longitude,

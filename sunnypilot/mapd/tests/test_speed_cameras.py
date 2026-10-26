@@ -46,6 +46,16 @@ def test_nearest_camera_filters_behind_and_direction():
   assert match.camera.speed_limit_kph == 60
 
 
+def test_direction_type_allows_all_and_both_directions():
+  cameras = parse_camera_snapshot({"cameras": [
+    {"lat": 55.751, "lon": 37.620, "speed": 60, "direction": 180, "dirType": 0},
+    {"lat": 55.752, "lon": 37.620, "speed": 40, "direction": 0, "dirType": 2},
+  ]})
+  match = find_nearest_camera(cameras, 55.750, 37.620, heading_deg=0, max_distance_m=500)
+  assert match is not None
+  assert match.camera.speed_limit_kph == 60
+
+
 def test_no_match_outside_radius():
   cameras = parse_camera_snapshot([{"lat": 55.9, "lon": 37.620}])
   assert find_nearest_camera(cameras, 55.750, 37.620, max_distance_m=100) is None

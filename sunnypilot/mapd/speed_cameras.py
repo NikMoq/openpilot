@@ -24,6 +24,7 @@ class SpeedCamera:
   speed_limit_kph: float | None = None
   direction_deg: float | None = None
   camera_type: str = "unknown"
+  direction_type: int | None = None
   end_latitude: float | None = None
   end_longitude: float | None = None
 
@@ -66,11 +67,13 @@ def _camera_from_mapping(item: dict[str, Any]) -> SpeedCamera | None:
       if isinstance(current, dict):
         speed_limit = current.get("speed")
   direction = item.get("direction_deg", item.get("direction", item.get("bearing", item.get("dir"))))
+  direction_type = item.get("direction_type", item.get("dirType"))
   return SpeedCamera(
     latitude=latitude,
     longitude=longitude,
     speed_limit_kph=_number(speed_limit),
     direction_deg=_number(direction),
+    direction_type=int(direction_type) if str(direction_type).strip().lstrip("-").isdigit() else None,
     camera_type=str(item.get("camera_type", item.get("type", "unknown"))),
     end_latitude=_number(item.get("end_latitude")),
     end_longitude=_number(item.get("end_longitude")),
@@ -130,9 +133,11 @@ def find_nearest_camera(cameras: Iterable[SpeedCamera], latitude: float, longitu
       delta = abs((bearing - heading_deg + 180) % 360 - 180)
       if delta > 90:
         continue
-      if camera.direction_deg is not None:
+      if camera.direction_deg is not None and camera.direction_type in (1, 2):
         camera_delta = abs((heading_deg - camera.direction_deg + 180) % 360 - 180)
-        if camera_delta > direction_tolerance_deg:
+        if camera.direction_type == 1 and camera_delta > direction_tolerance_deg:
+          continue
+        if camera.direction_type == 2 and min(camera_delta, abs(180 - camera_delta)) > direction_tolerance_deg:
           continue
     matches.append(CameraMatch(camera, distance, bearing))
   return min(matches, key=lambda match: match.distance_m, default=None)
