@@ -33,6 +33,21 @@ deployment is distributed.
 - Existing SunnyPilot SLC remains the owner of target-speed calculation; PQ35
   ICBM remains the existing actuator path.
 
+## Programmatic target-speed chain
+
+The current source path is:
+
+`liveMapDataSP.speedLimitAhead` →
+`SpeedLimitResolver._process_map_data()` →
+`SpeedLimitAssist.output_v_target` →
+`longitudinalPlanSP.vTarget` →
+`IntelligentCruiseButtonManagement.update_calculations()` →
+the existing Volkswagen ICBM controller.
+
+This proves the software wiring only. It does not prove that the target is
+accepted by the PQ35 vehicle or that the emitted CAN frame is correct; those
+remain bench evidence requirements below.
+
 ## Verification evidence
 
 - Embedded APK schema smoke test passed.
