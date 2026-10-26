@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from openpilot.sunnypilot.mapd.speed_cameras import find_nearest_camera, parse_camera_snapshot
 
@@ -24,6 +25,15 @@ def test_parse_radarbase_export_shape():
   assert len(cameras) == 1
   assert cameras[0].direction_deg == 180
   assert cameras[0].speed_limit_kph == 60
+
+
+def test_radarbase_replay_fixture_selects_camera_ahead():
+  fixture = Path(__file__).with_name("fixtures") / "radarbase_sample.json"
+  cameras = parse_camera_snapshot(fixture.read_text(encoding="utf-8"))
+  match = find_nearest_camera(cameras, 55.7498, 37.6101, heading_deg=180, max_distance_m=500)
+  assert match is not None
+  assert match.camera.speed_limit_kph == 60
+  assert match.distance_m > 0
 
 
 def test_nearest_camera_filters_behind_and_direction():

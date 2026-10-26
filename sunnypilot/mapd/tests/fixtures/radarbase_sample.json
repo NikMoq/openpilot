@@ -1,0 +1,9 @@
+{
+  "meta": {"ver": "3.0", "build": 4272},
+  "objects": [
+    {"id": 1, "lat": 55.7495, "lng": 37.6101, "type": 1, "dirType": 1,
+     "dir": 180, "speedControls": [{"speed": 60, "type": "current"}]},
+    {"id": 2, "lat": 55.7490, "lng": 37.6101, "type": 1, "dirType": 1,
+     "dir": 0, "speedControls": [{"speed": 40, "type": "current"}]}
+  ]
+}
