@@ -66,6 +66,27 @@ class FakeParams:
     self.values.pop(key, None)
 
 
+@pytest.mark.parametrize("saved_timestamp", [None, "", "0", "nan", "invalid"])
+def test_boot_restores_cache_metadata_without_network(tmp_path, saved_timestamp):
+  cache = tmp_path / "speed_cameras.json"
+  database = CameraDatabase("offline-cache", time.time(), (SpeedCamera(55.75, 37.61, 60),),
+                            "speedcamonline.ru", "a" * 64)
+  save_database(str(cache), database)
+  before = cache.read_bytes()
+  params = FakeParams({"SpeedCameraDatabaseUpdatedAt": saved_timestamp,
+                       "SpeedCameraDatabaseCount": "0", "SpeedCameraDatabaseStatus": "error"})
+
+  def no_network(*args):
+    pytest.fail("restoring a valid cache must not need the network")
+
+  CameraDatabaseUpdater(params=params, default_path=str(cache), download_fn=no_network)
+  assert params.get("SpeedCameraDatabaseCount") == "1"
+  assert params.get("SpeedCameraDatabaseStatus") == "ready"
+  assert params.get("SpeedCameraDatabaseVersion") == "a" * 12
+  assert float(params.get("SpeedCameraDatabaseUpdatedAt")) == database.fetched_at
+  assert cache.read_bytes() == before
+
+
 def test_malformed_params_use_bounded_defaults():
   config = read_config(FakeParams({
     "SpeedCameraDatabaseUpdatePeriodHours": "nan",

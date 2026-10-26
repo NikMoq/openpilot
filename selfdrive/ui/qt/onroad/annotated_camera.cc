@@ -18,7 +18,8 @@ AnnotatedCameraWidget::AnnotatedCameraWidget(VisionStreamType type, QWidget *par
   main_layout->setSpacing(0);
 
   experimental_btn = new ExperimentalButton(this);
-  main_layout->addWidget(experimental_btn, 0, Qt::AlignTop | Qt::AlignRight);
+  // Driving mode remains configurable in Settings; keep the onroad view clear.
+  experimental_btn->hide();
 }
 
 void AnnotatedCameraWidget::updateState(const UIState &s) {

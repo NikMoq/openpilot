@@ -112,6 +112,18 @@ void HudRendererSP::updateState(const UIState &s) {
     speedCameraAheadValid = false;
   }
 
+  // liveMapDataSP has coordinates/type but no stable camera ID. No camera
+  // identity is latched: each fresh selection must meet the user's distance.
+  // The sole retained bit permits an explicit position-lost notice after a
+  // visible warning; it never retains a limit/distance or opens a new warning.
+  const bool fresh_map = sm.alive("liveMapDataSP");
+  const bool position_lost = fresh_map && !lmd.getLocationValid();
+  const bool fresh_warning = fresh_map && sm.valid("liveMapDataSP") && lmd.getLocationValid() &&
+                             speedCameraAheadValid && std::isfinite(speedCameraAheadDistance) &&
+                             speedCameraAheadDistance >= 0 && speedCameraAheadDistance <= speedCameraAlertDistance;
+  cameraPositionLost = speedCameraEnabled && position_lost && (cameraWarningVisible || cameraPositionLost);
+  cameraWarningVisible = speedCameraEnabled && fresh_warning;
+
   static int reverse_delay = 0;
   bool reverse_allowed = false;
   if (car_state.getGearShifter() != cereal::CarState::GearShifter::REVERSE) {
@@ -191,7 +203,8 @@ void HudRendererSP::draw(QPainter &p, const QRect &surface_rect) {
 
   p.save();
 
-  if (is_cruise_available) {
+  cameraLayoutActive = !reversing && (cameraWarningVisible || cameraPositionLost);
+  if (is_cruise_available || cameraLayoutActive) {
     drawSetSpeedSP(p, surface_rect);
   }
 
@@ -252,7 +265,12 @@ void HudRendererSP::draw(QPainter &p, const QRect &surface_rect) {
     const int sign_height = 204;
     QRect sign_rect(sign_x, sign_y, sign_width, sign_height);
 
-    if (speedLimitAssistState == cereal::LongitudinalPlanSP::SpeedLimit::AssistState::PRE_ACTIVE) {
+    if (cameraLayoutActive) {
+      const QRect card = cameraOverlayRect(surface_rect);
+      sign_rect.moveTopLeft(QPoint(card.left() + 24, card.bottom() + 24));
+    }
+    if (speedLimitMode != SpeedLimitMode::OFF &&
+        speedLimitAssistState == cereal::LongitudinalPlanSP::SpeedLimit::AssistState::PRE_ACTIVE) {
       speedLimitAssistFrame++;
       showSpeedLimit = speed_limit_assist_pre_active_pulse;
       drawSpeedLimitPreActiveArrow(p, sign_rect);
@@ -262,12 +280,28 @@ void HudRendererSP::draw(QPainter &p, const QRect &surface_rect) {
     }
 
     if (showSpeedLimit) {
-      drawSpeedLimitSigns(p, sign_rect);
-
-      // do not show during SLA's preActive state
-      if (speedLimitAssistState != cereal::LongitudinalPlanSP::SpeedLimit::AssistState::PRE_ACTIVE) {
-        drawUpcomingSpeedLimit(p);
+      if (cameraLayoutActive) {
+        const QRect card = cameraOverlayRect(surface_rect);
+        const bool has_limit = speedLimitValid || speedLimitLastValid;
+        const bool overspeed = has_limit && std::nearbyint(speedLimitFinalLast) < std::nearbyint(speed);
+        const QColor color = speedLimitMode >= SpeedLimitMode::WARNING && overspeed ? QColor(255, 80, 80)
+                            : !speedLimitValid && speedLimitLastValid ? QColor(145, 155, 149) : QColor(Qt::white);
+        cameraOutlinedText(p, QRect(card.left() + 352, card.top() + 14, 304, 44), tr("LIMIT"), 32, QColor(185, 195, 203));
+        cameraOutlinedText(p, QRect(card.left() + 352, card.top() + 62, 200, 112),
+                           has_limit && std::isfinite(speedLimitLast) ? QString::number(std::nearbyint(speedLimitLast)) : "\u2014", 90, color);
+        if (has_limit && std::isfinite(speedLimitOffset) && speedLimitOffset != 0) {
+          cameraOutlinedText(p, QRect(card.left() + 552, card.top() + 90, 104, 60),
+                             (speedLimitOffset > 0 ? "+" : "") + QString::number(std::nearbyint(speedLimitOffset)), 32, color);
+        }
+      } else {
+        drawSpeedLimitSigns(p, sign_rect);
       }
+    }
+    // During a camera event the upcoming sign has its own space and stays
+    // visible while the current road limit pulses for assist confirmation.
+    if ((cameraLayoutActive && speedLimitMode != SpeedLimitMode::OFF) ||
+        (showSpeedLimit && speedLimitAssistState != cereal::LongitudinalPlanSP::SpeedLimit::AssistState::PRE_ACTIVE)) {
+      drawUpcomingSpeedLimit(p, surface_rect);
     }
 
     drawSpeedCameraWarning(p, surface_rect);
@@ -329,9 +363,8 @@ void HudRendererSP::drawSpeedCameraWarning(QPainter &p, const QRect &surface_rec
     speedCameraControlReason,
     speedCameraControlManualTakeover,
   };
-  drawCameraOverlay(p, surface_rect, speedCameraEnabled && speedCameraAheadValid &&
-                    speedCameraAheadDistance <= speedCameraAlertDistance,
-                    speedCameraAheadDistance, speedCameraSpeedLimit, is_metric, control);
+  drawCameraOverlay(p, surface_rect, cameraWarningVisible,
+                    speedCameraAheadDistance, speedCameraSpeedLimit, is_metric, control, cameraPositionLost);
 }
 
 void HudRendererSP::drawText(QPainter &p, int x, int y, const QString &text, QColor color) {
@@ -612,7 +645,7 @@ void HudRendererSP::drawSpeedLimitSigns(QPainter &p, QRect &sign_rect) {
   }
 }
 
-void HudRendererSP::drawUpcomingSpeedLimit(QPainter &p) {
+void HudRendererSP::drawUpcomingSpeedLimit(QPainter &p, const QRect &surface_rect) {
   bool speed_limit_ahead = speedLimitAheadValid && speedLimitAhead > 0 && speedLimitAhead != speedLimit && speedLimitAheadValidFrame > 0 &&
                            speedLimitSource == cereal::LongitudinalPlanSP::SpeedLimit::Source::MAP;
   if (!speed_limit_ahead) {
@@ -627,17 +660,17 @@ void HudRendererSP::drawUpcomingSpeedLimit(QPainter &p) {
   auto outputDistance = [&] {
     if (is_metric) {
       if (speedLimitAheadDistance < 50) return tr("Near");
-      if (speedLimitAheadDistance >= 1000) return QString::number(speedLimitAheadDistance * METER_TO_KM, 'f', 1) + tr("km");
+      if (speedLimitAheadDistance >= 1000) return QString::number(speedLimitAheadDistance * METER_TO_KM, 'f', 1) + QObject::tr(" km");
 
       int rounded = (speedLimitAheadDistance < 200) ? std::max(10, roundToInterval(speedLimitAheadDistance, 10, 5)) : roundToInterval(speedLimitAheadDistance, 100, 50);
-      return QString::number(rounded) + tr("m");
+      return QString::number(rounded) + QObject::tr(" m");
     } else {
       float distance_ft = speedLimitAheadDistance * METER_TO_FOOT;
       if (distance_ft < 100) return tr("Near");
-      if (distance_ft >= 900) return QString::number(speedLimitAheadDistance * METER_TO_MILE, 'f', 1) + tr("mi");
+      if (distance_ft >= 900) return QString::number(speedLimitAheadDistance * METER_TO_MILE, 'f', 1) + QObject::tr(" mi");
 
       int rounded = (distance_ft < 500) ? std::max(50, roundToInterval(distance_ft, 50, 25)) : roundToInterval(distance_ft, 100, 50);
-      return QString::number(rounded) + tr("ft");
+      return QString::number(rounded) + QObject::tr(" ft");
     }
   };
 
@@ -650,12 +683,16 @@ void HudRendererSP::drawUpcomingSpeedLimit(QPainter &p) {
   const int sign_y = 45;
   const int sign_height = 204;
 
-  const int ahead_width = 170;
+  const int ahead_width = cameraLayoutActive ? 240 : 170;
   const int ahead_height = 160;
   const int ahead_x = sign_x + (sign_width - ahead_width) / 2;
   const int ahead_y = sign_y + sign_height + 10;
 
   QRect ahead_rect(ahead_x, ahead_y, ahead_width, ahead_height);
+  if (cameraLayoutActive) {
+    const QRect card = cameraOverlayRect(surface_rect);
+    ahead_rect.moveTopLeft(QPoint(card.left() + 352, card.bottom() + 24));
+  }
   p.setPen(QPen(QColor(255, 255, 255, 100), 3));
   p.setBrush(QColor(0, 0, 0, 180));
   p.drawRoundedRect(ahead_rect, 16, 16);
@@ -736,7 +773,7 @@ void HudRendererSP::drawSetSpeedSP(QPainter &p, const QRect &surface_rect) {
   // Draw set speed box
   p.setPen(QPen(QColor(255, 255, 255, 75), 6));
   p.setBrush(QColor(0, 0, 0, 166));
-  p.drawRoundedRect(set_speed_rect, 32, 32);
+  if (!cameraLayoutActive) p.drawRoundedRect(set_speed_rect, 32, 32);
 
   // Colors based on status
   QColor max_color = QColor(0xa6, 0xa6, 0xa6, 0xff);
@@ -771,6 +808,14 @@ void HudRendererSP::drawSetSpeedSP(QPainter &p, const QRect &surface_rect) {
   int max_str_y = (icbm_active_counter != 0) ? 15 : 27;
   QString max_str = (icbm_active_counter != 0) ? QString::number(std::nearbyint(speedCluster)) : tr("MAX");
 
+  if (cameraLayoutActive) {
+    const QRect card = cameraOverlayRect(surface_rect);
+    cameraOutlinedText(p, QRect(card.left() + 24, card.top() + 14, 304, 44), max_str,
+                       icbm_active_counter != 0 ? 40 : 32, max_color);
+    cameraOutlinedText(p, QRect(card.left() + 24, card.top() + 62, 304, 112),
+                       is_cruise_set && is_cruise_available ? QString::number(std::nearbyint(set_speed)) : "\u2014", 90, set_speed_color);
+    return;
+  }
   p.setFont(InterFont(max_str_size, QFont::DemiBold));
   p.setPen(max_color);
   p.drawText(set_speed_rect.adjusted(0, max_str_y, 0, 0), Qt::AlignTop | Qt::AlignHCenter, max_str);

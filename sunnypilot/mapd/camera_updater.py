@@ -254,7 +254,7 @@ class CameraDatabaseUpdater:
     status = _text(_param_get(self.params, "SpeedCameraDatabaseStatus"), "")
     if status not in ("update requested", "downloading") and not status.startswith("retrying"):
       _param_put(self.params, "SpeedCameraDatabaseStatus", "ready")
-    if not _param_get(self.params, "SpeedCameraDatabaseUpdatedAt"):
+    if self._safe_timestamp(_param_get(self.params, "SpeedCameraDatabaseUpdatedAt")) <= 0:
       _param_put(self.params, "SpeedCameraDatabaseUpdatedAt", str(database.fetched_at))
 
   def request_update(self) -> None:

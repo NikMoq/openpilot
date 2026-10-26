@@ -4,6 +4,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QTimer>
+#include <QTranslator>
 #include <QPushButton>
 #include <QLabel>
 #include <QCommandLineParser>
@@ -17,6 +18,8 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <cstdio>
+#include <algorithm>
+#include <QSysInfo>
 #include <capnp/dynamic.h>
 
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h"
@@ -154,8 +157,18 @@ static bool verifyCameraControlFreshness(UIState &state, const QString &output) 
     "liveTorqueParameters", "carParams", "carParamsSP", "longitudinalPlanSP", "liveMapDataSP",
     "liveParameters", "deviceState", "selfdriveState", "driverStateV2",
   };
+  Params params;
+  const std::string original_enabled = params.get("SpeedCameraEnabled");
+  const std::string original_distance = params.get("SpeedCameraAlertDistanceMeters");
+  params.putBool("SpeedCameraEnabled", true);
+  params.put("SpeedCameraAlertDistanceMeters", "200");
   state.sm = std::make_unique<SubMaster>(services);
   state.scene.is_metric = true;
+  state.scene.speed_limit_mode = 1;
+  state.scene.dev_ui_info = 0;
+  state.scene.road_name = false;
+  state.scene.turn_signals = false;
+  state.scene.hideVEgoUI = false;
   state.status = STATUS_DISENGAGED;
   std::map<std::string, std::unique_ptr<MessageBuilder>> fixtures;
   std::vector<std::pair<std::string, cereal::Event::Reader>> initial_messages;
@@ -168,87 +181,303 @@ static bool verifyCameraControlFreshness(UIState &state, const QString &output) 
   }
   auto plan = fixtures.at("longitudinalPlanSP")->getRoot<cereal::Event>();
   auto control = plan.getLongitudinalPlanSP().initSpeedCameraControl();
-  auto map = fixtures.at("liveMapDataSP")->getRoot<cereal::Event>();
-  map.getLiveMapDataSP().setSpeedCameraAheadValid(true);
-  map.getLiveMapDataSP().setSpeedCameraAheadDistance(250);
-  map.getLiveMapDataSP().setSpeedCameraSpeedLimit(60.0f / 3.6f);
-  fixtures.at("carState")->getRoot<cereal::Event>().getCarState().setVEgo(130.0f / 3.6f);
-  const uint64_t now = nanos_since_boot();
-  state.sm->update_msgs(now, initial_messages);
-  HudRendererSP hud;
-  auto render = [&](const QString &name) {
-    hud.updateState(state);
-    QImage image(1700, 1080, QImage::Format_ARGB32_Premultiplied);
-    image.fill(QColor(23, 51, 73));
-    QPainter painter(&image);
-    hud.draw(painter, image.rect());
-    painter.end();
-    image.save(output + "/hud-control-" + name + ".png");
-    return image.copy(cameraOverlayRect(image.rect(), 180).adjusted(-4, -4, 4, 4));
-  };
-  const QImage warning = render("warning-only");
   control.setEnabled(true);
   control.setActive(true);
-  control.setSpeedCap(60.0f / 3.6f);
+  control.setSpeedCap(79.0f / 3.6f);
   control.setState("approach");
-  state.sm->update_msgs(now, {{"longitudinalPlanSP", plan.asReader()}});
-  const QImage active = render("active");
-
-  state.sm->update(0);  // Reset updated flags as on a normal UI tick.
-  state.sm->update_msgs(now + 2000000000ULL, {{"liveMapDataSP", map.asReader()}});
-  const bool plan_stale = !state.sm->alive("longitudinalPlanSP");
-  const QImage stale = render("stale");
-
-  plan.setValid(false);  // Even a newly received active/cap payload is untrusted.
-  state.sm->update_msgs(now + 3000000000ULL,
-                       {{"longitudinalPlanSP", plan.asReader()}, {"liveMapDataSP", map.asReader()}});
-  const QImage invalid = render("invalid");
-  plan.setValid(true);
-  state.sm->update_msgs(now + 4000000000ULL,
-                       {{"longitudinalPlanSP", plan.asReader()}, {"liveMapDataSP", map.asReader()}});
-  const QImage recovered = render("recovered");
-
-  // Composite the real wheel widget over the real HUD, as Qt does on device.
-  // The old camera-only preview could not expose this overlapping child widget.
-  bool header_layout_ok = true;
-  ExperimentalButtonSP wheel;
-  for (int width : {2100, 1700, 1050}) {
+  auto resolver = plan.getLongitudinalPlanSP().initSpeedLimit().initResolver();
+  resolver.setSpeedLimit(60.0f / 3.6f);
+  resolver.setSpeedLimitLast(60.0f / 3.6f);
+  resolver.setSpeedLimitFinalLast(60.0f / 3.6f);
+  resolver.setSpeedLimitValid(true);
+  resolver.setSpeedLimitLastValid(true);
+  resolver.setSource(cereal::LongitudinalPlanSP::SpeedLimit::Source::MAP);
+  auto map = fixtures.at("liveMapDataSP")->getRoot<cereal::Event>();
+  auto lmd = map.getLiveMapDataSP();
+  lmd.setLocationValid(true);
+  lmd.setSpeedCameraAheadValid(true);
+  lmd.setSpeedCameraAheadDistance(201);
+  lmd.setSpeedCameraSpeedLimit(60.0f / 3.6f);
+  lmd.setSpeedCameraLatitude(55.75);
+  lmd.setSpeedCameraLongitude(37.62);
+  lmd.setSpeedCameraType("speed_camera");
+  auto car = fixtures.at("carState")->getRoot<cereal::Event>();
+  car.getCarState().setVEgo(97.0f / 3.6f);
+  car.getCarState().setVCruiseCluster(130);
+  auto cruise = car.getCarState().initCruiseState();
+  cruise.setSpeedCluster(130.0f / 3.6f);
+  cruise.setAvailable(true);
+  cruise.setEnabled(true);
+  auto selfdrive = fixtures.at("selfdriveState")->getRoot<cereal::Event>();
+  selfdrive.getSelfdriveState().setEnabled(true);
+  auto car_control = fixtures.at("carControl")->getRoot<cereal::Event>();
+  car_control.getCarControl().setEnabled(true);
+  fixtures.at("carParamsSP")->getRoot<cereal::Event>().getCarParamsSP().setPcmCruiseSpeed(true);
+  uint64_t now = nanos_since_boot();
+  state.sm->update_msgs(now, initial_messages);
+  const QString original_cwd = QDir::currentPath();
+  QDir::setCurrent(original_cwd + "/selfdrive/ui");
+  HudRendererSP hud;  // Load the production assist-arrow assets at their normal paths.
+  QDir::setCurrent(original_cwd);
+  bool passed = true;
+  QJsonArray checks;
+  auto check = [&](const QString &name, bool ok) {
+    passed &= ok;
+    checks.append(QJsonObject{{"check", name}, {"passed", ok}});
+    std::printf("Camera UI %s: %s\n", qPrintable(name), ok ? "PASS" : "FAIL");
+  };
+  auto feed = [&]() {
+    state.sm->update(0);
+    now += 50000000ULL;
+    state.sm->update_msgs(now, {{"longitudinalPlanSP", plan.asReader()},
+                              {"liveMapDataSP", map.asReader()}, {"carState", car.asReader()},
+                              {"selfdriveState", selfdrive.asReader()},
+                              {"carControl", car_control.asReader()},
+                              {"carParamsSP", fixtures.at("carParamsSP")->getRoot<cereal::Event>().asReader()}});
+  };
+  auto render = [&](const QString &name, int width = 2100) {
+    hud.updateState(state);
     QImage image(width, 1080, QImage::Format_ARGB32_Premultiplied);
-    image.fill(QColor(23, 51, 73));
-    const QRect surface = image.rect();
-    const QRect camera = cameraOverlayRect(surface, 180).adjusted(-2, -2, 2, 2);
-    const QPoint wheel_position(width - UI_BORDER_SIZE - btn_size, UI_BORDER_SIZE);
-    const QRect wheel_rect(wheel_position, wheel.size());
-    QRect speed_rect = QFontMetrics(InterFont(176, QFont::Bold)).boundingRect("130");
-    speed_rect.moveCenter({surface.center().x(), 210 - speed_rect.height() / 2});
     QPainter painter(&image);
-    hud.draw(painter, surface);
+    // Synthetic high/low contrast road backdrop; every UI pixel is the real HUD.
+    QLinearGradient sky(0, 0, 0, 1080);
+    sky.setColorAt(0, QColor(130, 165, 190));
+    sky.setColorAt(0.45, QColor(205, 210, 195));
+    sky.setColorAt(0.46, QColor(90, 108, 80));
+    sky.setColorAt(1, QColor(45, 55, 50));
+    painter.fillRect(image.rect(), sky);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(100, 107, 112));
+    painter.drawPolygon(QPolygon({QPoint(width / 2 - 70, 420), QPoint(width / 2 + 70, 420),
+                                  QPoint(width, 1080), QPoint(0, 1080)}));
+    painter.setPen(QPen(QColor(235, 235, 210), 12));
+    painter.drawLine(width / 2 - 45, 440, width / 6, 1080);
+    painter.drawLine(width / 2 + 45, 440, width * 5 / 6, 1080);
+    hud.draw(painter, image.rect());
     painter.end();
-    const QImage camera_before_wheel = image.copy(camera);
-    painter.begin(&image);
-    wheel.render(&painter, wheel_position);
-    painter.end();
-    const bool clear = surface.contains(camera) && !camera.intersects(wheel_rect) &&
-                       !camera.intersects(speed_rect) && camera_before_wheel == image.copy(camera);
-    header_layout_ok &= clear;
-    image.save(output + QString("/hud-camera-wheel-%1.png").arg(width));
-    std::printf("Camera header width=%d: no-overlap=%d camera=(%d,%d,%d,%d)\n",
-                width, clear, camera.x(), camera.y(), camera.width(), camera.height());
-  }
-
-  state.sm->update(0);
-  state.sm->update_msgs(now + 20000000000ULL, {});
-  const QImage both_stale = render("both-stale");
-  map.getLiveMapDataSP().setSpeedCameraAheadValid(false);
-  control.setEnabled(false);
-  control.setActive(false);
-  state.sm->update_msgs(now + 21000000000ULL,
-                       {{"longitudinalPlanSP", plan.asReader()}, {"liveMapDataSP", map.asReader()}});
+    passed &= image.save(output + "/hud-" + name + ".png");
+    return image;
+  };
+  auto section = [](const QImage &image) {
+    const QRect r = cameraOverlayRect(image.rect());
+    return image.copy(QRect(r.left() + 16, r.top() + 260, 648, 185));
+  };
+  auto warning = [](const QImage &image) {
+    const QRect r = cameraOverlayRect(image.rect());
+    return image.copy(QRect(r.left() + 16, r.top() + 266, 648, 100));
+  };
+  auto target = [](const QImage &image) {
+    const QRect r = cameraOverlayRect(image.rect());
+    return image.copy(QRect(r.left() + 16, r.top() + 365, 648, 64));
+  };
+  const QImage outside = render("outside-200m-active-cap");
+  lmd.setSpeedCameraAheadValid(false); feed();
   const QImage empty = render("no-camera");
-  const bool passed = header_layout_ok && active != warning && plan_stale && stale == warning && invalid == warning &&
-                      recovered == active && both_stale == empty;
-  std::printf("HUD freshness: target-visible=%d plan-stale=%d stale-hidden=%d invalid-hidden=%d recovered=%d map-stale-hidden=%d\n",
-              active != warning, plan_stale, stale == warning, invalid == warning, recovered == active, both_stale == empty);
+  check("active-cap-does-not-open-before-warning-threshold", section(outside) == section(empty));
+  lmd.setSpeedCameraAheadValid(true);
+  lmd.setSpeedCameraAheadDistance(200); feed();
+  check("selected-200m-boundary", section(render("boundary-200m")) != section(empty));
+  lmd.setSpeedCameraAheadDistance(198); feed();
+  const QImage enabled = render("gps-198m-acc-enabled");
+  auto receivedState = [&](bool available, bool enabled, bool braking) {
+    const auto cs = (*state.sm)["carState"].getCarState();
+    const auto sd = (*state.sm)["selfdriveState"].getSelfdriveState();
+    return state.sm->updated("carState") && state.sm->valid("carState") &&
+           state.sm->updated("selfdriveState") && state.sm->valid("selfdriveState") &&
+           cs.getCruiseState().getAvailable() == available && cs.getCruiseState().getEnabled() == enabled &&
+           cs.getBrakePressed() == braking && sd.getEnabled() == enabled;
+  };
+  check("enabled-fixture-received-cruise-and-selfdrive-true", receivedState(true, true, false));
+  control.setManualTakeover(true);  // Controller output fixture; controller itself is not under test.
+  car.getCarState().setBrakePressed(true);
+  cruise.setEnabled(false);
+  selfdrive.getSelfdriveState().setEnabled(false);
+  car_control.getCarControl().setEnabled(false); feed();
+  const QImage brake = render("gps-198m-brake");
+  check("brake-fixture-received-cruise-and-selfdrive-false", receivedState(true, false, true));
+  check("brake-retains-live-warning-hides-target", warning(brake) == warning(enabled) && target(brake) != target(enabled));
+  control.setEnabled(false); control.setActive(false);
+  cruise.setAvailable(false);
+  cruise.setEnabled(false);
+  car.getCarState().setBrakePressed(false);
+  selfdrive.getSelfdriveState().setEnabled(false);
+  car_control.getCarControl().setEnabled(false); feed();
+  const QImage acc_off = render("gps-198m-acc-off");
+  check("ACC-off-fixture-received-unavailable-disabled-brake-released", receivedState(false, false, false));
+  check("ACC-off-retains-live-warning", warning(acc_off) == warning(brake));
+  QImage previous = acc_off;
+  for (int distance : {150, 80, 20}) {
+    lmd.setSpeedCameraAheadDistance(distance); feed();
+    QImage actual = render(QString("gps-%1m-acc-off").arg(distance));
+    QImage expected = empty.copy();
+    QPainter p(&expected);
+    drawCameraOverlay(p, expected.rect(), true, distance, 60, true);
+    p.end();
+    check(QString("live-GPS-distance-%1-changes").arg(distance), warning(actual) != warning(previous) && warning(actual) == warning(expected));
+    previous = actual;
+  }
+  // A real increasing provider sample is displayed too, never clamped by UI.
+  lmd.setSpeedCameraAheadDistance(35); feed();
+  check("provider-distance-can-increase", warning(render("gps-35m-provider-correction")) != warning(previous));
+  map.setValid(false); lmd.setLocationValid(false); feed();
+  const QImage lost = render("position-lost-after-visible");
+  check("GPS-loss-replaces-live-distance", warning(lost) != warning(previous) && section(lost) != section(empty));
+  map.setValid(true); lmd.setLocationValid(true); lmd.setSpeedCameraAheadValid(false); feed();
+  check("provider-passed-clears-warning", section(render("provider-passed")) == section(empty));
+  lmd.setLocationValid(false); map.setValid(false); feed();
+  check("position-loss-before-visible-stays-hidden", section(render("position-lost-before-visible")) == section(empty));
+  map.setValid(true); lmd.setLocationValid(true); lmd.setSpeedCameraAheadValid(true);
+  lmd.setSpeedCameraLongitude(37.63); lmd.setSpeedCameraAheadDistance(900); feed();
+  check("next-camera-awaits-threshold", section(render("next-camera-900m")) == section(empty));
+  params.put("SpeedCameraAlertDistanceMeters", "1000");
+  check("selected-1000m-opens-at-900m", section(render("threshold-1000m-at-900m")) != section(empty));
+  lmd.setSpeedCameraAheadDistance(1001); feed();
+  check("selected-1000m-excludes-1001m", section(render("threshold-1000m-at-1001m")) == section(empty));
+  lmd.setSpeedCameraAheadDistance(150); feed();
+  control.setEnabled(true); control.setActive(true); control.setManualTakeover(false);
+  car.getCarState().setBrakePressed(false);
+  cruise.setAvailable(true); cruise.setEnabled(true);
+  selfdrive.getSelfdriveState().setEnabled(true);
+  car_control.getCarControl().setEnabled(true); feed();
+  const QImage active = render("final-transparent-2100");
+  {
+    QJsonArray samples_by_scenario;
+    for (int width : {2100, 1050}) {
+      for (bool camera_enabled : {true, false}) {
+        params.putBool("SpeedCameraEnabled", camera_enabled);
+        hud.updateState(state);
+        QImage canvas(width, 1080, QImage::Format_ARGB32_Premultiplied);
+        auto paint_once_ms = [&]() {
+          canvas.fill(QColor(130, 165, 190));
+          QPainter painter(&canvas);
+          QElapsedTimer paint_clock;
+          paint_clock.start();
+          hud.draw(painter, canvas.rect());
+          painter.end();  // Include completion of synchronous QImage raster painting.
+          return paint_clock.nsecsElapsed() / 1000000.0;
+        };
+        const double first_paint_ms = paint_once_ms();  // Existing HUD/font caches; not process-cold.
+        for (int warmup = 0; warmup < 12; ++warmup) paint_once_ms();
+        std::vector<double> samples;
+        QElapsedTimer budget;
+        budget.start();
+        while (samples.size() < 120 && budget.elapsed() < 3000) samples.push_back(paint_once_ms());
+        std::sort(samples.begin(), samples.end());
+        if (samples.empty()) { passed = false; continue; }
+        double sum = 0;
+        for (double sample : samples) sum += sample;
+        auto percentile = [&](double fraction) { return samples[static_cast<size_t>(std::ceil(fraction * samples.size())) - 1]; };
+        samples_by_scenario.append(QJsonObject{
+          {"camera_enabled", camera_enabled}, {"width", width}, {"height", 1080},
+          {"first_paint_ms_existing_caches", first_paint_ms}, {"warmup_frames", 12},
+          {"sample_count", static_cast<int>(samples.size())}, {"sample_limit", 120}, {"sampling_budget_ms", 3000},
+          {"sampling_wall_ms", static_cast<double>(budget.elapsed())},
+          {"mean_ms", sum / samples.size()}, {"p50_ms", percentile(0.50)}, {"p95_ms", percentile(0.95)},
+          {"p99_ms", percentile(0.99)}, {"max_ms", samples.back()},
+        });
+        std::printf("PC HUD paint width=%d camera=%d n=%zu p50=%.3f p95=%.3f max=%.3f ms\n",
+                    width, camera_enabled, samples.size(), percentile(0.50), percentile(0.95), samples.back());
+      }
+    }
+    params.putBool("SpeedCameraEnabled", true);
+    hud.updateState(state);
+    QFile latency_report(output + "/hud-paint-latency-pc.json");
+    const QJsonObject result{
+      {"environment", "Local PC Docker, Qt offscreen, synchronous QImage raster"},
+      {"architecture", QSysInfo::currentCpuArchitecture()}, {"qt_version", qVersion()},
+      {"timed_region", "HudRendererSP::draw plus QPainter::end; excludes updateState, image allocation/fill, PNG I/O and event loop"},
+      {"comparison", "Current HUD camera on versus current HUD camera off; not an old-renderer comparison"},
+      {"limitations", "No embedded/device performance or watchdog validation; first paint is not process-cold"},
+      {"scenarios", samples_by_scenario},
+    };
+    const QByteArray json = QJsonDocument(result).toJson();
+    const bool saved = latency_report.open(QIODevice::WriteOnly) && latency_report.write(json) == json.size();
+    passed &= saved;
+  }
+  lmd.setSpeedCameraSpeedLimit(40.0f / 3.6f); feed();
+  const QImage other_limit = render("raw-limit40-target79");
+  check("warning-limit-separate-from-offset-ACC-target", warning(active) != warning(other_limit) && target(active) == target(other_limit));
+  lmd.setSpeedCameraSpeedLimit(0); feed(); render("unknown-camera-limit");
+  lmd.setSpeedCameraSpeedLimit(60.0f / 3.6f); feed();
+  plan.setValid(false); feed();
+  const QImage invalid_plan = render("invalid-plan");
+  check("invalid-plan-hides-only-control-target", warning(invalid_plan) == warning(active) && target(invalid_plan) != target(active));
+  plan.setValid(true); feed();
+  state.sm->update(0); now += 2000000000ULL;
+  state.sm->update_msgs(now, {{"liveMapDataSP", map.asReader()}, {"carState", car.asReader()}});
+  const bool plan_stale = !state.sm->alive("longitudinalPlanSP");
+  const QImage stale_plan = render("stale-plan");
+  check("stale-plan-hides-only-control-target", plan_stale && warning(stale_plan) == warning(active) && target(stale_plan) != target(active));
+  feed(); const QImage recovered_plan = render("recovered-plan");
+  check("fresh-plan-recovers-control-target", target(recovered_plan) == target(active));
+  map.setValid(false); feed();
+  check("invalid-map-clears-warning", section(render("invalid-map")) == section(empty));
+  map.setValid(true); feed();
+  params.putBool("SpeedCameraEnabled", false);
+  check("toggle-off-hides-even-active-cap", section(render("toggle-off")) == section(empty));
+  params.putBool("SpeedCameraEnabled", true);
+  for (int width : {2100, 1700, 1050}) {
+    const QImage actual = render(QString("final-transparent-%1").arg(width), width);
+    const QRect card = cameraOverlayRect(actual.rect()).adjusted(-4, -4, 4, 4);
+    QRect speed_rect = QFontMetrics(InterFont(176, QFont::Bold)).boundingRect("888");
+    speed_rect.moveCenter({actual.rect().center().x(), 210 - speed_rect.height() / 2});
+    check(QString("layout-%1-no-current-speed-overlap").arg(width), actual.rect().contains(card) && !card.intersects(speed_rect));
+  }
+  const QRect wide_card = cameraOverlayRect(active.rect());
+  const QRect road_header(wide_card.left() + 345, wide_card.top() + 10, 315, 165);
+  std::vector<QImage> road_modes;
+  for (int mode : {0, 1, 2, 3}) {
+    state.scene.speed_limit_mode = mode;
+    road_modes.push_back(render(QString("road-limit-mode-%1").arg(mode)));
+  }
+  check("road-modes-Off-Information-Warning-Assist", road_modes[0].copy(road_header) != road_modes[1].copy(road_header) &&
+        road_modes[1].copy(road_header) != road_modes[2].copy(road_header) && road_modes[2].copy(road_header) == road_modes[3].copy(road_header));
+  state.scene.speed_limit_mode = 1;
+  fixtures.at("carParamsSP")->getRoot<cereal::Event>().getCarParamsSP().setPcmCruiseSpeed(false);
+  fixtures.at("carControl")->getRoot<cereal::Event>().getCarControl().setEnabled(true);
+  car.getCarState().getCruiseState().setSpeedCluster(110.0f / 3.6f); feed();
+  const QImage icbm = render("icbm-native-cluster110-set130-target79");
+  const QRect max_label(wide_card.left() + 20, wide_card.top() + 10, 310, 50);
+  const QRect set_value(wide_card.left() + 20, wide_card.top() + 65, 310, 105);
+  check("ICBM-native-cluster-distinct-from-set-speed-and-camera-target", icbm.copy(max_label) != active.copy(max_label) &&
+        icbm.copy(set_value) == active.copy(set_value) && target(icbm) == target(active));
+  fixtures.at("carParamsSP")->getRoot<cereal::Event>().getCarParamsSP().setPcmCruiseSpeed(true);
+  fixtures.at("carControl")->getRoot<cereal::Event>().getCarControl().setEnabled(false); feed();
+  state.scene.speed_limit_mode = 3;
+  // Existing upcoming sign and assist arrow get distinct slots below the card.
+  lmd.setSpeedLimitAheadValid(true); lmd.setSpeedLimitAhead(40.0f / 3.6f);
+  lmd.setSpeedLimitAheadDistance(300); feed(); render("ahead-seed");
+  lmd.setSpeedLimitAheadDistance(290); feed(); render("upcoming-limit");
+  plan.getLongitudinalPlanSP().getSpeedLimit().initAssist().setState(cereal::LongitudinalPlanSP::SpeedLimit::AssistState::PRE_ACTIVE);
+  feed();
+  const QImage with_arrow = render("upcoming-plus-assist-1050", 1050);
+  const QRect narrow_card = cameraOverlayRect(with_arrow.rect());
+  const QRect ahead_region(narrow_card.left() + 350, narrow_card.bottom() + 20, 246, 168);
+  const QRect arrow_region(narrow_card.left() + 230, narrow_card.bottom() + 24, 110, 204);
+  plan.getLongitudinalPlanSP().getSpeedLimit().getAssist().setState(cereal::LongitudinalPlanSP::SpeedLimit::AssistState::INACTIVE);
+  feed(); const QImage no_arrow = render("upcoming-without-assist-1050", 1050);
+  check("assist-arrow-below-card-no-overlap", with_arrow.copy(arrow_region) != no_arrow.copy(arrow_region) &&
+        !arrow_region.intersects(narrow_card) && !arrow_region.intersects(ahead_region));
+  check("upcoming-stays-visible-during-assist-pulse", with_arrow.copy(ahead_region) == no_arrow.copy(ahead_region));
+  lmd.setSpeedLimitAheadValid(false); feed(); const QImage no_ahead = render("without-upcoming-1050", 1050);
+  check("upcoming-sign-below-card-no-overlap", no_arrow.copy(ahead_region) != no_ahead.copy(ahead_region) &&
+        !ahead_region.intersects(narrow_card) && no_arrow.rect().contains(ahead_region));
+  state.sm->update(0); now += 20000000000ULL;
+  state.sm->update_msgs(now, {});
+  state.scene.speed_limit_mode = 1;
+  check("dead-map-hides-warning", section(render("stale-map")) == section(empty));
+  // Transparent interior (not just an alpha-blended opaque rectangle).
+  QImage alpha(2100, 1080, QImage::Format_ARGB32_Premultiplied); alpha.fill(Qt::transparent);
+  QPainter painter(&alpha); drawCameraOverlay(painter, alpha.rect(), true, 150, 60, true); painter.end();
+  const QRect card = cameraOverlayRect(alpha.rect());
+  check("camera-panel-has-no-background-fill", qAlpha(alpha.pixel(card.left() + 10, card.top() + 300)) == 0 &&
+                                                        qAlpha(alpha.pixel(card.left() + 300, card.top() + 440)) == 0);
+  alpha.save(output + "/camera-transparent-alpha.png");
+  if (original_enabled.empty()) params.remove("SpeedCameraEnabled"); else params.put("SpeedCameraEnabled", original_enabled);
+  if (original_distance.empty()) params.remove("SpeedCameraAlertDistanceMeters"); else params.put("SpeedCameraAlertDistanceMeters", original_distance);
+  QFile report(output + "/camera-ui-checks.json");
+  passed &= report.open(QIODevice::WriteOnly);
+  if (report.isOpen()) report.write(QJsonDocument(QJsonObject{{"passed", passed}, {"checks", checks}}).toJson());
   return passed;
 }
 
@@ -449,7 +678,18 @@ int main(int argc, char **argv) {
   }
   // UIState's PrimeState posts an initial callback; keep it alive through exec().
   UIState hud_state;
-  const bool hud_freshness_ok = verifyCameraControlFreshness(hud_state, output);
+  bool hud_freshness_ok = verifyCameraControlFreshness(hud_state, output);
+  {
+    QTranslator russian;
+    const bool russian_loaded = russian.load(":/main_ru");
+    const QString russian_output = output + "/ru";
+    hud_freshness_ok &= russian_loaded && QDir().mkpath(russian_output);
+    if (russian_loaded) {
+      app.installTranslator(&russian);
+      hud_freshness_ok &= verifyCameraControlFreshness(hud_state, russian_output);
+      app.removeTranslator(&russian);
+    }
+  }
   for (int distance : {600, 250, 75, -1}) {
     QImage image(1700, 1080, QImage::Format_ARGB32_Premultiplied);
     image.fill(QColor(23, 51, 73));
@@ -494,12 +734,12 @@ int main(int argc, char **argv) {
   };
   const QImage offset_metric = offsetImage(60, true);
   const QImage other_warning = offsetImage(40, true);
-  const QRect banner = cameraOverlayRect(offset_metric.rect(), 165);
-  const QRect warning_line(banner.left() + 16, banner.top() + 52, 328, 35);
-  const QRect target_line(banner.left() + 16, banner.top() + 113, 328, 40);
+  const QRect banner = cameraOverlayRect(offset_metric.rect());
+  const QRect warning_line(banner.left() + 16, banner.top() + 266, 648, 100);
+  const QRect target_line(banner.left() + 16, banner.top() + 365, 648, 64);
   const bool separate_limit_target = offset_metric.copy(warning_line) != other_warning.copy(warning_line) &&
                                       offset_metric.copy(target_line) == other_warning.copy(target_line) &&
-                                      QFontMetrics(InterFont(25, QFont::Normal)).horizontalAdvance("ACC TARGET 79 km/h") <= 328;
+                                      QFontMetrics(InterFont(44, QFont::DemiBold)).horizontalAdvance(QObject::tr("ACC TARGET %1 %2").arg("79", QObject::tr("km/h"))) <= 632;
   offset_metric.save(output + "/camera-limit60-target79-150m.png");
   offsetImage(60, false).save(output + "/camera-limit60-target79-150m-imperial.png");
   other_warning.save(output + "/camera-other-warning40-target79.png");

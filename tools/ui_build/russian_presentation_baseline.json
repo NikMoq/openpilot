@@ -1,5 +1,6 @@
 {
   "sourceBase": "6395399fc448c46a8d265be6cdd9e82d3597a8a9",
+  "cameraLayoutBase": "transparent-left-unified-HUD; reviewed source digest in normalizedSourceSha256",
   "scope": "Portable frozen baseline extracted before localization commit; no Git/history required at test execution. SHA256 normalized source for4critical files; ordered control-call fixtures forchangedQtfiles.",
   "patterns": [
     "\\bparams\\w*\\.(?:put\\w*|remove)\\([^;]+;",
@@ -7,7 +8,7 @@
     "\\bemit\\s+\\w+\\([^;]+;"
   ],
   "normalizedSourceSha256": {
-    "selfdrive/ui/sunnypilot/qt/onroad/camera_warning.h": "8182aebeec677ac1198a157bbf1492a970363e493828b829bd2c752d13878bf2",
+    "selfdrive/ui/sunnypilot/qt/onroad/camera_warning.h": "8e57555fd4549c22254510ada42de96fe49c1384ad12e254f8cfd30c6f1eae42",
     "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.cc": "a73519f63bf3785ca3adebe427391138ea924a95eedb90d520c943178ed05f0b",
     "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal_panel.cc": "807543036612730bfbb994a3e91c86c744a72cf55e07188e298fc1a533304030",
     "selfdrive/ui/qt/onroad/alerts.cc": "a913f7509894e570aad1fcbaedffd9b9afd548d31662b9e402015014525ccd2e"
@@ -601,7 +602,7 @@
       ]
     },
     "selfdrive/ui/sunnypilot/qt/onroad/camera_warning.h": {
-      "blobTextSha256": "66ee0c17d9a82096f7df4c3125a9ebb0a5ee9cae2205ec8519180f986f9d1e9c",
+      "blobTextSha256": "f18a8faa177fd5f6d9ea8321c3a5dca4a8c4b9ffef06e268f635f0efc25dcb0d",
       "orderedCalls": [
         [],
         [],
@@ -612,7 +613,6 @@
         "std::isfinite(distance_m)",
         "qRound(distance_m)",
         "qRound(distance_m * 3.28084f)",
-        "qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f))",
         "std::isfinite(limit)",
         "qRound(limit)",
         "qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f))"

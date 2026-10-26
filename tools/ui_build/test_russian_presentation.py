@@ -75,7 +75,9 @@ class RussianPresentationTest(unittest.TestCase):
         self.assertIsNone(re.search(r'\b(?:params\w*|Params\(\))\.(?:put\w*|remove)\s*\(', text))
         self.assertIsNone(re.search(r'\btoggleFlipped\s*\(', text))
 
-  def test_camera_changes_are_only_translation_wrappers(self):
+  def test_camera_matches_reviewed_layout_and_translation_baseline(self):
+    # The HUD placement fix has its own reviewed baseline; all camera display
+    # decisions remain covered by the full normalized source digest.
     current = (ROOT / CAMERA).read_text(encoding='utf-8')
     current = re.sub(r'QObject::tr\(("[^"\n]*")\)', r'\1', current)
     assert_normalized(self, CAMERA, current)
