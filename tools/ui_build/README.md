@@ -64,3 +64,24 @@ Successful compilation, screenshots and replay establish UI/data behavior.
 They do not establish physical ICBM button acceptance or vehicle behavior.
 The camera source must also return a valid current snapshot; a retired endpoint
 must be reported as an error rather than a successful update.
+
+## Persistent camera settings on prebuilt devices
+
+`common/params_pyx.so` must use the same key registry as `common/params_keys.h`.
+The previous shipped extension did not know the 13 camera keys; manager cleanup
+deleted those files as unknown keys even when the source marked them persistent.
+The JSON camera database itself was unaffected.
+
+Build the CPython 3.12 AArch64 extension with `build_params_binding.py`, using
+the device-compatible ARM64 sysroot and ARM64 Python 3.12 headers. The output
+stays under `.native-build/params-persistence`; the builder does not install it.
+Run `verify_params_binding.py --original /path/to/preserved-old.so --candidate
+/path/to/new/params_pyx.so` under ARM64 CPython 3.12. Preserve the old extension
+from commit `6bfe922` before comparing: the tracked extension now contains the
+fix. The verifier uses isolated temporary Params roots, checks exact file bytes
+through all manager transition clears and reopening, and retains intentional
+ephemeral/full-clear behavior. It never writes device settings.
+
+The integrated release evidence is in `camera_persistence_release_checks.json`.
+UI fixtures and native-module tests are offline checks, not proof of physical
+ACC button acceptance or a fix for the historical UI watchdog stalls.

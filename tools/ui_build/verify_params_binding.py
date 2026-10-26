@@ -218,7 +218,8 @@ def worker(mode: str, extension: Path) -> dict:
 
 def main() -> int:
   parser = argparse.ArgumentParser(description=__doc__)
-  parser.add_argument("--original", type=Path, default=ROOT / "common/params_pyx.so")
+  parser.add_argument("--original", type=Path, required=True,
+                      help="Preserved pre-fix extension; the tracked extension now contains the fix")
   parser.add_argument("--candidate", type=Path,
                       default=ROOT / ".native-build/params-persistence/candidate/common/params_pyx.so")
   parser.add_argument("--worker", choices=("original", "candidate"), help=argparse.SUPPRESS)
