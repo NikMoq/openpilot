@@ -68,6 +68,68 @@ class CameraMatch:
   bearing_deg: float
 
 
+class CameraSpatialIndex:
+  """Conservative unit-sphere grid; exact lookup policy remains in the resolver.
+
+  A spherical cap of radius r fits inside the Cartesian box with half-width
+  2*sin(r/(2*R)) around its centre. This avoids longitude seams and polar
+  singularities. Buckets only remove impossible candidates; original indices
+  restore iteration order (including duplicates and equal-distance ties).
+  """
+
+  _CELL_SIZE = 0.001  # About 6.4 km on the unit sphere.
+  _PADDING = 1e-12  # Conservative allowance for floating-point trig/rounding.
+
+  def __init__(self, cameras: Iterable[SpeedCamera]):
+    self._cameras = tuple(cameras)
+    self._cells: dict[tuple[int, int, int], list[int]] = {}
+    self._unindexed: list[int] = []
+    for index, camera in enumerate(self._cameras):
+      if not self._valid_position(camera.latitude, camera.longitude):
+        # Preserve legacy handling of malformed caller-supplied records.
+        self._unindexed.append(index)
+        continue
+      cell = tuple(math.floor(value / self._CELL_SIZE) for value in self._point(camera.latitude, camera.longitude))
+      self._cells.setdefault(cell, []).append(index)
+
+  def __iter__(self):
+    return iter(self._cameras)
+
+  @staticmethod
+  def _valid_position(latitude: float, longitude: float) -> bool:
+    try:
+      return math.isfinite(latitude) and math.isfinite(longitude) and -90 <= latitude <= 90 and -180 <= longitude <= 180
+    except TypeError:
+      return False
+
+  @staticmethod
+  def _point(latitude: float, longitude: float) -> tuple[float, float, float]:
+    lat, lon = math.radians(latitude), math.radians(longitude)
+    cos_lat = math.cos(lat)
+    return cos_lat * math.cos(lon), cos_lat * math.sin(lon), math.sin(lat)
+
+  def query(self, latitude: float, longitude: float, radius_m: float) -> Iterable[SpeedCamera]:
+    # Fall back to the original iterable for invalid/unbounded queries rather
+    # than assigning new semantics to NaN, negative radii or invalid positions.
+    try:
+      bounded = math.isfinite(radius_m) and 0 <= radius_m < math.pi * EARTH_RADIUS_M
+    except TypeError:
+      bounded = False
+    if not bounded or not self._valid_position(latitude, longitude):
+      return iter(self._cameras)
+    half_width = 2 * math.sin(radius_m / (2 * EARTH_RADIUS_M)) + self._PADDING
+    bounds = [(math.floor((value - half_width) / self._CELL_SIZE),
+               math.floor((value + half_width) / self._CELL_SIZE)) for value in self._point(latitude, longitude)]
+    if math.prod(high - low + 1 for low, high in bounds) > 4096:
+      return iter(self._cameras)  # Bound work for unusually large query radii.
+    indices = list(self._unindexed)
+    for x in range(bounds[0][0], bounds[0][1] + 1):
+      for y in range(bounds[1][0], bounds[1][1] + 1):
+        for z in range(bounds[2][0], bounds[2][1] + 1):
+          indices.extend(self._cells.get((x, y, z), ()))
+    return (self._cameras[index] for index in sorted(indices))
+
+
 def _number(value: Any) -> float | None:
   try:
     number = float(value) if value is not None and value != "" else None
@@ -297,6 +359,8 @@ def find_nearest_camera(cameras: Iterable[SpeedCamera], latitude: float, longitu
                         heading_deg: float | None = None, max_distance_m: float = 5_000,
                         direction_tolerance_deg: float = 60) -> CameraMatch | None:
   """Return the closest camera ahead, or ``None`` when no match is reliable."""
+  if isinstance(cameras, CameraSpatialIndex):
+    cameras = cameras.query(latitude, longitude, max_distance_m)
   matches: list[CameraMatch] = []
   for camera in cameras:
     distance, bearing = _distance_and_bearing(latitude, longitude, camera)
@@ -325,5 +389,7 @@ def find_nearest_control_camera(cameras: Iterable[SpeedCamera], latitude: float,
   """Select independently of warnings, using raw eligibility before any offset."""
   if heading_deg is None or not math.isfinite(heading_deg) or not math.isfinite(minimum_speed_kph) or minimum_speed_kph <= 0:
     return None
+  if isinstance(cameras, CameraSpatialIndex):
+    cameras = cameras.query(latitude, longitude, max_distance_m)
   candidates = (camera for camera in cameras if camera.allowed_auto_control and camera.speed_limit_kph >= minimum_speed_kph)
   return find_nearest_camera(candidates, latitude, longitude, heading_deg, max_distance_m)

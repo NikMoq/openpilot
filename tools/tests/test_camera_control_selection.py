@@ -74,6 +74,7 @@ def map_pipeline(monkeypatch, tmp_path):
   instance.mem_params = NS(get=lambda _key: None)
   instance.camera_database_path = str(cache)
   instance.camera_database = instance.camera_database_mtime = None
+  instance.camera_index = None
   instance.camera_match = instance.camera_control_match = None
   instance.localizer_valid = True
   instance.last_position = NS(latitude=55, longitude=37)
@@ -176,3 +177,76 @@ def test_control_disable_clears_prior_candidate_without_hiding_warning(map_pipel
   lmd, _ = publish(rows)
   assert not lmd.speedCameraControlValid and lmd.speedCameraAheadValid
   assert lmd.speedCameraType == 'speedcamonline-cg77:18952'
+
+
+def test_index_reused_until_database_mtime_changes(map_pipeline, monkeypatch):
+  instance, _, publish = map_pipeline
+  publish(bkm_row(18059, 100))
+  original_index = instance.camera_index
+  module = sys.modules[instance.__class__.__module__]
+  builds = []
+  original_class = module.CameraSpatialIndex
+
+  def build(cameras):
+    builds.append(cameras)
+    return original_class(cameras)
+
+  monkeypatch.setattr(module, 'CameraSpatialIndex', build)
+  for _ in range(5):
+    instance.get_speed_camera()
+    assert instance.camera_index is original_index
+  assert not builds
+  old_mtime = instance.camera_database_mtime
+  cache = Path(instance.camera_database_path)
+  cameras = tuple(parse_camera_snapshot(('2|Radars|65001\n' + bkm_row(18059, 500)).encode()))
+  save_database(str(cache), CameraDatabase('reload', time.time(), cameras))  # noqa: TID251
+  module.os.utime(cache, (old_mtime + 10, old_mtime + 10))
+  assert instance.get_speed_camera().distance_m == pytest.approx(500)
+  assert len(builds) == 1 and instance.camera_index is not original_index
+
+
+def test_seeded_database_builds_missing_index_once_without_reloading(map_pipeline, monkeypatch):
+  instance, _, publish = map_pipeline
+  publish(bkm_row(18059, 100))
+  module = sys.modules[instance.__class__.__module__]
+  seeded = CameraDatabase('seeded', time.time(), tuple(parse_camera_snapshot(  # noqa: TID251
+    ('2|Radars|65001\n' + bkm_row(18059, 500)).encode())))
+  instance.camera_database = seeded
+  instance.camera_index = None
+
+  def unexpected_load(*args, **kwargs):
+    pytest.fail('A seeded database with unchanged mtime must not reload')
+
+  monkeypatch.setattr(module, 'load_database', unexpected_load)
+  assert instance.get_speed_camera().distance_m == pytest.approx(500)
+  index = instance.camera_index
+  assert index is not None and instance.camera_database is seeded
+  assert instance.get_speed_camera().distance_m == pytest.approx(500)
+  assert instance.camera_index is index
+
+
+@pytest.mark.parametrize('condition', ['missing', 'malformed', 'expired', 'path-change'])
+def test_index_does_not_survive_missing_invalid_expired_or_replaced_database(map_pipeline, condition, monkeypatch):
+  instance, config, publish = map_pipeline
+  publish(bkm_row(18059, 100))
+  original_index = instance.camera_index
+  module = sys.modules[instance.__class__.__module__]
+  cache = Path(instance.camera_database_path)
+  if condition == 'missing':
+    cache.unlink()
+  elif condition == 'malformed':
+    cache.write_text('{}')
+    module.os.utime(cache, (instance.camera_database_mtime + 10, instance.camera_database_mtime + 10))
+  elif condition == 'expired':
+    monkeypatch.setattr(module.time, 'time', lambda: instance.camera_database.fetched_at + 7 * 24 * 3600 + 1)
+  else:
+    replacement = cache.with_name('replacement.json')
+    replacement.write_bytes(cache.read_bytes())
+    config['SpeedCameraDatabasePath'] = str(replacement)
+    assert instance.get_speed_camera() is not None
+    assert instance.camera_index is not original_index
+    return
+  assert instance.get_speed_camera() is None
+  assert instance.camera_index is None
+  assert instance.camera_database is None
+  assert instance.get_speed_camera_control() is None

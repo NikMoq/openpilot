@@ -17,7 +17,7 @@ from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import load_database
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
-from openpilot.sunnypilot.mapd.speed_cameras import find_nearest_camera, find_nearest_control_camera
+from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera, find_nearest_control_camera
 from openpilot.sunnypilot.navd.helpers import Coordinate
 from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.helpers import get_minimum_set_speed
 
@@ -31,6 +31,7 @@ class OsmMapData(BaseMapData):
     self.camera_database_path = configured_path or os.path.join(Paths.mapd_root(), "speed_cameras.json")
     self.camera_database = None
     self.camera_database_mtime = None
+    self.camera_index = None
     self.camera_match = None
     self.camera_control_match = None
     self.camera_enabled = True
@@ -43,6 +44,7 @@ class OsmMapData(BaseMapData):
       self.camera_database_path = configured_path
       self.camera_database = None
       self.camera_database_mtime = None
+      self.camera_index = None
     enabled = str(self.camera_params.get("SpeedCameraEnabled") or "1").strip().lower()
     self.camera_enabled = enabled not in ("0", "false", "no", "off")
     try:
@@ -58,22 +60,27 @@ class OsmMapData(BaseMapData):
     except OSError:
       self.camera_database = None
       self.camera_database_mtime = None
+      self.camera_index = None
       self.camera_match = None
       return
     if mtime != self.camera_database_mtime:
       self.camera_database = load_database(self.camera_database_path, max_age_s=7 * 24 * 3600)
       self.camera_database_mtime = mtime
+      self.camera_index = None
+    if self.camera_database is not None and self.camera_index is None:
+      self.camera_index = CameraSpatialIndex(self.camera_database.cameras)
 
   def get_speed_camera(self):
     self._load_camera_database()
     self.camera_control_match = None
     if self.camera_database is not None and time.time() - self.camera_database.fetched_at > 7 * 24 * 3600:  # noqa: TID251 - persisted Unix time
       self.camera_database = None
+      self.camera_index = None
     if not self.localizer_valid or not self.camera_enabled or self.camera_database is None or self.last_position is None:
       self.camera_match = None
     else:
       self.camera_match = find_nearest_camera(
-        self.camera_database.cameras,
+        self.camera_index,
         self.last_position.latitude,
         self.last_position.longitude,
         heading_deg=self.last_bearing,
@@ -86,7 +93,7 @@ class OsmMapData(BaseMapData):
         is_metric = self.params.get_bool("IsMetric")
         minimum_speed_kph = get_minimum_set_speed(is_metric) * (1.0 if is_metric else CV.MPH_TO_MS / CV.KPH_TO_MS)
         self.camera_control_match = find_nearest_control_camera(
-          self.camera_database.cameras, self.last_position.latitude, self.last_position.longitude,
+          self.camera_index, self.last_position.latitude, self.last_position.longitude,
           heading_deg=self.last_bearing, minimum_speed_kph=minimum_speed_kph,
         )
     return self.camera_match
