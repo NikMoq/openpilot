@@ -8,6 +8,7 @@ See the LICENSE.md file in the root directory for more details.
 import argparse
 import os
 import re
+import stat
 
 from openpilot.sunnypilot import get_file_hash
 from openpilot.common.basedir import BASEDIR
@@ -17,8 +18,9 @@ MAPD_HASH_PATH = os.path.join(BASEDIR, "sunnypilot", "mapd", "tests", "mapd_hash
 MAPD_VERSION_PATH = os.path.join(BASEDIR, "sunnypilot", "mapd", "mapd_installer.py")
 
 
-def update_mapd_hash():
-  mapd_hash = get_file_hash(MAPD_PATH)
+def update_mapd_hash(mapd_hash: str | None = None):
+  if mapd_hash is None:
+    mapd_hash = get_file_hash(MAPD_PATH)
 
   with open(MAPD_HASH_PATH, "w") as f:
     f.write(mapd_hash)
@@ -72,6 +74,35 @@ def update_mapd_version(ver: str, path: str):
   print("[DONE]")
 
 
+def update_expected_sha256(checksum: str, path: str):
+  if not re.fullmatch(r"[0-9a-f]{64}", checksum):
+    raise ValueError("Expected mapd SHA-256 must be 64 lowercase hexadecimal characters")
+
+  with open(path, "rb") as f:
+    contents = f.read().decode("utf-8")
+
+  pattern = re.compile(
+    r"^(EXPECTED_SHA256[ \t]*=[ \t]*)(['\"])[^'\"]*(['\"])[ \t]*(\r?)$",
+    flags=re.MULTILINE,
+  )
+  updated, count = pattern.subn(
+    lambda match: f'{match.group(1)}{match.group(2)}{checksum}{match.group(3)}{match.group(4)}',
+    contents,
+    count=1,
+  )
+  if count != 1:
+    raise ValueError("EXPECTED_SHA256 pin not found exactly once in mapd_installer.py")
+
+  temp_path = path + ".tmp"
+  with open(temp_path, "wb") as f:
+    f.write(updated.encode("utf-8"))
+    f.flush()
+    os.fsync(f.fileno())
+  os.chmod(temp_path, stat.S_IMODE(os.stat(path).st_mode))
+  os.replace(temp_path, path)
+  print(f'Updated official mapd SHA-256 in {path}')
+
+
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description="Update mapd version and hash")
   parser.add_argument("--new_ver", type=str, help="New mapd version")
@@ -93,5 +124,7 @@ if __name__ == "__main__":
       print("Current mapd version and hash will not be updated! (aborted)")
       exit(0)
 
+  mapd_hash = get_file_hash(MAPD_PATH)
   update_mapd_version(new_ver, MAPD_VERSION_PATH)
-  update_mapd_hash()
+  update_expected_sha256(mapd_hash, MAPD_VERSION_PATH)
+  update_mapd_hash(mapd_hash)

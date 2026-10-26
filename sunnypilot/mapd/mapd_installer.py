@@ -5,14 +5,16 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+import hashlib
 import logging
 import os
 import stat
 import time
 import traceback
-import requests
 from pathlib import Path
 from urllib.request import urlopen
+
+import requests
 
 from cereal import messaging
 from openpilot.common.params import Params
@@ -22,15 +24,45 @@ from openpilot.system.version import is_prebuilt
 from openpilot.sunnypilot.mapd import MAPD_PATH, MAPD_BIN_DIR
 import openpilot.system.sentry as sentry
 
-VERSION = "v1.0.0"
-URL = f"https://github.com/NikMoq/mapd/releases/download/{VERSION}/mapd-linux-arm64.tar.gz"
+VERSION = "v1.12.0"
+URL = f"https://github.com/pfeiferj/mapd/releases/download/{VERSION}/mapd"
+EXPECTED_SHA256 = "fdb3b49ee19956e6ce09fdc3373cbba557f1263b2180e9f344c1d4053852284b"
+DOWNLOAD_CONNECT_TIMEOUT = 10
+DOWNLOAD_READ_TIMEOUT = 45
+DOWNLOAD_ATTEMPTS = 5
 
 
-def update_installed_version(version: str, params: Params = None) -> None:
+def sha256_file(file_path: Path) -> str:
+  digest = hashlib.sha256()
+  with open(file_path, 'rb') as source:
+    for chunk in iter(lambda: source.read(1024 * 1024), b''):
+      digest.update(chunk)
+  return digest.hexdigest()
+
+
+def is_verified_binary(file_path: Path | None = None) -> bool:
+  file_path = Path(MAPD_PATH) if file_path is None else Path(file_path)
+  try:
+    return sha256_file(file_path) == EXPECTED_SHA256
+  except OSError:
+    return False
+
+
+def update_installed_version(version: str, params: Params = None) -> bool:
   if params is None:
     params = Params()
+  # mapd_manager calls this at startup; never let that stamp a version onto
+  # a missing or different executable.
+  if not is_verified_binary():
+    params.remove("MapdVersion")
+    logging.warning("Not recording MapdVersion: installed mapd does not match %s", VERSION)
+    return False
+  if version != VERSION:
+    logging.warning("Not recording unexpected MapdVersion %s; expected %s", version, VERSION)
+    return False
 
   params.put("MapdVersion", version)
+  return True
 
 
 class MapdInstallManager:
@@ -39,16 +71,23 @@ class MapdInstallManager:
     self._params = Params()
 
   def download(self) -> None:
+    if not is_verified_binary():
+      self._params.remove("MapdVersion")
     self.ensure_directories_exist()
     self._download_file()
-    update_installed_version(VERSION, self._params)
+    if not update_installed_version(VERSION, self._params):
+      raise RuntimeError("Verified mapd binary was not installed; MapdVersion was not updated")
 
   def check_and_download(self) -> None:
     if self.download_needed():
       self.download()
 
   def download_needed(self) -> bool:
-    return not os.path.exists(MAPD_PATH) or self.get_installed_version() != VERSION
+    if not is_verified_binary():
+      return True
+    if self.get_installed_version() != VERSION:
+      update_installed_version(VERSION, self._params)
+    return False
 
   @staticmethod
   def ensure_directories_exist() -> None:
@@ -57,50 +96,42 @@ class MapdInstallManager:
     if not os.path.exists(MAPD_BIN_DIR):
       os.makedirs(MAPD_BIN_DIR)
 
-  @staticmethod
-  def _safe_write_and_set_executable(file_path: Path, content: bytes) -> None:
-    with open(file_path, 'wb') as output:
-      output.write(content)
-      output.flush()
-      os.fsync(output.fileno())
-    current_permissions = stat.S_IMODE(os.lstat(file_path).st_mode)
-    os.chmod(file_path, current_permissions | stat.S_IEXEC)
-
-  def _download_file(self, num_retries=5) -> None:
-    import tarfile
-    temp_archive = Path(MAPD_PATH + ".tar.gz.tmp")
-    download_timeout = 120
+  def _download_file(self, num_retries: int | None = None) -> None:
+    if num_retries is None:
+      num_retries = DOWNLOAD_ATTEMPTS
+    temp_file = Path(MAPD_PATH + ".tmp")
+    last_error = None
     for cnt in range(num_retries):
       try:
-        response = requests.get(URL, stream=True, timeout=download_timeout)
-        response.raise_for_status()
-        # Save archive
-        with open(temp_archive, 'wb') as f:
-          for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
-        # Extract tar.gz
-        with tarfile.open(temp_archive, "r:gz") as tar:
-          for member in tar.getmembers():
-            if member.name.endswith('mapd-linux-arm64') or member.name == 'mapd':
-              member.name = os.path.basename(member.name)
-              tar.extract(member, path=MAPD_BIN_DIR)
-              extracted_path = os.path.join(MAPD_BIN_DIR, member.name)
-              os.rename(extracted_path, MAPD_PATH)
-              self._safe_write_and_set_executable(Path(MAPD_PATH), open(MAPD_PATH, 'rb').read())
-              break
-        temp_archive.unlink(missing_ok=True)
+        temp_file.unlink(missing_ok=True)
+        digest = hashlib.sha256()
+        with requests.get(URL, stream=True,
+                          timeout=(DOWNLOAD_CONNECT_TIMEOUT, DOWNLOAD_READ_TIMEOUT)) as response:
+          response.raise_for_status()
+          with temp_file.open('wb') as output:
+            for chunk in response.iter_content(chunk_size=8192):
+              if chunk:
+                output.write(chunk)
+                digest.update(chunk)
+            output.flush()
+            os.fsync(output.fileno())
+        actual_sha256 = digest.hexdigest()
+        if actual_sha256 != EXPECTED_SHA256:
+          raise ValueError(f"mapd release SHA-256 mismatch: {actual_sha256}")
+        current_permissions = stat.S_IMODE(os.lstat(temp_file).st_mode)
+        os.chmod(temp_file, current_permissions | stat.S_IEXEC)
+        temp_file.replace(MAPD_PATH)
         return
-      except requests.exceptions.ReadTimeout:
-        self._spinner.update(f"ReadTimeout caught. Timeout is [{download_timeout}]. Retrying download... [{cnt}]")
-        time.sleep(0.5)
-      except requests.exceptions.RequestException as e:
-        self._spinner.update(f"RequestException caught: {e}. Retrying download... [{cnt}]")
-        time.sleep(0.5)
+      except (requests.exceptions.RequestException, TimeoutError) as error:
+        last_error = error
+        self._spinner.update(f"mapd binary download attempt {cnt + 1}/{num_retries} failed: {error}")
+        if cnt + 1 < num_retries:
+          time.sleep(0.5)
+      finally:
+        temp_file.unlink(missing_ok=True)
 
-    # Delete temp file if the process was not successful.
-    if temp_archive.exists():
-      temp_archive.unlink()
-    logging.error("Failed to download file after all retries")
+    logging.error("Failed to install mapd binary after %s attempts", num_retries)
+    raise RuntimeError(f"Failed to install verified mapd binary after {num_retries} attempts") from last_error
 
   def get_installed_version(self) -> str:
     return str(self._params.get("MapdVersion") or "")
@@ -144,8 +175,7 @@ class MapdInstallManager:
 
     except Exception:
       for i in range(6):
-        self._spinner.update("Failed to download OSM maps won't work until properly downloaded!" +
-                             "Try again manually rebooting. " +
+        self._spinner.update("Failed to install the official mapd executable; offline map downloads remain unavailable. " +
                              f"Boot will continue in {5 - i}s...")
         time.sleep(1)
 

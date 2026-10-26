@@ -1,127 +1,45 @@
-# Интеграция mapd (NikMoq/mapd) с openpilot pqplatform
+# Официальный mapd в SunnyPilot
 
-## Что изменено
+Проект использует официальный ARM64 `pfeiferj/mapd v1.12.0`, совместимый
+с текущим протоколом SunnyPilot и форматом offline-карт v1.
 
-### 1. Сборка mapd бинарника (оптимизировано)
-- **Старый способ**: Docker эмуляция ARM64 - 6+ часов
-- **Новый способ**: Cross-compile через `gcc-aarch64-linux-gnu` - **< 10 минут**
+- Релиз: https://github.com/pfeiferj/mapd/releases/tag/v1.12.0
+- Бинарник: `third_party/mapd_pfeiferj/mapd`, 9 371 832 байта.
+- SHA-256: `fdb3b49ee19956e6ce09fdc3373cbba557f1263b2180e9f344c1d4053852284b`.
+- Установщик: `sunnypilot/mapd/mapd_installer.py`.
+- Файл контрольной суммы: `sunnypilot/mapd/tests/mapd_hash`.
 
-### 2. Генерация тайлов (оптимизировано)
-- **Старый способ**: Одна job для всей России - 6+ часов
-- **Новый способ**: Параллельные job'ы по регионам - **< 1 часа**
+SHA-256 проверен по метаданным официального GitHub Release и по реально
+запущенному исполняемому файлу Comma. Значение `MapdVersion` само по себе
+не доказывает происхождение бинарника: старый установщик записывал неверную
+версию. Успешная запись версии допускается только после проверки файла.
 
-### 3. Источник данных
-- **Старый**: `pfeiferj/openpilot-mapd`
-- **Новый**: `NikMoq/mapd`
+## Карты через UI
 
----
+Страна выбирается и загрузка запускается штатной кнопкой в разделе OSM.
+Python-менеджер передаёт запрос через `OSMDownloadLocations` в `/dev/shm/params`;
+официальный mapd скачивает архивы с `https://map-data.pfeifer.dev/offline/`.
 
-## Файлы для загрузки в NikMoq/mapd
+Рабочие карты: `/data/media/0/osm/offline`. Это данные вне checkout, и обычное
+обновление кода их не удаляет. Сырой OSM PBF и каталог `osm/tiles` не заменяют
+этот формат. База камер `/data/media/0/osm/speed_cameras.json` является отдельным
+источником и не должна удаляться при обновлении OSM.
 
-### `.github/workflows/build-mapd-release.yml`
-Сборка бинарника mapd (native + ARM64) и создание Release.
-- Время: ~5-10 минут
-- Создаёт релиз с файлами:
-  - `mapd-linux-arm64.tar.gz` - для comma device
-  - `mapd-native.tar.gz` - для генерации тайлов
+Штатный выбор RU использует прямоугольник, пересекающий всю широту России:
+3780 архивов, а не полигон границ страны. В проверенном снимке источника это
+7 015 246 902 байта сжатых данных. Размер меняется при обновлении источника.
 
-### `.github/workflows/generate-tiles-optimized.yml`
-Генерация OSM тайлов по регионам параллельно.
-- Время: ~30-45 минут (вместо 6+ часов)
-- Регионы (параллельно):
-  - Moscow & Central
-  - St. Petersburg & North-West
-  - Kazan & Volga
-  - Sochi & South
-  - Novosibirsk & Siberia
-  - Yekaterinburg & Ural
-- Создаёт релиз с `mapd-russia-tiles.tar.gz`
+Ручная установка ранее скачанного набора не является текущей задачей.
+Критерий результата — корректная загрузка из UI и чтение карт официальным mapd.
 
----
+## Границы выполненной проверки
 
-## Настройка
+Совпадение хеша подтверждает официальный бинарник, но не исправность сетевого
+маршрута. На исследованном соединении Comma два HTTP Range-запроса по 16 КиБ
+завершились корректно, а запрос 64 КиБ остановился после 24 КиБ и завершился
+тайм-аутом. Поэтому исправление адреса/метаданных установщика нельзя выдавать
+за доказанное исправление штатной загрузки карт.
 
-### Шаг 1: Создать GitHub Token
-1. GitHub Settings → Developer settings → Personal access tokens
-2. Создать token с правами `repo` и `workflow`
-3. Добавить в Secrets репозитория NikMoq/mapd:
-   - Name: `GITHUB_TOKEN` (уже должен быть доступен автоматически)
-
-### Шаг 2: Загрузить workflow файлы
-```bash
-cd /path/to/mapd/repo
-cp /path/to/openpilot/mapd_workflows/build-mapd-release.yml .github/workflows/
-cp /path/to/openpilot/mapd_workflows/generate-tiles-optimized.yml .github/workflows/
-git add .github/workflows/
-git commit -m "Add optimized workflows for mapd build and tile generation"
-git push
-```
-
-### Шаг 3: Запустить сборку бинарника
-1. GitHub → NikMoq/mapd → Actions → "Build mapd Release"
-2. Run workflow
-3. Дождаться создания Release (v1.0.0)
-
-### Шаг 4: Запустить генерацию тайлов
-1. GitHub → NikMoq/mapd → Actions → "Generate Mapd Russia Tiles (Optimized)"
-2. Run workflow
-3. Дождаться создания Release с тайлами
-
-### Шаг 5: Обновить openpilot на устройстве
-```bash
-cd /data/openpilot
-git pull origin pqplatform
-# Перезагрузить устройство
-sudo reboot
-```
-
----
-
-## Как это работает в openpilot
-
-### Скачивание бинарника mapd
-При старте openpilot проверяет `sunnypilot/mapd/mapd_installer.py`:
-```python
-VERSION = "v1.0.0"
-URL = f"https://github.com/NikMoq/mapd/releases/download/{VERSION}/mapd-linux-arm64.tar.gz"
-```
-
-Если бинарник не установлен или версия устарела - скачивает и распаковывает.
-
-### Скачивание тайлов (опционально)
-Если нужно скачивать готовые тайлы вместо локальной генерации - добавить в `mapd_manager.py`:
-```python
-TILES_URL = "https://github.com/NikMoq/mapd/releases/download/vYYYY.MM.DD-rus/mapd-russia-tiles.tar.gz"
-```
-
----
-
-## Оптимизации
-
-### 1. Кэширование
-- Go modules кэшируются между запусками
-- OSM PBF файл кэшируется (если не изменился)
-
-### 2. Параллельность
-- 6 регионов генерируются одновременно
-- Каждый регион ~5-10 минут вместо 6 часов для всей России
-
-### 3. Cross-compile
-- ARM64 бинарник собирается через `gcc-aarch64-linux-gnu`
-- Без Docker эмуляции (медленно)
-
----
-
-## Тroubleshooting
-
-### Ошибка: "No release found"
-- Убедитесь что workflow `build-mapd-release.yml` создал Release
-- Проверьте тег версии (должен совпадать с `VERSION` в `mapd_installer.py`)
-
-### Ошибка: "Failed to download"
-- Проверьте интернет-соединение на устройстве
-- Проверьте URL в `mapd_installer.py`
-
-### Тайлы устарели
-- Запустить workflow `generate-tiles-optimized.yml` вручную
-- Или дождаться воскресенья (автозапуск по cron)
+Старые сценарии сборки отдельного форка, генерации несовместимого каталога
+тайлов и установки через SSH удалены. Управление скоростью через ICBM и
+камерный контроллер не переносится в mapd.
