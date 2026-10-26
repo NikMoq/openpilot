@@ -4,8 +4,9 @@
 
 Active source: SpeedCamOnline, all camera types/all Russian regions,
 https://speedcamonline.ru/cg77/Rus/comment/ . This replaces the old APK source.
-Code is prepared on dev in NikMoq/openpilot; last published code at this
-checkpoint remains fea42cc. New code and ARM UI await commit/push.
+Code and ARM UI are published on dev in NikMoq/openpilot at
+a5efa5767191cb077814e563651326bc900f599e. Installation remains a user action
+through the device Software UI; publication does not confirm installation.
 
 SSH remains diagnostics-only. User installs code through Software UI. No
 Panda/EPS firmware, safety-limit or stable-branch changes are included.
@@ -36,7 +37,10 @@ The initial release contains a fresh, live-downloaded BKM. A CI producer validat
 all records, publishes immutable hash-named BKM assets, verifies uploaded bytes,
 and switches manifest last with rollback. Scheduled refresh is every six hours.
 GitHub schedules require the workflow on default branch res; only that service
-workflow is to be installed there. Producer/application source remains on dev.
+workflow was added there at 169ad7dcc98f77474415768138ada99ef732f092.
+Producer/application source remains on dev. The first GitHub Actions run passed
+source download, validation and publication independently of the laptop:
+https://github.com/NikMoq/openpilot/actions/runs/40343842489 .
 
 The client checks source identity, timestamp (maximum 7 days, future tolerance
 300 seconds), filename, size, SHA256 and exact count >=10,000 before replacing
@@ -98,10 +102,11 @@ user archives, downloaded databases or vendor runtime libraries.
 
 ## Remaining checks
 
-Publish final dev commit; install the one scheduling workflow on res; confirm
-GitHub job fetch/publication and read-only device delivery. User then installs
-through UI and verifies real menu/status/notifications. A recorded vehicle trace
-is still required for physical ICBM acceptance and behavior.
+User installs through UI and verifies the actual menu/status/notifications.
+The native UI binary has not yet been confirmed running on the device in this
+checkpoint. A recorded vehicle trace is still required for physical ICBM
+acceptance and behavior. Monitor a scheduled run after the successful initial
+push-triggered GitHub run; schedule dispatch can be delayed by GitHub.
 
 Average-speed sections and full road-graph association are not implemented;
 parallel-road ambiguity remains a validation limitation. Do not rename Alpha
