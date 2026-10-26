@@ -10,6 +10,7 @@ import platform
 import os
 import glob
 import shutil
+import time
 from datetime import datetime
 
 from openpilot.common.params import Params
@@ -19,11 +20,13 @@ from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.sunnypilot.mapd.live_map_data.osm_map_data import OsmMapData
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd import MAPD_PATH
+from openpilot.sunnypilot.mapd.camera_database import download_database
 from openpilot.sunnypilot.mapd.mapd_installer import VERSION, update_installed_version
 
 # PFEIFER - MAPD {{
 params = Params()
 mem_params = Params("/dev/shm/params") if platform.system() != "Darwin" else params
+SPEED_CAMERA_UPDATE_PERIOD_S = 24 * 3600
 # }} PFEIFER - MAPD
 
 
@@ -119,6 +122,32 @@ def update_osm_db() -> None:
     mem_params.put("LastGPSPosition", "{}")
 
 
+def update_speed_camera_db() -> None:
+  """Refresh an explicitly configured camera snapshot once per day.
+
+  No endpoint is enabled by default. The URL and version are supplied through
+  Params so deployments can choose a permitted source and record provenance.
+  A failed refresh leaves the last valid local snapshot untouched.
+  """
+  url = params.get("SpeedCameraDatabaseUrl", return_default=True)
+  version = params.get("SpeedCameraDatabaseVersion", return_default=True)
+  if not url or not version:
+    return
+
+  last_update = float(params.get("SpeedCameraDatabaseUpdatedAt", return_default=True) or 0)
+  if time.time() - last_update < SPEED_CAMERA_UPDATE_PERIOD_S:
+    return
+
+  database_path = params.get("SpeedCameraDatabasePath", return_default=True)
+  if not database_path:
+    database_path = os.path.join(Paths.mapd_root(), "speed_cameras.json")
+  try:
+    download_database(url, database_path, version)
+    params.put("SpeedCameraDatabaseUpdatedAt", str(time.time()))
+  except Exception:
+    cloudlog.exception("mapd: speed-camera database refresh failed")
+
+
 def main_thread():
   update_installed_version(VERSION, params)
   config_realtime_process([0, 1, 2, 3], 5)
@@ -139,6 +168,7 @@ def main_thread():
     set_offroad_alert("Offroad_OSMUpdateRequired", show_alert, "This alert will be cleared when new maps are downloaded.")
 
     update_osm_db()
+    update_speed_camera_db()
     live_map_sp.tick()
     rk.keep_time()
 
