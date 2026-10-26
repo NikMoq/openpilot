@@ -2,6 +2,7 @@
 
 #include <QPainter>
 #include <cmath>
+#include "selfdrive/ui/qt/onroad/buttons.h"
 #include "selfdrive/ui/qt/util.h"
 
 struct CameraControlOverlay {
@@ -12,6 +13,22 @@ struct CameraControlOverlay {
   QString reasonText;
   bool manualTakeover = false;
 };
+
+inline QRect cameraOverlayRect(const QRect &surface, int height) {
+  constexpr int width = 360;
+  constexpr int gap = 24;
+  // The speed uses Inter 176 at the centre; the wheel is a separate 192 px
+  // widget with UI_BORDER_SIZE margins, painted above the HUD.
+  const int speed_half_width = (QFontMetrics(InterFont(176, QFont::Bold)).horizontalAdvance("888") + 1) / 2;
+  const int left = surface.center().x() + speed_half_width + gap;
+  const int right = surface.right() + 1 - UI_BORDER_SIZE - btn_size - gap;
+  if (right - left >= width) {
+    return QRect(left + (right - left - width) / 2, surface.top() + 45, width, height);
+  }
+  // Split map/sidebar layouts can leave no horizontal slot. Keep the text at
+  // its readable size below the speed/header instead of covering either one.
+  return QRect(surface.right() + 1 - UI_BORDER_SIZE - width, surface.top() + 330, width, height);
+}
 
 // Shared by the real HUD and the isolated preview: identical pixels for the
 // same camera event, without needing vehicle-control messages in the preview.
@@ -38,7 +55,7 @@ inline void drawCameraOverlay(QPainter &p, const QRect &surface, bool valid,
                         : QString::number(distance_m / 1609.344f, 'f', 1) + QObject::tr(" mi"))) : QString();
   const QColor color = distance_m <= 100 ? QColor(255, 80, 80)
                         : (distance_m <= 300 ? QColor(255, 190, 60) : QColor(Qt::white));
-  const QRect rect(surface.right() - 395, surface.top() + 45, 360, waiting_for_map ? 180 : (show_target ? 165 : 155));
+  const QRect rect = cameraOverlayRect(surface, waiting_for_map ? 180 : (show_target ? 165 : 155));
   p.save();
   p.setPen(QPen(show_position_hold ? QColor(255, 190, 60) : color, 3));
   p.setBrush(QColor(0, 0, 0, 190));

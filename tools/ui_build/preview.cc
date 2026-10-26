@@ -22,6 +22,7 @@
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h"
 #include "selfdrive/ui/sunnypilot/qt/onroad/camera_warning.h"
 #include "selfdrive/ui/sunnypilot/qt/onroad/hud.h"
+#include "selfdrive/ui/sunnypilot/qt/onroad/buttons.h"
 
 static bool verifyCameraSetting(SpeedLimitSettings &panel, const QString &output, const QString &title,
                                 const char *key, const QString &format, int minimum, int maximum, int step,
@@ -171,6 +172,7 @@ static bool verifyCameraControlFreshness(UIState &state, const QString &output) 
   map.getLiveMapDataSP().setSpeedCameraAheadValid(true);
   map.getLiveMapDataSP().setSpeedCameraAheadDistance(250);
   map.getLiveMapDataSP().setSpeedCameraSpeedLimit(60.0f / 3.6f);
+  fixtures.at("carState")->getRoot<cereal::Event>().getCarState().setVEgo(130.0f / 3.6f);
   const uint64_t now = nanos_since_boot();
   state.sm->update_msgs(now, initial_messages);
   HudRendererSP hud;
@@ -182,7 +184,7 @@ static bool verifyCameraControlFreshness(UIState &state, const QString &output) 
     hud.draw(painter, image.rect());
     painter.end();
     image.save(output + "/hud-control-" + name + ".png");
-    return image.copy(QRect(1280, 30, 410, 220));
+    return image.copy(cameraOverlayRect(image.rect(), 180).adjusted(-4, -4, 4, 4));
   };
   const QImage warning = render("warning-only");
   control.setEnabled(true);
@@ -206,6 +208,34 @@ static bool verifyCameraControlFreshness(UIState &state, const QString &output) 
                        {{"longitudinalPlanSP", plan.asReader()}, {"liveMapDataSP", map.asReader()}});
   const QImage recovered = render("recovered");
 
+  // Composite the real wheel widget over the real HUD, as Qt does on device.
+  // The old camera-only preview could not expose this overlapping child widget.
+  bool header_layout_ok = true;
+  ExperimentalButtonSP wheel;
+  for (int width : {2100, 1700, 1050}) {
+    QImage image(width, 1080, QImage::Format_ARGB32_Premultiplied);
+    image.fill(QColor(23, 51, 73));
+    const QRect surface = image.rect();
+    const QRect camera = cameraOverlayRect(surface, 180).adjusted(-2, -2, 2, 2);
+    const QPoint wheel_position(width - UI_BORDER_SIZE - btn_size, UI_BORDER_SIZE);
+    const QRect wheel_rect(wheel_position, wheel.size());
+    QRect speed_rect = QFontMetrics(InterFont(176, QFont::Bold)).boundingRect("130");
+    speed_rect.moveCenter({surface.center().x(), 210 - speed_rect.height() / 2});
+    QPainter painter(&image);
+    hud.draw(painter, surface);
+    painter.end();
+    const QImage camera_before_wheel = image.copy(camera);
+    painter.begin(&image);
+    wheel.render(&painter, wheel_position);
+    painter.end();
+    const bool clear = surface.contains(camera) && !camera.intersects(wheel_rect) &&
+                       !camera.intersects(speed_rect) && camera_before_wheel == image.copy(camera);
+    header_layout_ok &= clear;
+    image.save(output + QString("/hud-camera-wheel-%1.png").arg(width));
+    std::printf("Camera header width=%d: no-overlap=%d camera=(%d,%d,%d,%d)\n",
+                width, clear, camera.x(), camera.y(), camera.width(), camera.height());
+  }
+
   state.sm->update(0);
   state.sm->update_msgs(now + 20000000000ULL, {});
   const QImage both_stale = render("both-stale");
@@ -215,7 +245,7 @@ static bool verifyCameraControlFreshness(UIState &state, const QString &output) 
   state.sm->update_msgs(now + 21000000000ULL,
                        {{"longitudinalPlanSP", plan.asReader()}, {"liveMapDataSP", map.asReader()}});
   const QImage empty = render("no-camera");
-  const bool passed = active != warning && plan_stale && stale == warning && invalid == warning &&
+  const bool passed = header_layout_ok && active != warning && plan_stale && stale == warning && invalid == warning &&
                       recovered == active && both_stale == empty;
   std::printf("HUD freshness: target-visible=%d plan-stale=%d stale-hidden=%d invalid-hidden=%d recovered=%d map-stale-hidden=%d\n",
               active != warning, plan_stale, stale == warning, invalid == warning, recovered == active, both_stale == empty);
@@ -464,7 +494,9 @@ int main(int argc, char **argv) {
   };
   const QImage offset_metric = offsetImage(60, true);
   const QImage other_warning = offsetImage(40, true);
-  const QRect warning_line(1320, 97, 328, 35), target_line(1320, 158, 328, 40);
+  const QRect banner = cameraOverlayRect(offset_metric.rect(), 165);
+  const QRect warning_line(banner.left() + 16, banner.top() + 52, 328, 35);
+  const QRect target_line(banner.left() + 16, banner.top() + 113, 328, 40);
   const bool separate_limit_target = offset_metric.copy(warning_line) != other_warning.copy(warning_line) &&
                                       offset_metric.copy(target_line) == other_warning.copy(target_line) &&
                                       QFontMetrics(InterFont(25, QFont::Normal)).horizontalAdvance("ACC TARGET 79 km/h") <= 328;
