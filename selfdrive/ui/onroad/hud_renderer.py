@@ -46,6 +46,8 @@ class Colors:
   dark_grey: rl.Color = rl.Color(114, 114, 114, 255)
   black_translucent: rl.Color = rl.Color(0, 0, 0, 166)
   white_translucent: rl.Color = rl.Color(255, 255, 255, 200)
+  camera_warning: rl.Color = rl.Color(255, 196, 64, 255)
+  camera_critical: rl.Color = rl.Color(255, 92, 92, 255)
   border_translucent: rl.Color = rl.Color(255, 255, 255, 75)
   header_gradient_start: rl.Color = rl.Color(0, 0, 0, 114)
   header_gradient_end: rl.Color = rl.BLANK
@@ -197,10 +199,16 @@ class HudRenderer(Widget):
     rl.draw_text_ex(self._font_medium, unit_text, unit_pos, FONT_SIZES.speed_unit, 0, COLORS.white_translucent)
 
   def _draw_speed_camera(self, rect: rl.Rectangle) -> None:
-    """Show the next matched camera; target speed remains owned by SLC/IBCM."""
+    """Show the next matched camera and escalate its visual warning by distance."""
     distance = f"{round(self.speed_camera_distance_m)} m"
     limit = f"{round(self.speed_camera_limit)}"
-    label = f"CAM {limit}  {distance}"
+    camera_type = self.speed_camera_type.strip()
+    label = f"CAM {limit}  {distance}" if not camera_type else f"CAM {camera_type} {limit}  {distance}"
     text_size = measure_text_cached(self._font_semi_bold, label, FONT_SIZES.camera_info)
     x = rect.x + rect.width / 2 - text_size.x / 2
-    rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(x, 330), FONT_SIZES.camera_info, 0, COLORS.white_translucent)
+    color = COLORS.white_translucent
+    if self.speed_camera_distance_m <= 100:
+      color = COLORS.camera_critical
+    elif self.speed_camera_distance_m <= 300:
+      color = COLORS.camera_warning
+    rl.draw_text_ex(self._font_semi_bold, label, rl.Vector2(x, 330), FONT_SIZES.camera_info, 0, color)
