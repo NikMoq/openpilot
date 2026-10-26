@@ -390,7 +390,10 @@ class Updater:
     cmds = [
       ["git", "checkout", "--force", "--no-recurse-submodules", "-B", branch, remote_ref],
       ["git", "reset", "--hard"],
-      ["git", "clean", "-xdff"],
+      # The device keeps an executable opendbc virtualenv outside Git's
+      # ownership.  Cleaning it makes otherwise valid branch updates fail with
+      # Permission denied, so preserve it across updates.
+      ["git", "clean", "-xdff", "-e", "opendbc_repo/.venv/"],
       ["git", "submodule", "sync"],
       ["git", "submodule", "update", "--init", "--recursive"],
       ["git", "submodule", "foreach", "--recursive", "git", "reset", "--hard"],
