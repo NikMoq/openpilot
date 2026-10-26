@@ -39,14 +39,16 @@ deployment is distributed.
 - Replay fixture: `sunnypilot/mapd/tests/fixtures/radarbase_sample.json`.
 - Replay selection test passed for a camera 33 m ahead at 60 km/h.
 - Python syntax compilation passed for changed Python modules.
+- Cap'n Proto C++ bindings were regenerated from `cereal/custom.capnp` in
+  commit `9c70f61`; the generated header contains the four speed-camera fields.
 - Full pytest is not yet runnable in the current Windows checkout because the
   repository's symlink-style `openpilot/common` layout is not resolved by the
   local interpreter (`ModuleNotFoundError: openpilot.common`).
 
 ## Remaining blockers
 
-1. Run the unit suite in a Linux/device-like checkout and regenerate/validate
-   cereal bindings for the added `liveMapDataSP` fields.
+1. Run the unit suite and compile/runtime validation in a Linux/device-like
+   checkout, including the regenerated cereal bindings and a live message.
 2. Verify a live `liveMapDataSP` message from mapd using a recorded GPS replay.
 3. On a controlled stationary bench, verify that an SLC target change produces
    the expected PQ35 ICBM/ACC button frames and that the vehicle controller
