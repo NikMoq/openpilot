@@ -148,9 +148,54 @@
       ],
       "full_clear_removed_all_camera_keys": true
     },
+    "device_default": {
+      "default_path": "/data/params/d",
+      "shared_device_namespace": true
+    },
     "abi": "CPython 3.12 aarch64",
     "original_sha256": "461e1d0c28f66a4dd77f288893c3ba6cb8b299c9062f0ccde8988f71af86e510",
-    "candidate_sha256": "c1452e462af8029bbd276b3cdea4c9437befcd3e2efbffad284866a7673f0444"
+    "candidate_sha256": "6a626c013a8f01999c9d5dfd10660c62a459ee3f71777d047e6ac2b1182b844f",
+    "default_namespace_regression": {
+      "artifact_sha256": "6a626c013a8f01999c9d5dfd10660c62a459ee3f71777d047e6ac2b1182b844f",
+      "architecture": "aarch64",
+      "python": "3.12.11",
+      "environment": "Disposable linux/arm64 Docker, no network/bind mounts; /data and /tmp tmpfs",
+      "params_root_env_present": false,
+      "explicit_Params_argument": false,
+      "observed_default_path": "/data/params/d",
+      "received_sentinels": {
+        "GitCommit": "fixture-before",
+        "DoReboot": true,
+        "UpdateAvailable": true,
+        "SpeedCameraSpeedOffsetKph": "19"
+      },
+      "checks": {
+        "default_path_is_device": true,
+        "reads_UI_store": true,
+        "observes_pending_reboot": true,
+        "observes_pending_update": true,
+        "observes_camera_offset": true,
+        "writes_UI_store": true,
+        "manager_clear_removes_UI_update": true,
+        "manager_clear_removes_UI_reboot": true,
+        "manager_clear_preserves_camera_offset": true,
+        "no_PC_default_store_created": true
+      },
+      "passed": true
+    },
+    "rejected_previous_artifact": {
+      "sha256": "c1452e462af8029bbd276b3cdea4c9437befcd3e2efbffad284866a7673f0444",
+      "default_path_test_exit": 1,
+      "reason": "HardwarePC default namespace, omitted -DQCOM2"
+    },
+    "device_define": "QCOM2",
+    "abi_max": {
+      "GLIBC": "2.17",
+      "GLIBCXX": "3.4.26",
+      "CXXABI": "1.3.11"
+    },
+    "source_base": "3b33fd17877cfcf7dbd624357586ce042ae4eaa0",
+    "device_recovery_verified": false
   },
   "artifacts": {
     "selfdrive\\ui\\ui": {
@@ -158,8 +203,8 @@
       "bytes": 5455032
     },
     "common\\params_pyx.so": {
-      "sha256": "c1452e462af8029bbd276b3cdea4c9437befcd3e2efbffad284866a7673f0444",
-      "bytes": 1141552
+      "sha256": "6a626c013a8f01999c9d5dfd10660c62a459ee3f71777d047e6ac2b1182b844f",
+      "bytes": 1141568
     },
     "selfdrive\\ui\\translations\\main_ru.qm": {
       "sha256": "729f36f43d4150f44c2cf1e89f4f200e74b8e8a69df0bec7f7c39c06f1da7738",

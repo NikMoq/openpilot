@@ -94,7 +94,7 @@ def main() -> int:
     "--target=aarch64-linux-gnu",
     f"--sysroot={sysroot}",
     f"--gcc-toolchain={sysroot / 'usr'}",
-    "-std=c++17", "-fPIC", "-O1", "-pthread", "-I" + str(generated_root), "-I" + str(ROOT),
+    "-std=c++17", "-fPIC", "-O1", "-pthread", "-DQCOM2", "-I" + str(generated_root), "-I" + str(ROOT),
     "-I" + str(ROOT / "msgq_repo"), "-I" + str(ROOT / "third_party"),
     "-I" + str(python_include), "-I" + str(sysroot / "usr/include/eigen3"),
   ]

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Verify the original and candidate Params bindings in isolated temp roots.
 
-Run with the matching ARM64 CPython. The test writes only inside temporary
-directories and never uses the device's Params path.
+Run with the matching ARM64 CPython. Normal checks use temporary directories.
+The explicit --check-device-default probe additionally uses /data/params in a
+fresh disposable Docker container only; never run it on a real device.
 """
 from __future__ import annotations
 
@@ -211,6 +212,23 @@ def check_candidate(path: Path) -> dict:
 
 
 def worker(mode: str, extension: Path) -> dict:
+  if mode == "device-default":
+    # Explicit opt-in, fresh disposable container only: never probe a real
+    # installation by constructing default Params or clearing its contents.
+    if not Path('/.dockerenv').is_file() or Path('/data/params').exists():
+      raise RuntimeError('Default-root verification requires a fresh disposable container')
+    if os.environ.get('PARAMS_ROOT') or os.environ.get('OPENPILOT_PREFIX'):
+      raise RuntimeError('Remove path overrides when verifying the device default')
+    module = load_binding(extension)
+    params = module.Params()
+    actual = params.get_param_path()
+    if actual != '/data/params/d':
+      raise AssertionError(f'Wrong default Params root: {actual}; expected /data/params/d (QCOM2)')
+    params.put('GitCommit', 'isolated-device-root-test')
+    explicit = module.Params('/data/params')
+    if explicit.get('GitCommit') != 'isolated-device-root-test':
+      raise AssertionError('Default and explicit device Params disagree')
+    return {'default_path':actual, 'shared_device_namespace':True}
   if mode == "original":
     return check_original(extension)
   return check_candidate(extension)
@@ -222,7 +240,9 @@ def main() -> int:
                       help="Preserved pre-fix extension; the tracked extension now contains the fix")
   parser.add_argument("--candidate", type=Path,
                       default=ROOT / ".native-build/params-persistence/candidate/common/params_pyx.so")
-  parser.add_argument("--worker", choices=("original", "candidate"), help=argparse.SUPPRESS)
+  parser.add_argument("--worker", choices=("original", "candidate", "device-default"), help=argparse.SUPPRESS)
+  parser.add_argument("--check-device-default", action="store_true",
+                      help="Also check /data/params default in a fresh disposable ARM64 container")
   parser.add_argument("--extension", type=Path, help=argparse.SUPPRESS)
   args = parser.parse_args()
   if args.worker:
@@ -241,7 +261,7 @@ def main() -> int:
   results = {}
   for mode, extension in (("original", args.original), ("candidate", args.candidate)):
     command = [sys.executable, str(Path(__file__).resolve()), "--worker", mode,
-               "--extension", str(extension.resolve())]
+               "--extension", str(extension.resolve()), '--original', str(args.original.resolve())]
     env = dict(os.environ)
     env["PYTHONPATH"] = str(ROOT) + os.pathsep + env.get("PYTHONPATH", "")
     try:
@@ -250,6 +270,11 @@ def main() -> int:
     except subprocess.CalledProcessError as error:
       raise RuntimeError(f"{mode} verification failed:\n{error.stdout}{error.stderr}") from error
     results[mode] = json.loads(completed.stdout)
+  if args.check_device_default:
+    command = [sys.executable, str(Path(__file__).resolve()), '--worker', 'device-default',
+               '--extension', str(args.candidate.resolve()), '--original', str(args.original.resolve())]
+    completed = subprocess.run(command, cwd=ROOT, check=True, text=True, capture_output=True)
+    results['device_default'] = json.loads(completed.stdout)
   results["abi"] = f"CPython {sys.version_info.major}.{sys.version_info.minor} {os.uname().machine}"
   results["original_sha256"] = sha256(args.original)
   results["candidate_sha256"] = sha256(args.candidate)
