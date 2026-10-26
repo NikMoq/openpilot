@@ -7,13 +7,13 @@
 
 #include "selfdrive/ui/sunnypilot/qt/widgets/drive_stats.h"
 
-#include <QDebug>
 #include <QGridLayout>
 #include <QVBoxLayout>
+#include <QTimer>
+#include <QVariant>
+#include <QLocale>
 
 #include "common/params.h"
-#include "selfdrive/ui/qt/request_repeater.h"
-#include "selfdrive/ui/qt/util.h"
 
 static QLabel* newLabel(const QString& text, const QString &type) {
   QLabel* label = new QLabel(text);
@@ -51,11 +51,16 @@ DriveStats::DriveStats(QWidget* parent) : QFrame(parent) {
   main_layout->addStretch();
   add_stats_layouts(tr("PAST WEEK"), week_);
 
-  if (auto dongleId = getDongleId()) {
-    QString url = CommaApi::BASE_URL + "/v1.1/devices/" + *dongleId + "/stats";
-    RequestRepeater* repeater = new RequestRepeater(this, url, "ApiCache_DriveStats", 30);
-    QObject::connect(repeater, &RequestRepeater::requestDone, this, &DriveStats::parseResponse);
-  }
+  source_label_ = newLabel("", "source");
+  source_label_->setWordWrap(true);
+  source_label_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+  main_layout->addSpacing(15);
+  main_layout->addWidget(source_label_);
+
+  refreshLocal();
+  auto *local_timer = new QTimer(this);
+  connect(local_timer, &QTimer::timeout, this, [this]() { if (isVisible()) refreshLocal(); });
+  local_timer->start(10000);
 
   setStyleSheet(R"(
     DriveStats {
@@ -66,31 +71,42 @@ DriveStats::DriveStats(QWidget* parent) : QFrame(parent) {
     QLabel[type="title"] { font-size: 51px; font-weight: 500; }
     QLabel[type="number"] { font-size: 78px; font-weight: 500; }
     QLabel[type="unit"] { font-size: 51px; font-weight: 300; color: #A0A0A0; }
+    QLabel[type="source"] { font-size: 34px; font-weight: 300; color: #A0A0A0; }
   )");
 }
 
 void DriveStats::updateStats() {
-  auto update = [=](const QJsonObject& obj, StatsLabels& labels) {
-    labels.routes->setText(QString::number((int)obj["routes"].toDouble()));
-    labels.distance->setText(QString::number(int(obj["distance"].toDouble() * (metric_ ? MILE_TO_KM : 1))));
-    labels.distance_unit->setText(getDistanceUnit());
-    labels.hours->setText(QString::number((int)(obj["minutes"].toDouble() / 60)));
+  const QLocale locale = Params().get("LanguageSetting") == "main_ru" ? QLocale(QLocale::Russian, QLocale::Russia) : QLocale();
+  auto decimal = [&](double value, int places) {
+    const double scale = places == 1 ? 10.0 : 1.0;
+    return locale.toString(qRound64(value * scale) / scale, 'f', places);
   };
-
-  QJsonObject json = stats_.object();
-  update(json["all"].toObject(), all_);
-  update(json["week"].toObject(), week_);
+  auto number = [](QLabel *label, const QString &value) {
+    label->setText(value);
+    label->setStyleSheet(QString("font-size: %1px; font-weight: 500;").arg(qMin(78, 360 / qMax(1, value.size()))));
+  };
+  const bool have_data = have_local_;
+  const auto &stats = local_stats_;
+  auto update = [&](const DriveStatsData::Totals &totals, bool incomplete_routes, StatsLabels& labels) {
+    const double distance = totals.distance_m / (metric_ ? 1000.0 : 1609.344);
+    const QString routes = incomplete_routes ? (totals.routes > 0 ? QString::fromUtf8("≥") + locale.toString(totals.routes) : QString::fromUtf8("—")) : locale.toString(totals.routes);
+    number(labels.routes, have_data ? routes : QString::fromUtf8("—"));
+    number(labels.distance, have_data ? decimal(distance, distance < 100 ? 1 : 0) : QString::fromUtf8("—"));
+    labels.distance_unit->setText(getDistanceUnit());
+    number(labels.hours, have_data ? decimal(totals.duration_s / 3600.0, 1) : QString::fromUtf8("—"));
+  };
+  update(stats.all, stats.all_routes_incomplete, all_);
+  update(stats.week, stats.week_routes_incomplete, week_);
+  source_label_->setText(have_local_ ? tr("Recorded on this device") : tr("No trip data yet"));
 }
 
-void DriveStats::parseResponse(const QString& response, bool success) {
-  if (!success) return;
-
-  QJsonDocument doc = QJsonDocument::fromJson(response.trimmed().toUtf8());
-  if (doc.isNull()) {
-    qDebug() << "JSON Parse failed on getting past drives statistics";
-    return;
+void DriveStats::refreshLocal() {
+  DriveStatsData::Snapshot snapshot;
+  // Keep the last verified local snapshot across a transient read failure.
+  if (DriveStatsData::loadLocal(snapshot)) {
+    local_stats_ = snapshot;
+    have_local_ = true;
   }
-  stats_ = doc;
   updateStats();
 }
 
@@ -98,6 +114,6 @@ void DriveStats::showEvent(QShowEvent* event) {
   bool metric = Params().getBool("IsMetric");
   if (metric_ != metric) {
     metric_ = metric;
-    updateStats();
   }
+  refreshLocal();
 }

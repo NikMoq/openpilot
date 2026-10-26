@@ -1,0 +1,51 @@
+{
+  "status": "LOCAL_TRIP_STATS_READY_FOR_COORDINATOR_INTEGRATION",
+  "base": "6bfe922e475555d01417c2eb62bc83fb1f9650a4",
+  "new_params_keys": [],
+  "network_in_trip_stats": false,
+  "tests": {
+    "linux_producer": 19,
+    "windows_producer_pass": 16,
+    "windows_posix_skipped": 3,
+    "offline_recovery": 7,
+    "native_qt_core_contract": "PASS",
+    "native_qt_widget_cases": 7,
+    "native_qt_caption_fit_failures": 0,
+    "presentation_regression_tests": 5
+  },
+  "historical_recovery": {
+    "scope": "Available diagnostic recordings only; not lifetime",
+    "distance_m": 17946.869545751455,
+    "duration_s": 778.4706582970082,
+    "route_count_known": false,
+    "reimport_idempotent": true,
+    "production_ledger_modified": false
+  },
+  "integration_required": [
+    "Register PythonProcess(\"tripstatsd\", \"system.tripstatsd\", always_run) in process_config.py",
+    "Rebuild ARM64 UI and matching main_ru.qm with the coordinator full patchset",
+    "Optional explicit offline recovery review/import; no automatic history migration"
+  ],
+  "limits": [
+    "No deployment or on-device accumulation verified in this task",
+    "Unexpected power loss may omit unflushed up to30second sampled interval",
+    "UTC week is current day plus preceding6calendar dates",
+    "Four metric samples and writer code contain no distance; no claim every historical stats file audited"
+  ],
+  "files_sha256": {
+    "selfdrive/ui/sunnypilot/qt/widgets/drive_stats.cc": "72c98355af4b7ea04f7d4783811f8e378da5c9c41d0e8043a6a3ffefc6539ea5",
+    "selfdrive/ui/sunnypilot/qt/widgets/drive_stats.h": "c181d2cc3b5a4f1aae744779573df9c8a9b2059a56a41fa0bb66fe426a54b5fc",
+    "selfdrive/ui/translations/main_ru.ts": "c5bb199a2c74ac017a94e3ea3f05756045b957bde94aba85d576bf5a5be79d96",
+    "selfdrive/ui/sunnypilot/qt/widgets/drive_stats_data.h": "a1ff5d69fb62dc9eb2b8f6b1030b9d6ee818838920d4091fd60ef9f60830aa81",
+    "system/TRIP_STATS.md": "6250dc6ce3b61e672243979334238fea3296079eb6d0827ed36dc763907a67bb",
+    "system/tests/test_trip_stats.py": "f71cddb733f314b1ba2bedbd15e32386793c9df9be288343a7ddd3948c29dd23",
+    "system/trip_stats.py": "6f9aca38b099d13a7be76910bd0ba7d3432ebb89ec59c7fd350841a362b43460",
+    "system/tripstatsd.py": "b5b98834111116b20708610b35bd7519b688f5b2fbfd27484d242888ad2e8810",
+    "tools/trip_stats/README.md": "fd4c9754d8b3171323ad057e61bcb488d27f803f2910963611e0a56db263bd01",
+    "tools/trip_stats/build_preview.py": "5d9e7f26f8245a3826bf7e4b2e385449266377f992e4bfc86e8fa594148d7082",
+    "tools/trip_stats/preview.cc": "a447c55148ac68d802e296891ef1fb55c976075b43fa358be80cfdbb7b704353",
+    "tools/trip_stats/recover.py": "0768dc6fb1ea8541628cda67f77f2e9b05a936eb6a105681ddfb4d2372050f82",
+    "tools/trip_stats/test_display.cc": "f247e839c76a7cdcd6cafd6cd7b4119225068ba34e63bd0c7a189b43e50a2c76",
+    "tools/trip_stats/test_recover.py": "b363a153fdf6aebb6020990e926d12406a3fdcc10ba50810b37a4d1a897ebc22"
+  }
+}

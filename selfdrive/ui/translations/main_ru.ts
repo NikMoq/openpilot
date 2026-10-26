@@ -720,6 +720,14 @@ This is the time after which settings UI closes automatically if user is not int
         <source>Miles</source>
         <translation>Мили</translation>
     </message>
+    <message>
+        <source>Recorded on this device</source>
+        <translation>По сохранённым данным устройства</translation>
+    </message>
+    <message>
+        <source>No trip data yet</source>
+        <translation>Данных о поездках пока нет</translation>
+    </message>
 </context>
 <context>
     <name>DriverViewWindow</name>
