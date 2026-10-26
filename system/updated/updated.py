@@ -393,7 +393,10 @@ class Updater:
       # The device keeps an executable opendbc virtualenv outside Git's
       # ownership.  Cleaning it makes otherwise valid branch updates fail with
       # Permission denied, so preserve it across updates.
-      ["git", "clean", "-xdff", "-e", "opendbc_repo/.venv/"],
+      # opendbc_repo contains device-managed virtualenv/build metadata with
+      # ownership that cannot be removed by the updater user. Preserve the
+      # whole subtree so any protected generated files cannot abort updates.
+      ["git", "clean", "-xdff", "-e", "opendbc_repo/"],
       ["git", "submodule", "sync"],
       ["git", "submodule", "update", "--init", "--recursive"],
       ["git", "submodule", "foreach", "--recursive", "git", "reset", "--hard"],
