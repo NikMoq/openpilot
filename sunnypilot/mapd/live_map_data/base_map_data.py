@@ -42,6 +42,9 @@ class BaseMapData(ABC):
   def get_current_road_name(self) -> str:
     pass
 
+  def get_speed_camera(self):
+    return None
+
   def publish(self) -> None:
     speed_limit = self.get_current_speed_limit()
     next_speed_limit, next_speed_limit_distance = self.get_next_speed_limit_and_distance()
@@ -56,6 +59,13 @@ class BaseMapData(ABC):
     live_map_data.speedLimitAhead = next_speed_limit
     live_map_data.speedLimitAheadDistance = next_speed_limit_distance
     live_map_data.roadName = self.get_current_road_name()
+
+    camera = self.get_speed_camera()
+    if camera is not None:
+      live_map_data.speedCameraAheadValid = True
+      live_map_data.speedCameraAheadDistance = camera.distance_m
+      live_map_data.speedCameraSpeedLimit = (camera.camera.speed_limit_kph or 0.) / 3.6
+      live_map_data.speedCameraType = camera.camera.camera_type
 
     self.pm.send('liveMapDataSP', mapd_sp_send)
 
