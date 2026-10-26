@@ -3991,7 +3991,7 @@ Data</source><translation>Авто +
     <message><source>Back</source><translation>Назад</translation></message>
     <message><source>Speed Limit</source><translation>Ограничение скорости</translation></message>
     <message><source>Customize Source</source><translation>Настроить источник</translation></message>
-    <message><source>Speed Limit Offset</source><translation>Поправка к дорожному ограничению</translation></message>
+    <message><source>Speed Limit Offset</source><translation>Поправка к дорожному ограничению скорости</translation></message>
     <message><source>Speed Cameras</source><translation>Камеры контроля скорости</translation></message>
     <message><source>Download and use the speed-camera database for map warnings.</source><translation>Загружать и использовать базу камер контроля скорости для предупреждений на карте.</translation></message>
     <message><source>Manual</source><translation>Вручную</translation></message>
