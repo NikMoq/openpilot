@@ -13,7 +13,6 @@ import numpy as np
 from openpilot.common.params import Params
 from cereal import custom
 from openpilot.sunnypilot.modeld.constants import Meta, MetaTombRaider, MetaSimPose
-from openpilot.sunnypilot.modeld.runners import ModelRunner
 from openpilot.system.hardware import PC
 from openpilot.system.hardware.hw import Paths
 from pathlib import Path
@@ -123,6 +122,10 @@ def _get_model():
   return None
 
 def get_model_path():
+  # Metadata readers (including the longitudinal planner) do not need the
+  # native inference runtime. Load it only when selecting an execution path.
+  from openpilot.sunnypilot.modeld.runners import ModelRunner
+
   if USE_ONNX:
     return {ModelRunner.ONNX: Path(__file__).parent / '../models/supercombo.onnx'}
 

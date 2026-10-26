@@ -253,6 +253,11 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SpeedCameraDatabaseVersion", {PERSISTENT, STRING}},
     {"SpeedCameraDatabaseStatus", {PERSISTENT, STRING, "not downloaded"}},
     {"SpeedCameraDatabaseError", {PERSISTENT, STRING}},
+    {"SpeedCameraDatabaseCount", {PERSISTENT, STRING, "0"}},
+    {"SpeedCameraDatabaseCacheMaxAgeHours", {PERSISTENT, STRING, "168"}},
+    {"SpeedCameraEnabled", {PERSISTENT | BACKUP, BOOL, "1"}},
+    {"SpeedCameraControlEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"SpeedCameraAlertDistanceMeters", {PERSISTENT | BACKUP, STRING, "1000"}},
 
     // Smart Cruise Control
     {"MapTargetVelocities", {CLEAR_ON_ONROAD_TRANSITION, STRING}},

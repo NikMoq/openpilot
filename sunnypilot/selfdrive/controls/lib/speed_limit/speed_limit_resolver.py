@@ -4,6 +4,7 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+import math
 import time
 
 import cereal.messaging as messaging
@@ -123,8 +124,11 @@ class SpeedLimitResolver:
     gps_data = sm[self._gps_location_service]
     map_data = sm['liveMapDataSP']
 
-    gps_fix_age = time.monotonic() - gps_data.unixTimestampMillis * 1e-3
-    if gps_fix_age > LIMIT_MAX_MAP_DATA_AGE:
+    # unixTimestampMillis is an epoch timestamp, not a monotonic timestamp.
+    # Mixing the clocks produces a huge negative age and distance estimate.
+    gps_fix_age = time.time() - gps_data.unixTimestampMillis * 1e-3  # noqa: TID251 - compare Unix timestamps
+    if (not math.isfinite(gps_fix_age) or gps_fix_age < -1 or gps_fix_age > LIMIT_MAX_MAP_DATA_AGE or
+        not sm.all_checks(service_list=[self._gps_location_service, 'liveMapDataSP'])):
       return
 
     speed_limit = map_data.speedLimit if map_data.speedLimitValid else 0.
@@ -136,7 +140,7 @@ class SpeedLimitResolver:
     gps_data = sm[self._gps_location_service]
     map_data = sm['liveMapDataSP']
 
-    distance_since_fix = self.v_ego * (time.monotonic() - gps_data.unixTimestampMillis * 1e-3)
+    distance_since_fix = self.v_ego * max(0.0, time.time() - gps_data.unixTimestampMillis * 1e-3)  # noqa: TID251 - Unix GPS time
     distance_to_speed_limit_ahead = max(0., map_data.speedLimitAheadDistance - distance_since_fix)
 
     self.limit_solutions[SpeedLimitSource.map] = speed_limit

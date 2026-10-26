@@ -192,6 +192,16 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
   aTarget @5 :Float32;
   events @6 :List(OnroadEventSP.Event);
   e2eAlerts @7 :E2eAlerts;
+  speedCameraControl @8 :SpeedCameraControl;
+
+  struct SpeedCameraControl {
+    enabled @0 :Bool;
+    active @1 :Bool;
+    speedCap @2 :Float32;
+    state @3 :Text;
+    reason @4 :Text;
+    manualTakeover @5 :Bool;
+  }
 
   struct DynamicExperimentalControl {
     state @0 :DynamicExperimentalControlState;
@@ -446,6 +456,10 @@ struct LiveMapDataSP @0xf416ec09499d9d19 {
   speedCameraAheadDistance @7 :Float32;
   speedCameraSpeedLimit @8 :Float32;
   speedCameraType @9 :Text;
+  speedCameraLatitude @10 :Float64;
+  speedCameraLongitude @11 :Float64;
+  locationValid @12 :Bool;
+  speedCameraAutoControlAllowed @13 :Bool;
 }
 
 struct ModelDataV2SP @0xa1680744031fdb2d {

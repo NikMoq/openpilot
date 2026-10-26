@@ -49,6 +49,14 @@ class VCruiseHelper(VCruiseHelperSP):
     self.get_minimum_set_speed(is_metric)
 
     if CS.cruiseState.available:
+      if self.camera_manual_takeover and not self.CP_SP.pcmCruiseSpeed:
+        # After cancelling a camera episode, hand the setpoint back to the
+        # physical ACC. Releasing the camera cap must not restore an older,
+        # higher virtual setpoint after a manual button or pedal override.
+        self.v_cruise_kph = CS.cruiseState.speed * CV.MS_TO_KPH
+        self.v_cruise_cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
+        self.update_button_timers(CS, enabled)
+        return
       _enabled = self.update_enabled_state(CS, enabled)
       if not self.CP.pcmCruise or (not self.CP_SP.pcmCruiseSpeed and _enabled):
         # if stock cruise is completely disabled, then we can use our own set speed logic

@@ -51,8 +51,9 @@ class BaseMapData(ABC):
     next_speed_limit, next_speed_limit_distance = self.get_next_speed_limit_and_distance()
 
     mapd_sp_send = messaging.new_message('liveMapDataSP')
-    mapd_sp_send.valid = self.sm['liveLocationKalman'].gpsOK
+    mapd_sp_send.valid = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK)
     live_map_data = mapd_sp_send.liveMapDataSP
+    live_map_data.locationValid = mapd_sp_send.valid
 
     live_map_data.speedLimitValid = bool(MAX_SPEED_LIMIT > speed_limit > 0)
     live_map_data.speedLimit = speed_limit
@@ -66,6 +67,9 @@ class BaseMapData(ABC):
       live_map_data.speedCameraAheadDistance = camera.distance_m
       live_map_data.speedCameraSpeedLimit = (camera.camera.speed_limit_kph or 0.) / 3.6
       live_map_data.speedCameraType = camera.camera.camera_type
+      live_map_data.speedCameraLatitude = camera.camera.latitude
+      live_map_data.speedCameraLongitude = camera.camera.longitude
+      live_map_data.speedCameraAutoControlAllowed = camera.camera.allowed_auto_control
 
     self.pm.send('liveMapDataSP', mapd_sp_send)
 

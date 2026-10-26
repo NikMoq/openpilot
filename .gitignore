@@ -109,3 +109,6 @@ Pipfile
 !.idea/customTargets.xml
 !.idea/tools/*
 !.run/*
+
+# Reproducible native UI builds and local camera replay data.
+.native-build/

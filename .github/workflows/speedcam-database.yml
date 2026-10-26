@@ -1,0 +1,51 @@
+name: SpeedCamOnline Rus snapshot
+
+# Scheduled workflows are discovered on the default branch (res). The owner
+# delivers this workflow there separately; producer code always comes from dev.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/speedcam-database.yml'
+      - 'tools/speedcam_snapshot.py'
+      - 'tools/tests/test_speedcam_snapshot.py'
+      - 'sunnypilot/mapd/camera_database.py'
+      - 'sunnypilot/mapd/cityguide.py'
+      - 'sunnypilot/mapd/speed_cameras.py'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: speedcamonline-rus
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out producer from dev
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: dev
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Offline producer and publication contract tests
+        run: |
+          python -m pip install 'pytest>=8,<10' 'PyYAML>=6,<7'
+          python -B -m pytest -c /dev/null --noconftest -p no:cacheprovider tools/tests/test_speedcam_snapshot.py -q
+      - name: Fetch and validate the fixed SCO source
+        run: python -B tools/speedcam_snapshot.py build --directory "$RUNNER_TEMP/speedcam-snapshot"
+      - name: Verify raw checksum and every BKM record
+        run: python -B tools/speedcam_snapshot.py verify --directory "$RUNNER_TEMP/speedcam-snapshot"
+      - name: Publish immutable BKM then manifest last
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python -B tools/speedcam_snapshot.py publish --directory "$RUNNER_TEMP/speedcam-snapshot" --repository "$GITHUB_REPOSITORY"

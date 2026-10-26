@@ -1,98 +1,108 @@
-# Speed Camera / SLC status
+# Speed cameras / ICBM — 2026-10-26
 
-## Scope
+## Scope and deployment
 
-This document records the current `dev` implementation for the PQ35 speed-camera
-path. It is not a statement of flash readiness, bench readiness, or road
-readiness.
+Active source: SpeedCamOnline, all camera types/all Russian regions,
+https://speedcamonline.ru/cg77/Rus/comment/ . This replaces the old APK source.
+Code is prepared on dev in NikMoq/openpilot; last published code at this
+checkpoint remains fea42cc. New code and ARM UI await commit/push.
 
-## Confirmed APK evidence
+SSH remains diagnostics-only. User installs code through Software UI. No
+Panda/EPS firmware, safety-limit or stable-branch changes are included.
+DragonPilot remains a UX reference, not evidence of PQ35 command acceptance.
 
-- Artifact: `C:\Users\МИХАИЛ\Downloads\58-0.apk`
-- SHA-256: `7047b236946fedcbe0da169273cc602c1e6c36146eaaa7d5d06b9a0c5db1b94f`
-- Embedded database: `assets/database/RU.json`
-- Embedded schema: `{meta, objects[]}`; objects use `lat`, `lng`, `dir`, and
-  `speedControls[].speed`.
-- Observed export endpoint in APK strings:
-  `https://radarbase.info/export/cache/RU/main_extended.json`
-- A sample parse of the embedded RU database produced 35,067 normalized
-  camera records.
+## Download diagnosis and autonomous delivery
 
-The endpoint and database ownership/licensing are external dependencies. The
-runtime URL is configurable through Params and must be reviewed before a
-deployment is distributed.
+The full live source was downloaded with curl and the production Python
+transport (22/27 seconds). It matches the original user-supplied BKM exactly:
+5,305,735 bytes, 74,016 records, SHA256
+0ccaba30044729081e36cc006817d81501ad52dbe9eaf2ddbf35aa5751482c6c.
+The original file remains unchanged, outside Git.
 
-## Implemented on `dev`
+The PC proxy configuration routes .ru domains DIRECT even though an IP-check
+site shows foreign egress. The SCO server allocation is HETZNER-fsn1-dc10/DE.
+A request-specific proxy CONNECT to the server IP, retaining the original TLS
+name/certificate checks, completed the transfer. Earlier direct PC/Comma routes
+stalled. No VPN, ACL, credentials or network configuration was changed.
+The exact downstream network cause of that route's interruption is not proven.
 
-- Versioned, atomic local cache with stale-cache protection.
-- Configurable URL, version, path, and refresh period.
-- Radarbase parser plus generic JSON/GeoJSON compatibility.
-- GPS/distance/heading camera selection.
-- `liveMapDataSP` camera fields and existing map speed-limit path.
-- HUD indicator showing camera limit and distance.
-- Existing SunnyPilot SLC remains the owner of target-speed calculation; PQ35
-  ICBM remains the existing actuator path.
+Product delivery tries the exact SCO default directly for up to 30 seconds,
+then uses a validated copy from the SAME source at the fixed repository release:
+https://github.com/NikMoq/openpilot/releases/tag/speedcamonline-rus .
+Custom URLs remain direct-only. Total network budget is 120 seconds; stdlib
+DNS/trust-store loading and CPU/disk work are not preemptible.
 
-## Programmatic target-speed chain
+The initial release contains a fresh, live-downloaded BKM. A CI producer validates
+all records, publishes immutable hash-named BKM assets, verifies uploaded bytes,
+and switches manifest last with rollback. Scheduled refresh is every six hours.
+GitHub schedules require the workflow on default branch res; only that service
+workflow is to be installed there. Producer/application source remains on dev.
 
-The current source path is:
+The client checks source identity, timestamp (maximum 7 days, future tolerance
+300 seconds), filename, size, SHA256 and exact count >=10,000 before replacing
+cache. Mirrored data keeps the producer's acquisition time, not a fresh local
+stamp. Automatic retry timing is separate and monotonic. Failures preserve cache.
 
-`liveMapDataSP.speedLimitAhead` →
-`SpeedLimitResolver._process_map_data()` →
-`SpeedLimitAssist.output_v_target` →
-`longitudinalPlanSP.vTarget` →
-`IntelligentCruiseButtonManagement.update_calculations()` →
-the existing Volkswagen ICBM controller.
+## Implemented product paths
 
-This proves the software wiring only. It does not prove that the target is
-accepted by the PQ35 vehicle or that the emitted CAN frame is correct; those
-remain bench evidence requirements below.
+- Native Qt Cruise -> Speed Limit settings below offsets: warnings, automatic
+  camera control (default OFF), source, Manual/6/24/168-hour updates, warning
+  distance, status/count/date/hash/error and Update Database.
+- Native HUD displays camera distance/limit and temporary target/hold. Stale
+  map/planner messages suppress stale display details.
+- Camera data does not require downloaded OSM road maps. Mapd starts in a clean
+  PC profile; native Qt/Python use matching PARAMS_ROOT/OPENPILOT_PREFIX paths.
+- Recovery covers interrupted downloads, corrupt caches, source migrations and
+  source/path changes during an active worker. HTTP206/Content-Range are rejected.
+- Restored native Qt sources/build tool are required because the fork runs the
+  tracked selfdrive/ui/ui executable. Python-only UI edits were not visible.
 
-## Verification evidence
+CityGuide IDs differ from iGo IDs. HIGH CONFIDENCE: 290 exact ID+coordinate
+matches establish travel bearing=(1705+180)%360 for supported point types.
+1713 is beam shape, not DIRTYPE. Source IDs/raw parameters/ranges and a second
+explicit azimuth survive cache roundtrips. No average-speed linkage is invented.
+Full file: 70,164 positive limits; 60,149 normalized bearings; 59,669 supported
+point records eligible by import policy; 14,347 warning-only records retained.
+This policy is not hardware or road validation. See cityguide.py for evidence.
 
-- Embedded APK schema smoke test passed.
-- Replay fixture: `sunnypilot/mapd/tests/fixtures/radarbase_sample.json`.
-- Replay selection test passed for a camera 33 m ahead at 60 km/h.
-- Python syntax compilation passed for changed Python modules.
-- Cap'n Proto C++ bindings were regenerated from `cereal/custom.capnp` in
-  commit `9c70f61`; the generated header contains the four speed-camera fields.
-- Full pytest is not yet runnable in the current Windows checkout because the
-  repository's symlink-style `openpilot/common` layout is not resolved by the
-  local interpreter (`ModuleNotFoundError: openpilot.common`).
+LiveMapDataSP @13 carries validated eligibility. The planner additionally checks
+supported type, fresh GPS/map data, stock ACC minimum speed and a straight
+approach corridor. Camera targets pass through existing ICBM/Volkswagen ACC
+button messages. No direct throttle/brake actuation is introduced.
 
-## Remaining blockers
+Manual buttons/pedals hand over the current stock setpoint. Short inputs are
+latched at carState cadence before model planning. Passage needs two distinct
+fresh fixes behind the saved camera plus a fresh map generation before release.
+Manual intervention during the subsequent '+' return cannot restore an older
+higher virtual setpoint. Disengagement resets the episode.
 
-1. Run the unit suite and compile/runtime validation in a Linux/device-like
-   checkout, including the regenerated cereal bindings and a live message.
-2. Verify a live `liveMapDataSP` message from mapd using a recorded GPS replay.
-3. On a controlled stationary bench, verify that an SLC target change produces
-   the expected PQ35 ICBM/ACC button frames and that the vehicle controller
-   accepts them. No flash or road test is authorized by this document.
-4. Confirm camera direction semantics (`dirType`) against recorded data before
-   widening matching beyond the current conservative heading filter.
-5. Review the external Radarbase terms and availability before enabling the
-   default endpoint in a distributable build.
+## Validation
 
-## Next controlled bench evidence
+- Final portable suite: 633 passed, including full external BKM, producer,
+  manifest fallback, HTTP transport, cache, replay, controller and planner.
+- Final Linux native suite: 40 passed, zero skipped. Real Capnp/msgq/Params,
+  OsmMapData publication and actual LongitudinalPlannerSP construction/update/
+  arbitration/publication. MPC input is an explicitly supplied crash-counter
+  fixture; no MPC solver, model inference or complete plannerd loop ran.
+- Qt button -> real Python updater -> loopback full download -> cache -> native
+  labels: cold and cached refresh both passed, 74,016/hash/date visibly drawn.
+- ARM64 UI built with Qt 5.12.8; all 20 NEEDED libraries matched device inventory;
+  maximum GLIBC2.29/GLIBCXX3.4.26. Final tracked UI SHA256:
+  4545afe1028f7a493a03ce282d74006a0795b48525d9c8c0687790516192b221.
+- Production Python live SCO transfer validated on PC through the diagnostic
+  proxy route. Read-only validation on Comma also passed: 43.103 seconds, 74,016 records, matching SHA256, no device cache writes.
 
-Use a stationary, safe setup with the vehicle secured and no public-road
-operation. Capture a short before/after trace while publishing a synthetic
-`liveMapDataSP` camera event:
+Evidence remains ignored under .native-build: ui-final-evidence,
+runtime-smoke/final, source-probe, speedcam-release. Do not commit keys, caches,
+user archives, downloaded databases or vendor runtime libraries.
 
-1. Confirm `speedCameraAheadValid`, `speedCameraAheadDistance`,
-   `speedCameraSpeedLimit`, and `speedCameraType` on the subscriber side.
-2. Confirm the existing SLC resolver selects the map source and produces the
-   expected target speed without changing Panda safety limits.
-3. Confirm the existing PQ35 IBCM layer emits only the already-supported ACC
-   button frames when the target is changed; record CAN ID, bus, counter, and
-   checksum from the trace.
-4. Confirm clearing the camera event restores the prior map/car speed-limit
-   behavior and does not leave a stale target.
+## Remaining checks
 
-This evidence must be reviewed before any hardware installation or road test.
+Publish final dev commit; install the one scheduling workflow on res; confirm
+GitHub job fetch/publication and read-only device delivery. User then installs
+through UI and verifies real menu/status/notifications. A recorded vehicle trace
+is still required for physical ICBM acceptance and behavior.
 
-## DragonPilot reference rule
-
-DragonPilot remains a reference for user-visible behavior and update flow. Its
-behavior is not treated as proof of the APK endpoint or of PQ35 CAN semantics;
-those require independent evidence.
+Average-speed sections and full road-graph association are not implemented;
+parallel-road ambiguity remains a validation limitation. Do not rename Alpha
+to stable based on compilation or synthetic tests. No hardware readiness claim.
