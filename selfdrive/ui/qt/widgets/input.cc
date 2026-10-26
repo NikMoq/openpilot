@@ -3,11 +3,51 @@
 #include <QPushButton>
 #include <QButtonGroup>
 #include <QScroller>
+#include <QPainter>
+#include <QTextLayout>
+#include <QTextDocument>
+#include <QtMath>
 
 #include "system/hardware/hw.h"
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/qt/qt_window.h"
 #include "selfdrive/ui/qt/widgets/scrollview.h"
+
+namespace {
+// QLabel's plain word wrapping can leave a valid unspaced SSID wider than the
+// header. Use the same text/font with a measured fallback break inside a word.
+class RussianInputLabel : public QLabel {
+public:
+  using QLabel::QLabel;
+  bool hasHeightForWidth() const override { return true; }
+  QSize minimumSizeHint() const override { return QSize(0, fontMetrics().height()); }
+  int heightForWidth(int width) const override {
+    if (Qt::mightBeRichText(text())) return QLabel::heightForWidth(width);
+    return layoutText(nullptr, qMax(1, width));
+  }
+protected:
+  void paintEvent(QPaintEvent *event) override {
+    if (Qt::mightBeRichText(text())) { QLabel::paintEvent(event); return; }
+    QPainter painter(this);
+    painter.setPen(palette().color(QPalette::WindowText));
+    painter.translate(contentsRect().topLeft());
+    layoutText(&painter, qMax(1, contentsRect().width()));
+  }
+private:
+  int layoutText(QPainter *painter, int width) const {
+    QTextLayout layout(text(), font());
+    QTextOption option; option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    layout.setTextOption(option); layout.beginLayout();
+    qreal height = 0;
+    while (true) {
+      QTextLine line = layout.createLine(); if (!line.isValid()) break;
+      line.setLineWidth(width); line.setPosition(QPointF(0, height)); height += line.height();
+    }
+    layout.endLayout(); if (painter) layout.draw(painter, QPointF());
+    return qCeil(height);
+  }
+};
+}
 
 
 DialogBase::DialogBase(QWidget *parent) : QDialog(parent) {
@@ -50,23 +90,36 @@ int DialogBase::exec() {
 }
 
 InputDialog::InputDialog(const QString &title, QWidget *parent, const QString &subtitle, bool secret) : DialogBase(parent) {
+  const bool russian = Params().get("LanguageSetting") == "main_ru";
   main_layout = new QVBoxLayout(this);
-  main_layout->setContentsMargins(50, 55, 50, 50);
+  main_layout->setContentsMargins(50, russian ? 40 : 55, 50, 50);
   main_layout->setSpacing(0);
 
   // build header
   QHBoxLayout *header_layout = new QHBoxLayout();
 
   QVBoxLayout *vlayout = new QVBoxLayout;
-  header_layout->addLayout(vlayout);
-  label = new QLabel(title, this);
+  header_layout->addLayout(vlayout, russian ? 1 : 0);
+  label = russian ? new RussianInputLabel(title, this) : new QLabel(title, this);
   label->setStyleSheet("font-size: 90px; font-weight: bold;");
-  vlayout->addWidget(label, 1, Qt::AlignTop | Qt::AlignLeft);
+  if (russian) {
+    label->setWordWrap(true);
+    label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    vlayout->addWidget(label);
+  } else {
+    vlayout->addWidget(label, 1, Qt::AlignTop | Qt::AlignLeft);
+  }
 
   if (!subtitle.isEmpty()) {
-    sublabel = new QLabel(subtitle, this);
-    sublabel->setStyleSheet("font-size: 55px; font-weight: light; color: #BDBDBD;");
-    vlayout->addWidget(sublabel, 1, Qt::AlignTop | Qt::AlignLeft);
+    sublabel = russian ? new RussianInputLabel(subtitle, this) : new QLabel(subtitle, this);
+    sublabel->setStyleSheet(russian ? "font-size: 40px; font-weight: light; color: #BDBDBD;" : "font-size: 55px; font-weight: light; color: #BDBDBD;");
+    if (russian) {
+      sublabel->setWordWrap(true);
+      sublabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+      vlayout->addWidget(sublabel);
+    } else {
+      vlayout->addWidget(sublabel, 1, Qt::AlignTop | Qt::AlignLeft);
+    }
   }
 
   QPushButton* cancel_btn = new QPushButton(tr("Cancel"));
@@ -82,7 +135,7 @@ InputDialog::InputDialog(const QString &title, QWidget *parent, const QString &s
       background-color: #444444;
     }
   )");
-  header_layout->addWidget(cancel_btn, 0, Qt::AlignRight);
+  header_layout->addWidget(cancel_btn, 0, russian ? Qt::AlignRight | Qt::AlignTop : Qt::AlignRight);
   QObject::connect(cancel_btn, &QPushButton::clicked, this, &InputDialog::reject);
   QObject::connect(cancel_btn, &QPushButton::clicked, this, &InputDialog::cancel);
 
@@ -139,6 +192,7 @@ InputDialog::InputDialog(const QString &title, QWidget *parent, const QString &s
   main_layout->addSpacing(25);
 
   k = new Keyboard(this);
+  if (russian) k->setMinimumHeight(620);  // Four unchanged 155px key rows.
   QObject::connect(k, &Keyboard::emitEnter, this, &InputDialog::handleEnter);
   QObject::connect(k, &Keyboard::emitBackspace, this, [=]() {
     line->backspace();
@@ -379,6 +433,11 @@ TreeOptionDialog::TreeOptionDialog(const QString &prompt_text, const QList<TreeF
   iconFilled = QIcon ("../../sunnypilot/selfdrive/assets/icons/star-filled.png");
 
   treeWidget = new QTreeWidget(this);
+  if (params.get("LanguageSetting") == "main_ru") {
+    QFont rowFont = treeWidget->font();
+    rowFont.setPixelSize(55);
+    treeWidget->setFont(rowFont);
+  }
   treeWidget->setHeaderHidden(true);
   treeWidget->setIndentation(50);
   treeWidget->setExpandsOnDoubleClick(false); // Disable double-click expansion

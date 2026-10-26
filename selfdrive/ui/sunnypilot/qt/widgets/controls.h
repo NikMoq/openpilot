@@ -78,6 +78,10 @@ public:
     description->setVisible(false);
   }
 
+  void setDescriptionFontSize(int pixels) {
+    if (description) description->setStyleSheet(QString("font-size: %1px; color: grey").arg(qBound(32, pixels, 40)));
+  }
+
 public slots:
   void showDescription() override {
     description->setVisible(true);
@@ -744,7 +748,7 @@ class PanelBackButton : public QPushButton {
   Q_OBJECT
 
 public:
-  PanelBackButton(const QString &label = "Back", QWidget *parent = nullptr) : QPushButton(label, parent) {
+  PanelBackButton(const QString &label = tr("Back"), QWidget *parent = nullptr) : QPushButton(label, parent) {
     setObjectName("back_btn");
     setFixedSize(400, 100);
   }

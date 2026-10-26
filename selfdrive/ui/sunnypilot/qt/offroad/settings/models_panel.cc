@@ -58,7 +58,7 @@ ModelsPanel::ModelsPanel(QWidget *parent) : QWidget(parent) {
 
   const auto current_model = GetActiveModelName();
   currentModelLblBtn = new ButtonControlSP(tr("Current Model"), tr("SELECT"), "", this);
-  currentModelLblBtn->setValue(current_model);
+  currentModelLblBtn->setValue(current_model == DEFAULT_MODEL ? tr("Firehose (Default)") : current_model);
 
   connect(currentModelLblBtn, &ButtonControlSP::clicked, this, &ModelsPanel::handleCurrentModelLblBtnClicked);
   connect(uiState(), &UIState::offroadTransition, [=](bool offroad) {
@@ -105,9 +105,9 @@ ModelsPanel::ModelsPanel(QWidget *parent) : QWidget(parent) {
 
   // Lane Turn Desire toggle
   lane_turn_desire_toggle = new ParamControlSP("LaneTurnDesire", tr("Use Lane Turn Desires"),
-                            "If you’re driving at 20 mph (32 km/h) or below and have your blinker on, "
+                            tr("If you’re driving at 20 mph (32 km/h) or below and have your blinker on, "
                             "the car will plan a turn in that direction at the nearest drivable path. "
-                            "This prevents situations (like at red lights) where the car might plan the wrong turn direction.",
+                            "This prevents situations (like at red lights) where the car might plan the wrong turn direction."),
                              "../assets/offroad/icon_shell.png");
   list->addItem(lane_turn_desire_toggle);
 
@@ -117,7 +117,7 @@ ModelsPanel::ModelsPanel(QWidget *parent) : QWidget(parent) {
   const float K = 1.609344f;
   int per_value_change_scaled = is_metric_initial ? static_cast<int>(std::round((1.0f / K) * 100.0f)) : 100; // 100 -> 1 mph
   lane_turn_value_control = new OptionControlSP("LaneTurnValue", tr("Adjust Lane Turn Speed"),
-    tr("Set the maximum speed for lane turn desires. Default is 19 %1.").arg(is_metric_initial ? "km/h" : "mph"),
+    tr("Set the maximum speed for lane turn desires. Default is 19 %1.").arg(is_metric_initial ? QObject::tr("km/h") : QObject::tr("mph")),
     "", {5 * 100, max_value_mph * 100}, per_value_change_scaled, false, nullptr, true, true);
   lane_turn_value_control->showDescription();
   list->addItem(lane_turn_value_control);
@@ -362,7 +362,7 @@ void ModelsPanel::handleCurrentModelLblBtnClicked() {
         if (model.index == folderPair.second) {
           QRegularExpressionMatch match = re.match(model.displayName);
           if (match.hasMatch()) {
-            folder.append(" - (Updated: ").append(match.captured(1)).append(")");
+            folder.append(tr(" - (Updated: ")).append(match.captured(1)).append(")");
           }
         }
         folderModels.append(model);
@@ -372,10 +372,11 @@ void ModelsPanel::handleCurrentModelLblBtnClicked() {
   }
 
   items.insert(0, TreeFolder{"", {
-    TreeNode{"", DEFAULT_MODEL, DEFAULT_MODEL, -1}
+    TreeNode{"", tr("Firehose (Default)"), DEFAULT_MODEL, -1}
   }});
 
-  currentModelLblBtn->setValue(GetActiveModelInternalName());
+  const QString activeModelCaption = GetActiveModelInternalName();
+  currentModelLblBtn->setValue(activeModelCaption == DEFAULT_MODEL ? tr("Firehose (Default)") : activeModelCaption);
 
   const QString selectedBundleRef = TreeOptionDialog::getSelection(
     tr("Select a Model"), items, GetActiveModelRef(), QString("ModelManager_Favs"), this);
@@ -416,7 +417,8 @@ void ModelsPanel::updateLabels() {
   updateModelManagerState();
   handleBundleDownloadProgress();
   currentModelLblBtn->setEnabled(!is_onroad && !isDownloading());
-  currentModelLblBtn->setValue(GetActiveModelInternalName());
+  const QString activeModelCaption = GetActiveModelInternalName();
+  currentModelLblBtn->setValue(activeModelCaption == DEFAULT_MODEL ? tr("Firehose (Default)") : activeModelCaption);
 
   // Update lagdToggle description with current value
   QString desc = tr("Enable this for the car to learn and adapt its steering response time. "
@@ -458,7 +460,7 @@ void ModelsPanel::updateLabels() {
   // Update lane turn desire label and visibility
   refreshLaneTurnValueControl();
 
-  clearModelCacheBtn->setValue(QString::number(calculateCacheSize(), 'f', 2) + " MB");
+  clearModelCacheBtn->setValue(QString::number(calculateCacheSize(), 'f', 2) + " " + tr("MB"));
 }
 
 /**

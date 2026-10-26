@@ -10,12 +10,27 @@
 #include <algorithm>
 #include <QDateTime>
 #include <QTimer>
+#include <QRegularExpression>
 #include <QUrl>
 
 #include "selfdrive/ui/sunnypilot/qt/util.h"
+#include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/camera_error_ru.h"
 
 namespace {
 constexpr const char *SPEED_CAMERA_DEFAULT_URL = "https://speedcamonline.ru/cg77/Rus/comment/";
+
+// Display only: persisted updater protocol values stay unchanged.
+QString cameraStatus(const QString &status) {
+  if (status.isEmpty() || status == "not downloaded") return QObject::tr("not downloaded");
+  if (status == "update requested") return QObject::tr("update requested");
+  if (status == "downloading") return QObject::tr("downloading");
+  if (status == "ready") return QObject::tr("ready");
+  if (status == "error") return QObject::tr("error");
+  static const QRegularExpression retry("^retrying in ([0-9]+)s \\(([0-9]+)/([0-9]+)\\)$");
+  const auto match = retry.match(status);
+  if (match.hasMatch()) return QObject::tr("retrying in %1s (%2/%3)").arg(match.captured(1), match.captured(2), match.captured(3));
+  return status;  // Preserve unknown technical diagnostics.
+}
 
 void cameraButtonSymbols(OptionControlSP *control) {
   // Inter contains these glyphs; the full-width variants need a system fallback font.
@@ -281,7 +296,7 @@ void SpeedLimitSettings::refresh() {
   if (offset_type_param == SpeedLimitOffsetType::PERCENT) {
     offsetLabel += "%";
   } else if (offset_type_param == SpeedLimitOffsetType::FIXED) {
-    offsetLabel += QString(" %1").arg(is_metric_param ? "km/h" : "mph");
+    offsetLabel += QString(" %1").arg(is_metric_param ? tr("km/h") : tr("mph"));
   }
 
   if (offset_type_param == SpeedLimitOffsetType::NONE) {
@@ -289,7 +304,7 @@ void SpeedLimitSettings::refresh() {
   } else {
     speed_limit_offset->setVisible(true);
     speed_limit_offset->setLabel(offsetLabel);
-    speed_limit_offset->showDescription();
+    if (params.get("LanguageSetting") != "main_ru") speed_limit_offset->showDescription();
   }
 
   if (sla_available) {
@@ -300,13 +315,13 @@ void SpeedLimitSettings::refresh() {
   }
 
   speed_limit_mode_settings->refresh();
-  speed_limit_mode_settings->showDescription();
-  speed_limit_offset->showDescription();
+  if (params.get("LanguageSetting") != "main_ru") speed_limit_mode_settings->showDescription();
+  if (params.get("LanguageSetting") != "main_ru") speed_limit_offset->showDescription();
 
   const QString status = QString::fromStdString(params.get("SpeedCameraDatabaseStatus"));
   speed_camera_alert_distance->setLabel(tr("%1 m").arg(QString::fromStdString(params.get("SpeedCameraAlertDistanceMeters"))));
   speed_camera_speed_offset->setLabel(tr("+%1 km/h").arg(QString::fromStdString(params.get("SpeedCameraSpeedOffsetKph"))));
-  speed_camera_status->setText(status.isEmpty() ? tr("not downloaded") : status);
+  speed_camera_status->setText(cameraStatus(status));
   const QString count = QString::fromStdString(params.get("SpeedCameraDatabaseCount"));
   speed_camera_count->setText(count.isEmpty() ? "0" : count);
   speed_camera_updated->setText(cameraTimestamp(params.get("SpeedCameraDatabaseUpdatedAt")));
@@ -314,7 +329,7 @@ void SpeedLimitSettings::refresh() {
   const QString source_url = QString::fromStdString(params.get("SpeedCameraDatabaseUrl"));
   speed_camera_source->setValue(source_url == SPEED_CAMERA_DEFAULT_URL ? tr("SpeedCamOnline") : QUrl(source_url).host());
   const QString error = QString::fromStdString(params.get("SpeedCameraDatabaseError"));
-  speed_camera_error->setText(error.isEmpty() ? tr("None") : error);
+  speed_camera_error->setText(error.isEmpty() ? tr("None") : CameraErrorRu::present(error, QString::fromStdString(params.get("LanguageSetting"))));
   speed_camera_update->setEnabled(status != "downloading" && !status.startsWith("retrying"));
 
   speed_camera_enabled->refresh();

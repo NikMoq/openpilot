@@ -1,0 +1,705 @@
+{
+  "sourceBase": "6395399fc448c46a8d265be6cdd9e82d3597a8a9",
+  "scope": "Portable frozen baseline extracted before localization commit; no Git/history required at test execution. SHA256 normalized source for4critical files; ordered control-call fixtures forchangedQtfiles.",
+  "patterns": [
+    "\\bparams\\w*\\.(?:put\\w*|remove)\\([^;]+;",
+    "\\b\\w+(?:->|\\.)(?:setEnabled|setEnableSelectedButtons|toggleFlipped)\\([^;]+;",
+    "\\bemit\\s+\\w+\\([^;]+;"
+  ],
+  "normalizedSourceSha256": {
+    "selfdrive/ui/sunnypilot/qt/onroad/camera_warning.h": "8182aebeec677ac1198a157bbf1492a970363e493828b829bd2c752d13878bf2",
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.cc": "a73519f63bf3785ca3adebe427391138ea924a95eedb90d520c943178ed05f0b",
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal_panel.cc": "807543036612730bfbb994a3e91c86c744a72cf55e07188e298fc1a533304030",
+    "selfdrive/ui/qt/onroad/alerts.cc": "a913f7509894e570aad1fcbaedffd9b9afd548d31662b9e402015014525ccd2e"
+  },
+  "files": {
+    "selfdrive/ui/main.cc": {
+      "blobTextSha256": "06a2b3b0afcf0c9c6c9600a6f20a9a82d8a5ec7e3c4bb663b96c82cfdd78a37b",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": []
+    },
+    "selfdrive/ui/qt/offroad/firehose.cc": {
+      "blobTextSha256": "e0a949679b90b0cab2d6c429cb96c52cc809926d17093433d538cdb52dc10286",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&RequestRepeater::requestDone",
+        "&UIState::uiUpdate",
+        "&FirehosePanel::refresh"
+      ]
+    },
+    "selfdrive/ui/qt/offroad/onboarding.cc": {
+      "blobTextSha256": "9c45207b5cea38801ca342d291d83bad42dcdb056362994584324253db73d352",
+      "orderedCalls": [
+        [
+          "params.put(\"HasAcceptedTerms\", current_terms_version);",
+          "params.put(\"CompletedTrainingVersion\", current_training_version);"
+        ],
+        [],
+        [
+          "emit completedTraining();",
+          "emit onboardingDone();"
+        ]
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&QPushButton::clicked",
+        "&TermsPage::declinedTerms",
+        "&QPushButton::clicked",
+        "&TermsPage::acceptedTerms",
+        "&QPushButton::clicked",
+        "&DeclinePage::getBack",
+        "&QPushButton::clicked",
+        "&TermsPage::acceptedTerms",
+        "&TermsPage::declinedTerms",
+        "&TrainingGuide::completedTraining",
+        "&DeclinePage::getBack"
+      ]
+    },
+    "selfdrive/ui/qt/offroad/settings.cc": {
+      "blobTextSha256": "3258ba9b6d77bf576d7374fa3e4992b1f5f0a4a08d52e4485583ef213aae95d1",
+      "orderedCalls": [
+        [
+          "params.putBool(\"OnroadCycleRequested\", true);",
+          "params.remove(\"ExperimentalMode\");",
+          "params.remove(\"CalibrationParams\");",
+          "params.remove(\"LiveTorqueParameters\");",
+          "params.remove(\"LiveParameters\");",
+          "params.remove(\"LiveParametersV2\");",
+          "params.remove(\"LiveDelay\");",
+          "params.putBool(\"OnroadCycleRequested\", true);",
+          "params.put(\"LanguageSetting\", langs[selection].toStdString());",
+          "params.putBool(\"DoReboot\", true);",
+          "params.putBool(\"DoShutdown\", true);"
+        ],
+        [
+          "toggle->setEnabled(!locked);",
+          "toggle->setEnabled(!engaged);",
+          "experimental_mode_toggle->setEnabled(true);",
+          "long_personality_setting->setEnabled(true);",
+          "experimental_mode_toggle->setEnabled(false);",
+          "long_personality_setting->setEnabled(false);",
+          "btn->setEnabled(offroad);"
+        ],
+        [
+          "emit showDriverView();",
+          "emit reviewTrainingGuide();",
+          "emit expandToggleDescription(param);",
+          "emit scrollToToggle(param);"
+        ]
+      ],
+      "orderedMath": [
+        "hasLongitudinalControl(CP)"
+      ],
+      "signalSlotReferences": [
+        "&UIState::uiUpdate",
+        "&TogglesPanel::updateState",
+        "&UIState::engagedChanged",
+        "&ParamControl::toggleFlipped",
+        "&ButtonControl::clicked",
+        "&PrimeState::changed",
+        "&ButtonControl::clicked",
+        "&ButtonControl::showDescriptionEvent",
+        "&DevicePanel::updateCalibDescription",
+        "&ButtonControl::clicked",
+        "&ButtonControl::clicked",
+        "&ButtonControl::clicked",
+        "&ButtonControl::clicked",
+        "&UIState::offroadTransition",
+        "&QPushButton::clicked",
+        "&DevicePanel::reboot",
+        "&QPushButton::clicked",
+        "&DevicePanel::poweroff",
+        "&UIState::offroadTransition",
+        "&QPushButton::setVisible",
+        "&QPushButton::clicked",
+        "&SettingsWindow::closeSettings",
+        "&DevicePanel::reviewTrainingGuide",
+        "&SettingsWindow::reviewTrainingGuide",
+        "&DevicePanel::showDriverView",
+        "&SettingsWindow::showDriverView",
+        "&SettingsWindow::expandToggleDescription",
+        "&TogglesPanel::expandToggleDescription",
+        "&SettingsWindow::scrollToToggle",
+        "&TogglesPanel::scrollToToggle",
+        "&PrimeState::changed",
+        "&Networking::setPrimeType",
+        "&QPushButton::clicked"
+      ]
+    },
+    "selfdrive/ui/qt/onroad/alerts.cc": {
+      "blobTextSha256": "a913f7509894e570aad1fcbaedffd9b9afd548d31662b9e402015014525ccd2e",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": []
+    },
+    "selfdrive/ui/qt/widgets/input.cc": {
+      "blobTextSha256": "3df146ec6f194608ef2a1a10c49aa332979c027e8af562c223967f40dfca7a5b",
+      "orderedCalls": [
+        [
+          "params.put(\"ModelManager_Favs\", favs.toStdString());"
+        ],
+        [
+          "confirm_btn->setEnabled(false);",
+          "confirm_btn->setEnabled(true);",
+          "confirm_btn->setEnabled(false);",
+          "confirm_btn->setEnabled(false);",
+          "confirm_btn->setEnabled(selection != current);"
+        ],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&QPushButton::clicked",
+        "&InputDialog::reject",
+        "&QPushButton::clicked",
+        "&InputDialog::cancel",
+        "&QPushButton::toggled",
+        "&Keyboard::emitEnter",
+        "&InputDialog::handleEnter",
+        "&Keyboard::emitBackspace",
+        "&Keyboard::emitKey",
+        "&QPushButton::clicked",
+        "&ConfirmationDialog::reject",
+        "&QPushButton::clicked",
+        "&ConfirmationDialog::accept",
+        "&QPushButton::toggled",
+        "&QPushButton::clicked",
+        "&ConfirmationDialog::reject",
+        "&QPushButton::clicked",
+        "&ConfirmationDialog::accept",
+        "&QTreeWidget::itemClicked",
+        "&QTreeWidget::itemSelectionChanged",
+        "&QPushButton::clicked",
+        "&ConfirmationDialog::reject",
+        "&QPushButton::clicked",
+        "&ConfirmationDialog::accept",
+        "&QPushButton::clicked"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/developer_panel.cc": {
+      "blobTextSha256": "1745817fbbe96e1bad1f5084f97bb38a4ffea35d7624dded2d986302e1a7cb61",
+      "orderedCalls": [
+        [
+          "params.putBool(\"QuickBootToggle\", QFile::exists(\"/data/openpilot/prebuilt\"));"
+        ],
+        [
+          "prebuiltToggle->setEnabled(disable_updates);",
+          "showAdvancedControls->setEnabled(true);"
+        ],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&ParamControlSP::toggleFlipped",
+        "&ParamControl::toggleFlipped",
+        "&ButtonControlSP::clicked",
+        "&UIState::offroadTransition",
+        "&DeveloperPanelSP::updateToggles"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/device_panel.cc": {
+      "blobTextSha256": "426aa3de9322ff9452db3421d6c03225d0a22dec75f2c8e5f49e9a48e2c71d55",
+      "orderedCalls": [
+        [
+          "params.put(\"LanguageSetting\", langs[selection].toStdString());",
+          "params.put(\"DeviceBootMode\", QString::number(index).toStdString());",
+          "params.remove(\"OffroadMode\");",
+          "params.putBool(\"OffroadMode\", true);",
+          "params.remove(key);"
+        ],
+        [
+          "btn->setEnabled(_offroad);"
+        ],
+        [
+          "emit showDriverView();",
+          "emit reviewTrainingGuide();"
+        ]
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&PushButtonSP::clicked",
+        "&PushButtonSP::clicked",
+        "&PushButtonSP::updateButton",
+        "&PushButtonSP::clicked",
+        "&PushButtonSP::clicked",
+        "&PushButtonSP::clicked",
+        "&PushButtonSP::clicked",
+        "&DevicePanelSP::resetSettings",
+        "&PushButtonSP::clicked",
+        "&PushButtonSP::updateButton",
+        "&OptionControlSP::updateLabels",
+        "&MaxTimeOffroad::refresh",
+        "&ButtonParamControlSP::buttonClicked",
+        "&PushButtonSP::clicked",
+        "&DevicePanelSP::reboot",
+        "&PushButtonSP::clicked",
+        "&DevicePanelSP::poweroff",
+        "&UIState::offroadTransition",
+        "&PushButtonSP::setVisible",
+        "&PushButtonSP::clicked",
+        "&DevicePanelSP::setOffroadMode",
+        "&UIState::offroadTransition",
+        "&DevicePanelSP::updateState"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/display/onroad_screen_brightness.cc": {
+      "blobTextSha256": "b52d73e73b9a19e0856caa381facfb653512571d86a5034acbabc6dae84dc45c",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [
+        "std::atoi(params.get(\"OnroadScreenOffTimer\").c_str())"
+      ],
+      "signalSlotReferences": [
+        "&OptionControlSP::updateLabels",
+        "&OnroadScreenBrightnessControl::refresh",
+        "&OptionControlSP::updateLabels",
+        "&OnroadScreenBrightnessControl::refresh"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/display_panel.cc": {
+      "blobTextSha256": "3a721abf10c3a4dd6584edd6865ba64609de57997a3bab8d7a6c57ee737fbba0",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&OptionControlSP::updateLabels",
+        "&Brightness::refresh",
+        "&OptionControlSP::updateLabels"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/lateral/torque_lateral_control_custom_params.cc": {
+      "blobTextSha256": "d9f66697215e5a1050f4b07c72b619bd8d69d8510ef03c053253977ed4f631ac",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&ParamControl::toggleFlipped",
+        "&TorqueLateralControlCustomParams::refresh",
+        "&OptionControlSP::updateLabels",
+        "&TorqueLateralControlCustomParams::refresh",
+        "&OptionControlSP::updateLabels",
+        "&TorqueLateralControlCustomParams::refresh"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/custom_acc_increment.cc": {
+      "blobTextSha256": "101ded3a61e3ab24dff170e0060543050094fa5a01cb92a7267e345215e2abff",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&OptionControlSP::updateLabels",
+        "&AccIncrementOptionControl::refresh",
+        "&OptionControlSP::updateLabels",
+        "&AccIncrementOptionControl::refresh"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_policy.cc": {
+      "blobTextSha256": "37a60593fe8a5f390569ecb9ebdb8786411bc58264e82cd6e9d28debb689f20f",
+      "orderedCalls": [
+        [],
+        [],
+        [
+          "emit backPress();"
+        ]
+      ],
+      "orderedMath": [
+        "std::atoi(params.get(\"SpeedLimitPolicy\").c_str())"
+      ],
+      "signalSlotReferences": [
+        "&QPushButton::clicked",
+        "&ButtonParamControlSP::buttonClicked",
+        "&SpeedLimitPolicy::refresh"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.cc": {
+      "blobTextSha256": "a73519f63bf3785ca3adebe427391138ea924a95eedb90d520c943178ed05f0b",
+      "orderedCalls": [
+        [
+          "params.putBool(\"SpeedCameraEnabled\", true);",
+          "params.putBool(\"SpeedCameraControlEnabled\", false);",
+          "params.put(\"SpeedCameraAlertDistanceMeters\", \"1000\");",
+          "params.put(\"SpeedCameraSpeedOffsetKph\", \"0\");",
+          "params.put(\"SpeedCameraDatabaseUpdatePeriodHours\", \"24\");",
+          "params.put(\"SpeedCameraDatabaseUrl\", SPEED_CAMERA_DEFAULT_URL);",
+          "params.put(\"SpeedCameraDatabaseUrl\", url.toString().toStdString());",
+          "params.put(\"SpeedCameraDatabaseStatus\", \"update requested\");",
+          "params.put(\"SpeedCameraDatabaseUpdatePeriodHours\", periods[std::clamp(id, 0, 3)]);",
+          "params.put(\"SpeedCameraDatabaseStatus\", \"update requested\");",
+          "params.remove(\"SpeedCameraDatabaseError\");",
+          "params.put(\"SpeedLimitMode\", std::to_string(static_cast<int>(SpeedLimitMode::WARNING)));",
+          "params.putBool(\"SpeedCameraControlEnabled\", false);"
+        ],
+        [
+          "speed_limit_mode_settings->setEnableSelectedButtons(true, convertSpeedLimitModeValues(getSpeedLimitModeValues()));",
+          "speed_limit_mode_settings->setEnableSelectedButtons(true, convertSpeedLimitModeValues(\n      {SpeedLimitMode::OFF, SpeedLimitMode::INFORMATION, SpeedLimitMode::WARNING}));",
+          "speed_camera_update->setEnabled(status != \"downloading\" && !status.startsWith(\"retrying\"));",
+          "speed_camera_control_enabled->setEnabled(speed_camera_control_available);"
+        ],
+        [
+          "emit backPress();"
+        ]
+      ],
+      "orderedMath": [
+        "std::isfinite(seconds)",
+        "std::clamp(id, 0, 3)",
+        "std::atoi(params.get(\"SpeedLimitMode\").c_str())",
+        "std::atoi(params.get(\"SpeedLimitOffsetType\").c_str())",
+        "hasLongitudinalControl(CP)",
+        "hasIntelligentCruiseButtonManagement(CP_SP)",
+        "std::atoi(params.get(\"SpeedCameraDatabaseUpdatePeriodHours\").c_str())"
+      ],
+      "signalSlotReferences": [
+        "&QPushButton::clicked",
+        "&QPushButton::clicked",
+        "&SpeedLimitPolicy::backPress",
+        "&ButtonControlSP::clicked",
+        "&MultiButtonControlSP::buttonClicked",
+        "&OptionControlSP::updateLabels",
+        "&OptionControlSP::updateLabels",
+        "&QPushButton::clicked",
+        "&ButtonParamControlSP::buttonClicked",
+        "&SpeedLimitSettings::refresh",
+        "&OptionControlSP::updateLabels",
+        "&SpeedLimitSettings::refresh",
+        "&ButtonParamControlSP::showDescriptionEvent",
+        "&OptionControlSP::showDescription",
+        "&ButtonParamControlSP::buttonClicked",
+        "&SpeedLimitSettings::refresh",
+        "&QTimer::timeout",
+        "&SpeedLimitSettings::refresh"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal_panel.cc": {
+      "blobTextSha256": "807543036612730bfbb994a3e91c86c744a72cf55e07188e298fc1a533304030",
+      "orderedCalls": [
+        [
+          "params.remove(\"IntelligentCruiseButtonManagement\");",
+          "params.remove(\"CustomAccIncrementsEnabled\");",
+          "params.remove(\"DynamicExperimentalControl\");",
+          "params.remove(\"SmartCruiseControlVision\");",
+          "params.remove(\"SmartCruiseControlMap\");"
+        ],
+        [
+          "intelligentCruiseButtonManagement->setEnabled(offroad);",
+          "intelligentCruiseButtonManagement->setEnabled(false);",
+          "customAccIncrement->setEnabled(((has_longitudinal_control && !is_pcm_cruise) || has_icbm) && offroad);",
+          "dynamicExperimentalControl->setEnabled(has_longitudinal_control);",
+          "SmartCruiseControlVision->setEnabled(true);",
+          "SmartCruiseControlMap->setEnabled(true);",
+          "customAccIncrement->setEnabled(false);",
+          "dynamicExperimentalControl->setEnabled(false);",
+          "SmartCruiseControlVision->setEnabled(false);",
+          "SmartCruiseControlMap->setEnabled(false);",
+          "customAccIncrement->toggleFlipped(false);"
+        ],
+        []
+      ],
+      "orderedMath": [
+        "hasLongitudinalControl(CP)",
+        "hasIntelligentCruiseButtonManagement(CP_SP)"
+      ],
+      "signalSlotReferences": [
+        "&ParamControlSP::toggleFlipped",
+        "&UIState::offroadTransition",
+        "&LongitudinalPanel::refresh",
+        "&QPushButton::clicked",
+        "&SpeedLimitSettings::backPress"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal_panel.h": {
+      "blobTextSha256": "3e278d505d81de807230497bf8d13ec921154a7e99367ee7c9581e91b2850b7d",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": []
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/models_panel.cc": {
+      "blobTextSha256": "d9019226a42288ccc36e6108966c38a064c3957230fb5b48ec9a5a4a4d99f2ed",
+      "orderedCalls": [
+        [
+          "params.put(\"ModelManager_LastSyncTime\", \"0\");",
+          "params.remove(\"ModelManager_ActiveBundle\");",
+          "params.put(\"ModelManager_DownloadIndex\", std::to_string(bundle.getIndex()));",
+          "params.remove(\"CalibrationParams\");",
+          "params.remove(\"LiveTorqueParameters\");",
+          "params.putBool(\"ModelManager_ClearCache\", true);"
+        ],
+        [
+          "currentModelLblBtn->setEnabled(false);",
+          "currentModelLblBtn->setEnabled(!is_onroad && !isDownloading());"
+        ],
+        []
+      ],
+      "orderedMath": [
+        "std::round((1.0f / K) * 100.0f)",
+        "std::round(display_value)"
+      ],
+      "signalSlotReferences": [
+        "&ButtonControlSP::clicked",
+        "&ModelsPanel::handleCurrentModelLblBtnClicked",
+        "&UIState::offroadTransition",
+        "&UIStateSP::uiUpdate",
+        "&ModelsPanel::updateLabels",
+        "&ButtonControlSP::clicked",
+        "&ButtonControlSP::clicked",
+        "&ModelsPanel::clearModelCache",
+        "&ParamControlSP::toggleFlipped",
+        "&ModelsPanel::refreshLaneTurnValueControl",
+        "&OptionControlSP::updateLabels",
+        "&ModelsPanel::refreshLaneTurnValueControl",
+        "&OptionControlSP::updateLabels",
+        "&ParamControlSP::toggleFlipped"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/osm_panel.cc": {
+      "blobTextSha256": "23314dead6d3474c3f5694091bca46b277cb85bf5e7458f117b4389ad84cb5fe",
+      "orderedCalls": [
+        [
+          "params.putBool(\"OsmDbUpdatesCheck\", true);",
+          "params.put(\"OsmLocal\", \"1\");",
+          "params.put(\"OsmLocationTitle\", selection.toStdString());",
+          "params.put(\"OsmLocationName\", std::get<1>(loc).toStdString());",
+          "params.putBool(\"OsmDbUpdatesCheck\", true);",
+          "params.put(\"OsmStateTitle\", selection.toStdString());",
+          "params.put(\"OsmStateName\", std::get<1>(loc).toStdString());",
+          "params.putBool(\"OsmDbUpdatesCheck\", true);",
+          "params.remove(\"OsmStateName\");",
+          "params.remove(\"OsmStateTitle\");",
+          "params.remove(\"OsmLocal\");",
+          "params.remove(\"OsmLocationName\");",
+          "params.remove(\"OsmLocationTitle\");",
+          "params.remove(\"OsmStateName\");",
+          "params.remove(\"OsmStateTitle\");"
+        ],
+        [
+          "osmDeleteMapsBtn->setEnabled(false);",
+          "osmDeleteMapsBtn->setEnabled(true);",
+          "osmDownloadBtn->setEnabled(false);",
+          "osmDownloadBtn->setEnabled(true);",
+          "usStatesBtn->setEnabled(false);",
+          "usStatesBtn->setEnabled(true);",
+          "osmDownloadBtn->setEnabled(!osm_download_in_progress);",
+          "usStatesBtn->setEnabled(!osm_download_in_progress);"
+        ],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&UIStateSP::offroadTransition",
+        "&QTimer::timeout",
+        "&OsmPanel::updateLabels",
+        "&ButtonControlSP::clicked",
+        "&ButtonControlSP::clicked",
+        "&ButtonControlSP::clicked",
+        "&ButtonControlSP::clicked"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/osm_panel.h": {
+      "blobTextSha256": "3fca3d6a901db003585d137cf102b0d338f4388aaf9dd63190713f0df7c1d258",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": []
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/software_panel.cc": {
+      "blobTextSha256": "2ee7edf9a864cf3604804b4e1e40a3fc8fb73e4263c237f5f3c15ec11ffc6517",
+      "orderedCalls": [
+        [
+          "params.put(\"UpdaterTargetBranch\", selection.toStdString());",
+          "params.put(\"UpdaterTargetBranch\", selected_branch.toStdString());",
+          "params.putBool(\"DoReboot\", true);",
+          "params.putBool(\"DisableUpdates\", !state);"
+        ],
+        [
+          "disableUpdatesToggle->setEnabled(enabled);"
+        ],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&ButtonControlSP::clicked",
+        "&ParamControl::toggleFlipped",
+        "&SoftwarePanelSP::handleDisableUpdatesToggled",
+        "&UIState::offroadTransition",
+        "&SoftwarePanelSP::updateDisableUpdatesToggle"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/sunnylink_panel.cc": {
+      "blobTextSha256": "aa587f2c42767afe8920887042142ee44e0b9328b30662efbf59bbbf86f84ada",
+      "orderedCalls": [
+        [
+          "params.putBool(\"BackupManager_CreateBackup\", true);",
+          "params.put(\"BackupManager_RestoreVersion\", \"latest\");"
+        ],
+        [
+          "backupSettings->setEnabled(false);",
+          "restoreSettings->setEnabled(false);",
+          "backupSettings->setEnabled(false);",
+          "backupSettings->setEnabled(!is_onroad);",
+          "backupSettings->setEnabled(!is_onroad && !backup_request_pending && is_sunnylink_enabled);",
+          "restoreSettings->setEnabled(false);",
+          "restoreSettings->setEnabled(!is_onroad);",
+          "restoreSettings->setEnabled(!is_onroad && !restore_request_pending && is_sunnylink_enabled);",
+          "sunnylinkEnabledBtn->setEnabled(!is_onroad);",
+          "sunnylinkEnabledBtn->setEnabled(!is_onroad);",
+          "sponsorBtn->setEnabled(!is_onroad && is_sunnylink_enabled);",
+          "pairSponsorBtn->setEnabled(!is_onroad && is_sunnylink_enabled);",
+          "sunnylinkUploaderEnabledBtn->setEnabled(can_do_uploads);"
+        ],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&ParamWatcher::paramChanged",
+        "&UIStateSP::sunnylinkRolesChanged",
+        "&SunnylinkPanel::updatePanel",
+        "&UIStateSP::sunnylinkDeviceUsersChanged",
+        "&SunnylinkPanel::updatePanel",
+        "&UIStateSP::offroadTransition",
+        "&ButtonControlSP::clicked",
+        "&ButtonControlSP::clicked",
+        "&ParamControl::showDescriptionEvent",
+        "&ParamControl::toggleFlipped",
+        "&QPushButton::clicked",
+        "&QPushButton::clicked",
+        "&UIState::offroadTransition",
+        "&SunnylinkPanel::updatePanel",
+        "&UIStateSP::uiUpdate",
+        "&SunnylinkPanel::updatePanel"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/onroad/camera_warning.h": {
+      "blobTextSha256": "66ee0c17d9a82096f7df4c3125a9ebb0a5ee9cae2205ec8519180f986f9d1e9c",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [
+        "std::isfinite(control.speedCapMps)",
+        "std::isfinite(distance_m)",
+        "qRound(distance_m)",
+        "qRound(distance_m * 3.28084f)",
+        "qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f))",
+        "std::isfinite(limit)",
+        "qRound(limit)",
+        "qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f))"
+      ],
+      "signalSlotReferences": []
+    },
+    "selfdrive/ui/sunnypilot/qt/widgets/controls.cc": {
+      "blobTextSha256": "21a147cff2e21bff6a2037f665e4a825a1178fc046b091ef51442eaf91daf0aa",
+      "orderedCalls": [
+        [
+          "params.putBool(key + \"Confirmed\", true);",
+          "params.putBool(key, state);"
+        ],
+        [],
+        [
+          "emit showDescriptionEvent();",
+          "emit showDescriptionEvent();"
+        ]
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&QPushButton::clicked",
+        "&QPushButton::clicked",
+        "&QPushButton::clicked",
+        "&ButtonControlSP::clicked",
+        "&ParamControlSP::toggleFlipped",
+        "&ParamControlSP::toggleClicked"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/widgets/controls.h": {
+      "blobTextSha256": "08335dad1f0926752f98eb112ff93df222f37cff385ea5da37be50435f88c354",
+      "orderedCalls": [
+        [
+          "params.put(key, std::to_string(id));",
+          "params.put(key, QString::number(scaled_value, 'f', 2).toStdString());",
+          "params.put(key, value_str.toStdString());",
+          "params.putBool(key, !is_enabled);"
+        ],
+        [
+          "btn.setEnabled(enabled);",
+          "toggle.setEnabled(enabled);",
+          "btn->setEnabled(enable);",
+          "button->setEnabled((i == 0) ? !(value <= range.min_value) : !(value >= range.max_value));",
+          "btn->setEnabled(enabled);",
+          "label.setEnabled(enabled);"
+        ],
+        [
+          "emit clicked();",
+          "emit updateOtherToggles();"
+        ]
+      ],
+      "orderedMath": [
+        "std::clamp(value, range.min_value, range.max_value)"
+      ],
+      "signalSlotReferences": [
+        "&ToggleSP::stateChanged",
+        "&ToggleControlSP::toggleFlipped",
+        "&QButtonGroup::buttonClicked",
+        "&MultiButtonControlSP::buttonClicked",
+        "&MultiButtonControlSP::buttonClicked",
+        "&QPushButton::clicked"
+      ]
+    },
+    "selfdrive/ui/sunnypilot/qt/widgets/external_storage.cc": {
+      "blobTextSha256": "ed1d6068f3914a4a80403f420c185c46c9360284e49ed7e3305634eae32045c4",
+      "orderedCalls": [
+        [],
+        [],
+        []
+      ],
+      "orderedMath": [],
+      "signalSlotReferences": [
+        "&ButtonControl::clicked",
+        "&UIState::offroadTransition",
+        "&ExternalStorageControl::updateState",
+        "&QProcess::finished",
+        "&ExternalStorageControl::debouncedRefresh"
+      ]
+    }
+  },
+  "newPresentationHelpers": [
+    "selfdrive/ui/qt/comma_ui_qa.cpp",
+    "selfdrive/ui/qt/comma_ui_qa.h",
+    "selfdrive/ui/qt/offroad/training_overlay.h",
+    "selfdrive/ui/qt/onroad/alerts_ru.cpp",
+    "selfdrive/ui/qt/onroad/alerts_ru.h",
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/camera_error_ru.h",
+    "selfdrive/ui/sunnypilot/qt/widgets/ru_title_button.h"
+  ]
+}

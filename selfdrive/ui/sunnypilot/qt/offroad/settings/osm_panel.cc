@@ -127,7 +127,7 @@ ButtonControlSP *OsmPanel::setupOsmDownloadButton(QWidget *parent) {
 ButtonControlSP *OsmPanel::setupUsStatesButton(QWidget *parent) {
   usStatesBtn = new ButtonControlSP(tr("State"), tr("SELECT"));
   connect(usStatesBtn, &ButtonControlSP::clicked, [=]() {
-    const std::tuple<QString, QString> allStatesOption = std::make_tuple("All States (~4.8 GB)", "All");
+    const std::tuple<QString, QString> allStatesOption = std::make_tuple(tr("All States (~4.8 GB)"), "All");
     usStatesBtn->setEnabled(false);
     usStatesBtn->setValue(tr("Fetching State list..."));
     const std::vector<std::tuple<QString, QString, QString, QString> > locations =

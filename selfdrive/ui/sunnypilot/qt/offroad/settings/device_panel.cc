@@ -58,7 +58,13 @@ DevicePanelSP::DevicePanelSP(SettingsWindowSP *parent) : DevicePanel(parent) {
 
   if (Hardware::TICI()) {
     connect(buttons["regulatoryBtn"], &PushButtonSP::clicked, [=]() {
-      const std::string txt = util::read_file("../assets/offroad/fcc.html");
+      std::string txt;
+      if (params.get("LanguageSetting") == "main_ru") {
+        txt = util::read_file("../assets/offroad/fcc_ru.html");
+      }
+      if (txt.empty()) {
+        txt = util::read_file("../assets/offroad/fcc.html");
+      }
       ConfirmationDialog::rich(QString::fromStdString(txt), this);
     });
   }
@@ -83,7 +89,7 @@ DevicePanelSP::DevicePanelSP(SettingsWindowSP *parent) : DevicePanel(parent) {
   connect(maxTimeOffroad, &OptionControlSP::updateLabels, maxTimeOffroad, &MaxTimeOffroad::refresh);
   addItem(maxTimeOffroad);
 
-  toggleDeviceBootMode = new ButtonParamControlSP("DeviceBootMode", tr("Wake-Up Behavior"), "", "", {"Default", "Offroad"}, 375, true);
+  toggleDeviceBootMode = new ButtonParamControlSP("DeviceBootMode", tr("Wake-Up Behavior"), "", "", {tr("Default"), tr("Offroad")}, 375, true);
   addItem(toggleDeviceBootMode);
 
   connect(toggleDeviceBootMode, &ButtonParamControlSP::buttonClicked, this, [=](int index) {

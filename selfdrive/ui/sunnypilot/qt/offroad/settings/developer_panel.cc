@@ -48,7 +48,8 @@ DeveloperPanelSP::DeveloperPanelSP(SettingsWindow *parent) : DeveloperPanel(pare
     QFileInfo file("/data/community/crashes/error.log");
     QString text;
     if (file.exists()) {
-      text = "<b>" + file.lastModified().toString("dd-MMM-yyyy hh:mm:ss ").toUpper() + "</b><br><br>";
+      const bool russian = Params().get("LanguageSetting") == "main_ru";
+      text = "<b>" + file.lastModified().toString(russian ? "dd.MM.yyyy HH:mm:ss " : "dd-MMM-yyyy hh:mm:ss ").toUpper() + "</b><br><br>";
     }
     text += QString::fromStdString(util::read_file("/data/community/crashes/error.log"));
     ConfirmationDialog::rich(text, this);

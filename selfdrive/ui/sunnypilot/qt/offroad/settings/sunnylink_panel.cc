@@ -49,9 +49,18 @@ SunnylinkPanel::SunnylinkPanel(QWidget *parent) : QFrame(parent) {
 
   sunnylinkDesc->setStyleSheet("font-size: 40px; font-weight: 100; font-family: 'Noto';");
   sponsorMsg->setStyleSheet("font-size: 35px; font-weight: 100; font-family: 'Noto';");
+  if (Params().get("LanguageSetting") == "main_ru") {
+    sunnylinkDesc->setWordWrap(true);
+    sponsorMsg->setWordWrap(true);
+  }
 
-  titleLayout->addWidget(sunnylinkDesc, 0, Qt::AlignCenter);
-  titleLayout->addWidget(sponsorMsg, 0, Qt::AlignCenter);
+  if (Params().get("LanguageSetting") == "main_ru") {
+    titleLayout->addWidget(sunnylinkDesc);
+    titleLayout->addWidget(sponsorMsg);
+  } else {
+    titleLayout->addWidget(sunnylinkDesc, 0, Qt::AlignCenter);
+    titleLayout->addWidget(sponsorMsg, 0, Qt::AlignCenter);
+  }
 
   list->addItem(titleLayout);
 
@@ -137,6 +146,7 @@ SunnylinkPanel::SunnylinkPanel(QWidget *parent) : QFrame(parent) {
   // Settings Restore and Settings Backup in the same horizontal space
   auto settings_layout = new QHBoxLayout;
   settings_layout->setContentsMargins(0, 0, 0, 30);
+  if (Params().get("LanguageSetting") == "main_ru") settings_layout->setSpacing(0);
   settings_layout->addWidget(backupSettings, 0, Qt::AlignLeft);
   settings_layout->addSpacing(10);
   settings_layout->addWidget(restoreSettings, 0, Qt::AlignRight);

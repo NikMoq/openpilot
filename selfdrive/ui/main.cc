@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QTranslator>
+#include "selfdrive/ui/qt/comma_ui_qa.h"
 
 #include "system/hardware/hw.h"
 #include "selfdrive/ui/qt/util.h"
@@ -32,5 +33,8 @@ int main(int argc, char *argv[]) {
   MainWindow w;
   setMainWindow(&w);
   a.installEventFilter(&w);
+#ifdef COMMA_UI_QA_LINKED
+  commaUiQaInstall();
+#endif
   return a.exec();
 }

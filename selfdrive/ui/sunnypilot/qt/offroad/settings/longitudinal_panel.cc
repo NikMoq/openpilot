@@ -10,6 +10,7 @@
 #include "selfdrive/ui/sunnypilot/qt/util.h"
 
 LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
+  russian_help = params.get("LanguageSetting") == "main_ru";
   setStyleSheet(R"(
     #back_btn {
       font-size: 50px;
@@ -37,7 +38,7 @@ LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
 
   intelligentCruiseButtonManagement = new ParamControlSP(
     "IntelligentCruiseButtonManagement",
-    tr("Intelligent Cruise Button Management (ABCM)"),
+    tr("Intelligent Cruise Button Management (ICBM)"),
     "",
     "",
     this
@@ -91,6 +92,12 @@ LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
   main_layout->addWidget(cruisePanelScreen);
   main_layout->addWidget(speedLimitScreen);
   main_layout->setCurrentWidget(cruisePanelScreen);
+  if (russian_help) {
+    for (auto *control : findChildren<AbstractControlSP *>()) control->setDescriptionFontSize(34);
+    connect(device(), &Device::displayPowerChanged, this, [this](bool on) {
+      if (!on) collapseRussianHelp();
+    });
+  }
   refresh(offroad);
 }
 
@@ -99,7 +106,13 @@ void LongitudinalPanel::showEvent(QShowEvent *event) {
   refresh(offroad);
 }
 
+void LongitudinalPanel::collapseRussianHelp() {
+  if (!russian_help) return;
+  for (auto *control : findChildren<AbstractControlSP *>()) control->hideDescription();
+}
+
 void LongitudinalPanel::hideEvent(QHideEvent *event) {
+  collapseRussianHelp();
   main_layout->setCurrentWidget(cruisePanelScreen);
 }
 
@@ -139,7 +152,7 @@ void LongitudinalPanel::refresh(bool _offroad) {
       }
 
       intelligentCruiseButtonManagement->setDescription("<b>" + long_desc + "</b><br><br>" + icbm_description);
-      intelligentCruiseButtonManagement->showDescription();
+      if (!russian_help) intelligentCruiseButtonManagement->showDescription();
     }
 
     if (has_longitudinal_control || has_icbm) {
@@ -177,20 +190,20 @@ void LongitudinalPanel::refresh(bool _offroad) {
   QString onroadOnlyDescription = tr("Start the vehicle to check vehicle compatibility.");
 
   if (offroad) {
-    customAccIncrement->setDescription(onroadOnlyDescription);
-    customAccIncrement->showDescription();
+    customAccIncrement->setDescription(russian_help ? accEnabledDescription + "<br><br>" + onroadOnlyDescription : onroadOnlyDescription);
+    if (!russian_help) customAccIncrement->showDescription();
   } else {
     if (has_longitudinal_control || has_icbm) {
       if (has_longitudinal_control && is_pcm_cruise) {
-        customAccIncrement->setDescription(accPcmCruiseDisabledDescription);
-        customAccIncrement->showDescription();
+        customAccIncrement->setDescription(russian_help ? accEnabledDescription + "<br><br>" + accPcmCruiseDisabledDescription : accPcmCruiseDisabledDescription);
+        if (!russian_help) customAccIncrement->showDescription();
       } else {
         customAccIncrement->setDescription(accEnabledDescription);
       }
     } else {
       customAccIncrement->toggleFlipped(false);
-      customAccIncrement->setDescription(accNoLongDescription);
-      customAccIncrement->showDescription();
+      customAccIncrement->setDescription(russian_help ? accEnabledDescription + "<br><br>" + accNoLongDescription : accNoLongDescription);
+      if (!russian_help) customAccIncrement->showDescription();
     }
   }
 

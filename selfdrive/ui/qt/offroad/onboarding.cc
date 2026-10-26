@@ -1,4 +1,5 @@
 #include "selfdrive/ui/qt/offroad/onboarding.h"
+#include "selfdrive/ui/qt/offroad/training_overlay.h"
 
 #include <string>
 
@@ -55,7 +56,18 @@ void TrainingGuide::showEvent(QShowEvent *event) {
 }
 
 QImage TrainingGuide::loadImage(int id) {
-  QImage img(img_path + QString("step%1.png").arg(id));
+  const QString source_path = img_path + QString("step%1.png").arg(id);
+  QImage img(source_path);
+  QString overlay_diagnostic;
+  img = drawRussianTrainingOverlay(img, source_path, img_path + "training_overlay_layout.json", id,
+                                   QString::fromStdString(Params().get("LanguageSetting")), &overlay_diagnostic);
+  static QString last_overlay_diagnostic;
+  if (overlay_diagnostic != last_overlay_diagnostic) {
+    last_overlay_diagnostic = overlay_diagnostic;
+    if (!overlay_diagnostic.isEmpty()) {
+      qWarning("Russian training overlay skipped: %s", qPrintable(overlay_diagnostic));
+    }
+  }
   image_raw_size = img.size();
   if (image_raw_size != rect().size()) {
     img = img.scaled(width(), height(), Qt::KeepAspectRatio, Qt::SmoothTransformation);

@@ -1,0 +1,168 @@
+{
+  "source_base": "6395399fc448c46a8d265be6cdd9e82d3597a8a9",
+  "status": "OFFLINE_BUILD_AND_QT_CHECKS_PASS",
+  "qt": "5.12.8",
+  "artifacts": {
+    "selfdrive/ui/ui": {
+      "sha256": "6b8da5208f91f804cd928258ffb76523bcb497a94e711878a72614d11a9c58d9",
+      "bytes": 6756136
+    },
+    "selfdrive/ui/translations/main_ru.qm": {
+      "sha256": "0f59d4b9058ba0332815fc0f8dbf978287a424c0adceba8ee82c02a537b200f1",
+      "bytes": 222971
+    },
+    "selfdrive/ui/translations/main_ru.ts": {
+      "sha256": "2e16fe1f054bf8c72cab31cef1a8def2e3b4aea26ead5ce74bc7985130e1685b",
+      "bytes": 269566
+    }
+  },
+  "catalog": {
+    "messages": 1293,
+    "contexts": 106,
+    "original_keys_preserved": 778,
+    "added_keys": 515,
+    "lupdate_extracted_keys": 788,
+    "missing_keys": 0
+  },
+  "checks": {
+    "arm": {
+      "evidence_sha256": "c50cf705ec4408a05df08e6215ef91a44d64b45e225be81fa3ee4f231d87daf9",
+      "candidate": {
+        "sha256": "6b8da5208f91f804cd928258ffb76523bcb497a94e711878a72614d11a9c58d9",
+        "size": 6756136,
+        "needed": [
+          "libQt5Network.so.5",
+          "libQt5Concurrent.so.5",
+          "libQt5DBus.so.5",
+          "libQt5Xml.so.5",
+          "libQt5Svg.so.5",
+          "libQt5Widgets.so.5",
+          "libQt5Gui.so.5",
+          "libQt5Core.so.5",
+          "libzmq.so.5",
+          "libOpenCL.so",
+          "libEGL_adreno.so",
+          "libGLESv2_adreno.so",
+          "libwayland-client.so.0",
+          "libpthread.so.0",
+          "libdl.so.2",
+          "libm.so.6",
+          "libstdc++.so.6",
+          "libgcc_s.so.1",
+          "libc.so.6",
+          "ld-linux-aarch64.so.1"
+        ],
+        "rpath_runpath": [],
+        "abi_max": {
+          "GLIBC": "GLIBC_2.29",
+          "GLIBCXX": "GLIBCXX_3.4.26",
+          "CXXABI": "CXXABI_1.3.11"
+        },
+        "elf64": true,
+        "aarch64": true
+      },
+      "tracked_english": {
+        "sha256": "d36447230a2947d1070dd227a5364ee836f8ba95da4d761d2805d00d1f79538b",
+        "size": 6560840,
+        "needed": [
+          "libQt5Network.so.5",
+          "libQt5Concurrent.so.5",
+          "libQt5DBus.so.5",
+          "libQt5Xml.so.5",
+          "libQt5Svg.so.5",
+          "libQt5Widgets.so.5",
+          "libQt5Gui.so.5",
+          "libQt5Core.so.5",
+          "libzmq.so.5",
+          "libOpenCL.so",
+          "libEGL_adreno.so",
+          "libGLESv2_adreno.so",
+          "libwayland-client.so.0",
+          "libpthread.so.0",
+          "libdl.so.2",
+          "libm.so.6",
+          "libstdc++.so.6",
+          "libgcc_s.so.1",
+          "libc.so.6",
+          "ld-linux-aarch64.so.1"
+        ],
+        "rpath_runpath": [],
+        "abi_max": {
+          "GLIBC": "GLIBC_2.29",
+          "GLIBCXX": "GLIBCXX_3.4.26",
+          "CXXABI": "CXXABI_1.3.11"
+        },
+        "elf64": true,
+        "aarch64": true
+      },
+      "resources": {
+        "device_qm_sha256": "0f59d4b9058ba0332815fc0f8dbf978287a424c0adceba8ee82c02a537b200f1",
+        "pc_device_qm_equal": true,
+        "rcc_decoded_qm_equal": true,
+        "exact_compressed_resource_packet_in_elf": true,
+        "compressed_payload_in_elf": true,
+        "ts_sha256": "2e16fe1f054bf8c72cab31cef1a8def2e3b4aea26ead5ce74bc7985130e1685b"
+      },
+      "checks": {
+        "needed_equal": true,
+        "abi_max_equal": true,
+        "no_qt5test": true,
+        "icbm_literal": true,
+        "abcm_literal_absent": true,
+        "qa_flag_literal_present": true,
+        "qa_default_opt_out_source": true,
+        "source_files_stable_during_audit": true
+      },
+      "source_snapshot": {
+        "files": 268,
+        "sha256": "16cfddf684d5d2106c2b3668c6b2460bdfc07df2a81fe4500aa959a60cd12cb8",
+        "manifest": "russian_build_inputs.json",
+        "host_container_exact_lf": true,
+        "mismatches": [],
+        "input_cc_lf_sha256": "7c68732f4b3b6ec6dc95df6bb26418b0d7f431205ad945895004f1d134f87e69"
+      },
+      "device_actions": false,
+      "status": "OFFLINE_ARM_COMPATIBILITY_PASS",
+      "artifact_install": {
+        "before_ui_sha256": "d36447230a2947d1070dd227a5364ee836f8ba95da4d761d2805d00d1f79538b",
+        "before_qm_sha256": "055a4d2472d31fdbccc533ece3ad3918111534fdd94c9972696e2cd0dfb0d6c7",
+        "target": "workspace/ru_ui_dev_a5",
+        "committed": false,
+        "device_actions": false,
+        "ui_sha256": "6b8da5208f91f804cd928258ffb76523bcb497a94e711878a72614d11a9c58d9",
+        "qm_sha256": "0f59d4b9058ba0332815fc0f8dbf978287a424c0adceba8ee82c02a537b200f1"
+      }
+    },
+    "menus": {
+      "evidence_sha256": "63512f56c20e007a794ff040a943fdb09e22590b7199f725f00ab93066a9dc6f",
+      "captures": 144,
+      "profiles": 37,
+      "positive_scroll_regions": 23,
+      "horizontal_clips": 0,
+      "scroll_coverage_gaps": 0,
+      "help_title_click_and_collapse": "PASS",
+      "binary_sha256": "da9425852ca5d29ce06f626ebd568a92c0437512f08b8a2bf16c09b0d0bdaf50"
+    },
+    "dialogs": {
+      "evidence_sha256": "973f84cc76a2226532c60588c8d8dcfdbb3724e396931485d01560f9db1a9f9f",
+      "cases": 12,
+      "keys_per_input": 34,
+      "key_intersections": 0,
+      "out_of_frame": 0,
+      "long_url_and_32_character_ssid": "PASS"
+    }
+  },
+  "additional_checks": {
+    "training_native_pages": 19,
+    "alerts_native_cases": 249,
+    "camera_error_native_static": 38,
+    "camera_error_native_dynamic_templates": 5,
+    "portable_presentation_tests": 5,
+    "device_deployment_or_hardware_validation": false
+  },
+  "limits": [
+    "Native Qt host fixtures cover captured profiles; other hardware and dynamic state branches require device verification.",
+    "The user will check the published dev build on their Comma 3."
+  ],
+  "built_with_qa_default": "off"
+}

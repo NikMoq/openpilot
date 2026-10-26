@@ -52,5 +52,5 @@ void SpeedLimitPolicy::refresh() {
 void SpeedLimitPolicy::showEvent(QShowEvent *event) {
   speedLimitPolicyScroller->verticalScrollBar()->setValue(0);
   refresh();
-  speed_limit_policy->showDescription();
+  if (params.get("LanguageSetting") != "main_ru") speed_limit_policy->showDescription();
 }

@@ -32,10 +32,10 @@ inline void drawCameraOverlay(QPainter &p, const QRect &surface, bool valid,
   if (!valid_distance && !show_target && !show_position_hold) return;
 
   const QString distance = valid_distance ? (metric
-    ? (distance_m < 1000 ? QString::number(qRound(distance_m)) + " m"
-                        : QString::number(distance_m / 1000, 'f', 1) + " km")
-    : (distance_m < 1609 ? QString::number(qRound(distance_m * 3.28084f)) + " ft"
-                        : QString::number(distance_m / 1609.344f, 'f', 1) + " mi")) : QString();
+    ? (distance_m < 1000 ? QString::number(qRound(distance_m)) + QObject::tr(" m")
+                        : QString::number(distance_m / 1000, 'f', 1) + QObject::tr(" km"))
+    : (distance_m < 1609 ? QString::number(qRound(distance_m * 3.28084f)) + QObject::tr(" ft")
+                        : QString::number(distance_m / 1609.344f, 'f', 1) + QObject::tr(" mi"))) : QString();
   const QColor color = distance_m <= 100 ? QColor(255, 80, 80)
                         : (distance_m <= 300 ? QColor(255, 190, 60) : QColor(Qt::white));
   const QRect rect(surface.right() - 395, surface.top() + 45, 360, waiting_for_map ? 180 : (show_target ? 165 : 155));
@@ -56,12 +56,12 @@ inline void drawCameraOverlay(QPainter &p, const QRect &surface, bool valid,
       p.setFont(InterFont(25, QFont::Normal));
       p.drawText(rect.adjusted(16, 130, -16, 0), Qt::AlignTop | Qt::AlignLeft,
                  QObject::tr("ACC TARGET %1 %2").arg(qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f)))
-                                        .arg(metric ? "km/h" : "mph"));
+                                        .arg(metric ? QObject::tr("km/h") : QObject::tr("mph")));
     }
   } else {
     p.setFont(InterFont(27, QFont::Normal));
     const QString camera_limit = valid_distance && std::isfinite(limit) && limit > 0
-      ? QString::number(qRound(limit)) + (metric ? " km/h" : " mph") : QString();
+      ? QString::number(qRound(limit)) + (metric ? QObject::tr(" km/h") : QObject::tr(" mph")) : QString();
     if (!camera_limit.isEmpty()) {
       p.drawText(rect.adjusted(16, 52, -16, 0), Qt::AlignTop | Qt::AlignLeft, camera_limit);
     }
@@ -75,7 +75,7 @@ inline void drawCameraOverlay(QPainter &p, const QRect &surface, bool valid,
       p.setFont(InterFont(25, QFont::Normal));
       p.drawText(rect.adjusted(16, 113, -16, 0), Qt::AlignTop | Qt::AlignLeft,
                  QObject::tr("ACC TARGET %1 %2").arg(qRound(control.speedCapMps * (metric ? 3.6f : 2.23694f)))
-                                            .arg(metric ? "km/h" : "mph"));
+                                            .arg(metric ? QObject::tr("km/h") : QObject::tr("mph")));
     }
   }
   p.restore();

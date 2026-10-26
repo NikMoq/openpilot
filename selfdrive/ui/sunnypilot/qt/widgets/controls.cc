@@ -6,6 +6,7 @@
  */
 
 #include "selfdrive/ui/sunnypilot/qt/widgets/controls.h"
+#include "selfdrive/ui/sunnypilot/qt/widgets/ru_title_button.h"
 
 #include <QPainter>
 #include <QStyleOption>
@@ -57,8 +58,7 @@ AbstractControlSP::AbstractControlSP(const QString &title, const QString &desc, 
   hlayout->setSpacing(20);
 
   // title
-  title_label = new QPushButton(title);
-  title_label->setFixedHeight(120);
+  title_label = makeControlTitleButton(title, Params().get("LanguageSetting") == "main_ru");
   title_label->setStyleSheet("font-size: 50px; font-weight: 450; text-align: left; border: none;");
   hlayout->addWidget(title_label, 1);
 
@@ -131,8 +131,7 @@ AbstractControlSP_SELECTOR::AbstractControlSP_SELECTOR(const QString &title, con
 
   // title
   if (!title.isEmpty()) {
-    title_label = new QPushButton(title);
-    title_label->setFixedHeight(120);
+    title_label = makeControlTitleButton(title, Params().get("LanguageSetting") == "main_ru");
     title_label->setStyleSheet("font-size: 50px; font-weight: 450; text-align: left; border: none; padding: 0 0 0 0");
     main_layout->addWidget(title_label, 1);
 

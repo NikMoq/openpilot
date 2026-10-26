@@ -24,6 +24,7 @@ FirehosePanel::FirehosePanel(SettingsWindow *parent) : QWidget((QWidget*)parent)
   // header
   QLabel *title = new QLabel(tr("Firehose Mode"));
   title->setStyleSheet("font-size: 100px; font-weight: 500; font-family: 'Noto Color Emoji';");
+  if (Params().get("LanguageSetting") == "main_ru") title->setWordWrap(true);
   layout->addWidget(title, 0, Qt::AlignCenter);
 
   // Create a container for the content
@@ -47,6 +48,7 @@ FirehosePanel::FirehosePanel(SettingsWindow *parent) : QWidget((QWidget*)parent)
 
   toggle_label = new QLabel(tr("Firehose Mode: ACTIVE"));
   toggle_label->setStyleSheet("font-size: 60px; font-weight: bold; color: white;");
+  if (Params().get("LanguageSetting") == "main_ru") toggle_label->setWordWrap(true);
   content_layout->addWidget(toggle_label);
 
   // Add contribution label

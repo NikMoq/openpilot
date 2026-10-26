@@ -90,7 +90,7 @@ void SoftwarePanelSP::searchBranches(const QString &query) {
 
 void SoftwarePanelSP::handleDisableUpdatesToggled(bool state) {
   if (ConfirmationDialog::confirm(tr("%1 updates requires a reboot.<br>Reboot now?")
-      .arg(state ? "Disabling" : "Enabling"), tr("Reboot"), this)) {
+      .arg(state ? tr("Disabling") : tr("Enabling")), tr("Reboot"), this)) {
     params.putBool("DoReboot", true);
   } else {
     params.putBool("DisableUpdates", !state);

@@ -97,10 +97,15 @@ def main():
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--device", action="store_true", help="Build for the Comma ARM64 hardware APIs")
   parser.add_argument("--preview", action="store_true", help="Build the actual settings-widget preview instead of the main UI")
+  parser.add_argument("--ru-preview", action="store_true", help="Build isolated Russian settings screenshots with actual Qt widgets")
   parser.add_argument("--sysroot", type=Path, help="ARM64 sysroot for native host cross-compilation")
   parser.add_argument("--vendor-libs", type=Path, help="Read-only copy of the device's EGL/GLES libraries for ABI-compatible linking")
   parser.add_argument("-j", type=int, default=4)
   args = parser.parse_args()
+  if args.ru_preview:
+    if args.device:
+      parser.error("--ru-preview is a host-only isolated fixture")
+    args.preview = True
   os.chdir(ROOT)
   if args.sysroot:
     repair_sysroot_links(args.sysroot)
@@ -154,9 +159,13 @@ def main():
   sources = sorted({entry["file"].replace("/data/openpilot/", "") for entry in commands
                     if "/selfdrive/ui/" in entry["file"] and entry["file"].endswith(".cc")
                     and "/moc_" not in entry["file"] and "/tests/" not in entry["file"]})
+  # Presentation helper is absent from the shipped compile database.
+  sources.append("selfdrive/ui/qt/onroad/alerts_ru.cpp")
+  sources.append("selfdrive/ui/qt/comma_ui_qa.cpp")
+  flags.append("-DCOMMA_UI_QA_LINKED")
   if args.preview:
     sources.remove("selfdrive/ui/main.cc")
-    sources.append("tools/ui_build/preview.cc")
+    sources.append("tools/ui_build/ru_preview.cc" if args.ru_preview else "tools/ui_build/preview.cc")
   sources += ["common/" + name + ".cc" for name in ("params", "swaglog", "util", "watchdog", "ratekeeper", "clutil")]
   sources += ["common/transformations/orientation.cc", "common/transformations/coordinates.cc",
               "cereal/messaging/socketmaster.cc", "third_party/json11/json11.cpp", "third_party/qrcode/QrCode.cc"]
@@ -199,6 +208,8 @@ def main():
   libs = [*qt_libs, "-Wl,--as-needed", "-Wl,-Bstatic", "-lcapnp", "-lkj", "-lssl", "-lcrypto", "-Wl,-Bdynamic",
           "-Wl,--exclude-libs,ALL", "-lzmq", "-lOpenCL", "-lEGL", "-lGLESv2", "-lGL",
           "-lwayland-client", "-lpthread", "-ldl", "-lm", "-Wl,--no-undefined"]
+  if args.ru_preview:
+    libs += shlex.split(run(["pkg-config", "--libs", "Qt5Test"]))
   if args.sysroot:
     for directory in (args.sysroot / "lib/aarch64-linux-gnu", args.sysroot / "usr/lib/aarch64-linux-gnu"):
       libs.insert(0, "-Wl,-rpath-link," + str(directory))
@@ -232,7 +243,7 @@ def main():
     target = build / "obj" / (source.replace("/", "_").replace("\\", "_") + ".o")
     objects.append(str(target))
     ninja.append(f"build {target}: cxx {source}")
-  target = build / ("camera-preview" if args.preview else "ui")
+  target = build / ("ru-preview" if args.ru_preview else "camera-preview" if args.preview else "ui")
   ninja += [f"build {target}: link " + " ".join(objects), f"default {target}"]
   manifest = build / "build.ninja"
   manifest.write_text("\n".join(ninja) + "\n")

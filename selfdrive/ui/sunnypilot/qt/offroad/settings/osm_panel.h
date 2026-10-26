@@ -211,10 +211,10 @@ private:
 
     if (size < gb) {
       const double sizeMB = size / static_cast<double>(mb);
-      return QString::number(sizeMB, 'f', 2) + " MB";
+      return QString::number(sizeMB, 'f', 2) + " " + tr("MB");
     } else {
       const double sizeGB = size / static_cast<double>(gb);
-      return QString::number(sizeGB, 'f', 2) + " GB";
+      return QString::number(sizeGB, 'f', 2) + " " + tr("GB");
     }
   }
 

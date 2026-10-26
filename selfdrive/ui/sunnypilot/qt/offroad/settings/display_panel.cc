@@ -58,8 +58,8 @@ void DisplayPanel::refresh() {
 
   QString timeoutValue = QString::fromStdString(params.get("InteractivityTimeout"));
   if (timeoutValue == "0" || timeoutValue.isEmpty()) {
-    interactivityTimeout->setLabel("Default");
+    interactivityTimeout->setLabel(tr("Default"));
   } else {
-    interactivityTimeout->setLabel(timeoutValue + "s");
+    interactivityTimeout->setLabel(timeoutValue + tr("s"));
   }
 }

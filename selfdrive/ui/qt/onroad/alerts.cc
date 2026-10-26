@@ -1,4 +1,6 @@
 #include "selfdrive/ui/qt/onroad/alerts.h"
+#include "selfdrive/ui/qt/onroad/alerts_ru.h"
+#include "common/params.h"
 
 #include <QPainter>
 #include <map>
@@ -51,6 +53,9 @@ OnroadAlerts::Alert OnroadAlerts::getAlert(const SubMaster &sm, uint64_t started
       }
     }
   }
+  const QString language = QString::fromStdString(Params().get("LanguageSetting"));
+  a.text1 = CommaRu::presentAlertText(a.text1, language);
+  a.text2 = CommaRu::presentAlertText(a.text2, language);
   return a;
 }
 

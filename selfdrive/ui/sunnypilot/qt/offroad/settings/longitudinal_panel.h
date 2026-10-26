@@ -22,7 +22,9 @@ public:
   void refresh(bool _offroad);
 
 private:
+  void collapseRussianHelp();
   Params params;
+  bool russian_help = false;
   bool has_longitudinal_control = false;
   bool is_pcm_cruise = false;
   bool has_icbm = false;

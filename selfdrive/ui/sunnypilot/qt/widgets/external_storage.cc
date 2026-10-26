@@ -91,7 +91,7 @@ void ExternalStorageControl::refresh() {
           setValue(info);
           setText(tr("UNMOUNT"));
         } else {
-          setValue("drive detected");
+          setValue(tr("drive detected"));
           setText(tr("MOUNT"));
         }
         updateState(!uiState()->scene.started);

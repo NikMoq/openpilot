@@ -46,7 +46,7 @@ TorqueLateralControlCustomParams::TorqueLateralControlCustomParams(const QString
 void TorqueLateralControlCustomParams::refresh() {
   bool torque_override_param = params.getBool("TorqueParamsOverrideEnabled");
   float laf_param = QString::fromStdString(params.get("TorqueParamsOverrideLatAccelFactor")).toFloat();
-  const QString laf_unit = "m/s²";
+  const QString laf_unit = tr("m/s²");
 
   float friction_param = QString::fromStdString(params.get("TorqueParamsOverrideFriction")).toFloat();
 
