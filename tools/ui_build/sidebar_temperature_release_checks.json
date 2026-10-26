@@ -1,0 +1,48 @@
+{
+  "base_commit": "6b6c1df126a9e45dc3cad43fd60bd473e518fcdb",
+  "isolated_commit": "f118045844ea41850a6103b9282af006e43010a0",
+  "target": "Comma 3 clone, AArch64 QCOM2, Qt 5.12.8, CPython 3.12",
+  "artifacts_sha256": {
+    "ui": "2b965c4949f6ec7d44766c5d253371c935185030b5c5121bcc3c6c7026d29dd1",
+    "main_ru.qm": "7ae00a79d7b95bd7e37d2547dfdb2eaba78354c374ce3067c00bb9775d76da25",
+    "params_pyx.so": "d4b44c436b2121f5e2b07f8e78c110c8512dc796ad61fa7308321724ff06508a"
+  },
+  "build_input_sha256": {
+    "common/params_keys.h": "e42462646fe6dce952fa57fb86d3d441b99a1366d825701f94824cbb4ec15200",
+    "selfdrive/ui/sunnypilot/qt/sidebar.cc": "8b2c090fb364053739bf5fadd6d9a774e6816b6bec602802231373f254016241",
+    "selfdrive/ui/sunnypilot/qt/sidebar.h": "5a7ab0fe80f13fcc6826797b919388d80a0e5b4e30821d448152d06b09c10a5c",
+    "selfdrive/ui/sunnypilot/qt/sidebar_temperature.h": "b5f825dd5441f5aefc85dd2db6a2da3f3693a39161b1c79bb5de14d16f37fdbc",
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/display_panel.cc": "15c9c0a1c4997338b88237f31fb4ba1a6ba365659d5833b91dc34ec4abc9bf7d",
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/max_time_offroad.cc": "cb98bcbd0bd62a8fd405faad7378d70c4aaae40a4e9c7750287600d275ba9f3e",
+    "selfdrive/ui/sunnypilot/qt/widgets/controls.h": "43fe021d6ab58948088abe087b21ec1bb2b7bdd728cb446f851ed06b331ed9ab",
+    "selfdrive/ui/translations/main_ru.ts": "fcd9dd6d2e8d7c95c1dff3f8e5c927c46a03c4fb1d986253340a395a7fcd455a"
+  },
+  "verification": [
+    "C++ selection cases: CPU, GPU and RAM hottest; partial and absent sensors; modes 1-3 — PASS",
+    "QCOM2 ARM64 CPython 3.12 Params: INT default 0, PERSISTENT|BACKUP, values 0-4 survive manager clear and reopen — PASS",
+    "Existing camera Params persistence regression — PASS",
+    "Fresh disposable ARM64 /data tmpfs: default Params() resolves /data/params/d and shares explicit namespace — PASS",
+    "Targeted actual Qt 5.12.8 preview: five options, invalid 2junk -> Status, auto shutdown 0/default/max, readable minus/plus, no clipping — PASS"
+  ],
+  "scope": "Offline build and Qt preview only; no device installation or hardware interaction",
+  "primary_source_commit": "29cce49",
+  "primary_verification": {
+    "artifacts_byte_exact": true,
+    "source_matches_build_inputs": true,
+    "git_crlf_only_conversion": [
+      "selfdrive/ui/sunnypilot/qt/sidebar_temperature.h"
+    ],
+    "elf_machine": "AArch64",
+    "rpath": false,
+    "abi_max": {
+      "GLIBC": "2.29",
+      "GLIBCXX": "3.4.26",
+      "CXXABI": "1.3.11"
+    },
+    "qt_screens_visually_reviewed": [
+      "glyph_fix/display/display-bottom.png",
+      "glyph_fix/device-default/device-default-top.png",
+      "sidebar/sidebar-full-cpu.png"
+    ]
+  }
+}
