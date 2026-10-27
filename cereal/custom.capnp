@@ -29,6 +29,13 @@ struct IntelligentCruiseButtonManagement {
   state @0 :IntelligentCruiseButtonManagementState;
   sendButton @1 :SendButtonState;
   vTarget @2 :Float32;
+  speedUnit @3 :SpeedUnit;
+
+  enum SpeedUnit {
+    unknown @0;
+    kph @1;
+    mph @2;
+  }
 
   enum IntelligentCruiseButtonManagementState {
     inactive @0;      # No button press or default state
@@ -482,9 +489,24 @@ struct ModelDataV2SP @0xa1680744031fdb2d {
 }
 
 struct CustomReserved10 @0xcb9fd56c7057593a {
+  # One correlated Panda button request. button: 1=UP, 2=DOWN, 3=SET, 4=RES.
+  requestId @0 :UInt16;
+  button @1 :UInt8;
+  valid @2 :Bool;
 }
 
 struct CustomReserved11 @0xc2243c65e0340384 {
+  # Panda 10.2.0 ICBM transport status. Signature match is checked in pandad
+  # against an explicitly configured expected signature; absence means false.
+  signatureMatched @0 :Bool;
+  protocolValid @1 :Bool;
+  pandaCount @2 :UInt8;
+  state @3 :UInt8;
+  button @4 :UInt8;
+  reason @5 :UInt8;
+  requestId @6 :UInt16;
+  txCounter @7 :UInt16;
+  statusMonoTimeNs @8 :UInt64;  # First pandad observation of this status transition.
 }
 
 struct CustomReserved12 @0x9ccdc8676701b412 {

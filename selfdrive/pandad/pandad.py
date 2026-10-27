@@ -11,6 +11,7 @@ from openpilot.common.basedir import BASEDIR
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 from openpilot.common.swaglog import cloudlog
+from openpilot.selfdrive.pandad.pq_icbm_release import prepare_pairing
 
 
 def get_expected_signature(panda: Panda) -> bytes:
@@ -77,6 +78,7 @@ def main() -> None:
   count = 0
   first_run = True
   params = Params()
+  prepare_pairing(BASEDIR, params)
   no_internal_panda_count = 0
 
   while not do_exit:
@@ -170,6 +172,9 @@ def main() -> None:
     first_run = False
 
     # run pandad with all connected serials as arguments
+    # Old Params bindings can remove unknown keys on ignition transitions.
+    # Refresh the validated identity for every native process restart.
+    prepare_pairing(BASEDIR, params)
     os.environ['MANAGER_DAEMON'] = 'pandad'
     process = subprocess.Popen(["./pandad", *panda_serials], cwd=os.path.join(BASEDIR, "selfdrive/pandad"))
     process.wait()

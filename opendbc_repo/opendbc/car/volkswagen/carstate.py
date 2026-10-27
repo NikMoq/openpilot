@@ -18,6 +18,11 @@ class CarState(CarStateBase):
     self.esp_hold_confirmation = False
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
+    self.icbm_feedback_snapshot = {
+      "ACC_GRA_Anzeige": {"ACA_V_Wunsch": 0, "ACA_kmh_mph": 0, "timestamp_nanos": 0},
+      "ACC_System": {"ACS_Sta_ADR": 0, "ACS_FreigSollB": 0, "timestamp_nanos": 0},
+      "readiness_timestamps": {"GRA_Neu": 0, "Motor_2": 0, "Motor_3": 0, "Motor_5": 0},
+    }
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -146,6 +151,7 @@ class CarState(CarStateBase):
   def update_pq(self, pt_cp, cam_cp, ext_cp) -> tuple[structs.CarState, structs.CarStateSP]:
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
+    self.update_icbm_feedback_snapshot(ext_cp, pt_cp)
 
     # vEgo obtained from Bremse_1 vehicle speed rather than Bremse_3 wheel speeds because Bremse_3 isn't present on NSF
     ret.vEgoRaw = pt_cp.vl["Bremse_1"]["BR1_Rad_kmh"] * CV.KPH_TO_MS
@@ -234,6 +240,40 @@ class CarState(CarStateBase):
 
     self.frame += 1
     return ret, ret_sp
+
+  def update_icbm_feedback_snapshot(self, ext_cp, pt_cp=None):
+    """Copy raw PQ ACC feedback and source-message timestamps without freshness inference."""
+    gra = ext_cp.vl["ACC_GRA_Anzeige"]
+    system = ext_cp.vl["ACC_System"]
+    gra_ts = ext_cp.ts_nanos["ACC_GRA_Anzeige"]
+    system_ts = ext_cp.ts_nanos["ACC_System"]
+    self.icbm_feedback_snapshot = {
+      "ACC_GRA_Anzeige": {
+        "ACA_V_Wunsch": gra.get("ACA_V_Wunsch", 0),
+        "ACA_kmh_mph": gra.get("ACA_kmh_mph", 0),
+        "timestamp_nanos": gra_ts.get("ACA_V_Wunsch", 0),
+      },
+      "ACC_System": {
+        "ACS_Sta_ADR": system.get("ACS_Sta_ADR", 0),
+        "ACS_FreigSollB": system.get("ACS_FreigSollB", 0),
+        "timestamp_nanos": system_ts.get("ACS_Sta_ADR", 0),
+      },
+      "readiness_timestamps": {"GRA_Neu": 0, "Motor_2": 0, "Motor_3": 0, "Motor_5": 0},
+    }
+    if pt_cp is not None:
+      readiness_messages = ("GRA_Neu", "Motor_2", "Motor_3", "Motor_5")
+      for message in readiness_messages:
+        pt_cp.vl[message]  # Ensure lazy CANParser registration before reading ts_nanos.
+      readiness_signals = {
+        "GRA_Neu": "COUNTER",
+        "Motor_2": "MO2_Sta_GRA",
+        "Motor_3": "Fahrpedal_Rohsignal",
+        "Motor_5": "GRA_Hauptschalter",
+      }
+      self.icbm_feedback_snapshot["readiness_timestamps"] = {
+        message: pt_cp.ts_nanos[message].get(signal, 0)
+        for message, signal in readiness_signals.items()
+      }
 
   def update_low_speed_alert(self, v_ego: float) -> bool:
     # Low speed steer alert hysteresis logic

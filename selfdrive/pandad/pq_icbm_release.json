@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "panda_version": "10.2.0",
+  "unsigned_sha256": "5fb3c668a260af6f80c8e18153bdb8ce55d5119836b14ebc7c3f0d8864177246",
+  "files": {
+    "panda/board/obj/panda.bin.signed": "fa04afc0544209b56f028b256b0156c42c294bb277e8034e11eb2cbb6a621a72",
+    "selfdrive/pandad/pandad": "01f58f41ed4b63b80d061f2612709b55e08f92a12664704d837256ba88d2d8c8"
+  },
+  "panda_signature_hex": "b9566566ab519f497b79898a9825112e60d41b0baaf9e9d6c37d207dac4bdd1e61510eb7851dd35e9d56b7f1994536bb8a123c432e1136a77d82a231ef651153fef5cff5fb4cf906911a7adddd1560ccf7f51a2d40048b1b398a2500654fc2e78b68bfcb0d0816e7e3771d3b08a1a1db7255200554c73745bdfb7e2865a0810c",
+  "validation": "offline only; vehicle acceptance unverified"
+}

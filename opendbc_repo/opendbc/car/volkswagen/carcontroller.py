@@ -7,12 +7,22 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.volkswagen import mqbcan, pqcan
 from opendbc.car.volkswagen.values import CanBus, CarControllerParams, VolkswagenFlags
 from opendbc.sunnypilot.car.volkswagen.icbm import IntelligentCruiseButtonManagementInterface
+from opendbc.sunnypilot.car.volkswagen.pq_icbm_coordinator import PQICBMCoordinator, StockFeedback
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
 
 class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterface):
+  # Explicit host observation policy. These freshness/deadline values bound
+  # stale data; they are not claims about ECU button acceptance timing.
+  ICBM_INPUT_MAX_AGE_S = 0.12
+  ICBM_FEEDBACK_MAX_AGE_S = 0.12
+  ICBM_RELEASE_MAX_AGE_S = 0.12
+  ICBM_TRANSACTION_TIMEOUT_S = 1.0
+  ICBM_SETTLE_S = 0.08
+  ICBM_ECHO_MAX_AGE_S = 0.5
+
   def __init__(self, dbc_names, CP, CP_SP):
     CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
     IntelligentCruiseButtonManagementInterface.__init__(self, CP, CP_SP)
@@ -27,11 +37,24 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
+    self.icbm_coordinator = None
+    self.icbm_command = None
+    if CP.flags & VolkswagenFlags.PQ:
+      self.icbm_coordinator = PQICBMCoordinator(
+        transaction_timeout_s=self.ICBM_TRANSACTION_TIMEOUT_S,
+        feedback_max_age_s=self.ICBM_FEEDBACK_MAX_AGE_S,
+        release_max_age_s=self.ICBM_RELEASE_MAX_AGE_S,
+        settle_s=self.ICBM_SETTLE_S,
+        echo_max_age_s=self.ICBM_ECHO_MAX_AGE_S,
+        native_bus=0,
+        returned_bus=130,
+      )
 
   def update(self, CC, CC_SP, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
     can_sends = []
+    self.icbm_command = None
 
     # **** Steering Controls ************************************************ #
 
@@ -121,9 +144,77 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
       if CC.cruiseControl.cancel or CC.cruiseControl.resume:
         can_sends.append(self.CCS.create_acc_buttons_control(self.packer_pt, self.CAN.ext, CS.gra_stock_values,
                                                              cancel=CC.cruiseControl.cancel, resume=CC.cruiseControl.resume))
-      else:
+      elif self.icbm_coordinator is None:
         can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CS, CC_SP, self.packer_pt, self.CCS,
                                                                            self.CAN.ext, self.frame, self.gra_acc_counter_last))
+
+    if self.icbm_coordinator is not None:
+      firmware_status_valid = bool(getattr(CC_SP, "icbm_status_valid", False))
+      firmware_signature_matched = bool(getattr(CC_SP, "icbm_signature_matched", False))
+      firmware_protocol_valid = bool(getattr(CC_SP, "icbm_protocol_valid", False))
+      firmware_panda_count = getattr(CC_SP, "icbm_panda_count", 0)
+      firmware_request_id = getattr(CC_SP, "icbm_firmware_request_id", 0)
+      firmware_state = getattr(CC_SP, "icbm_firmware_state", 0)
+      firmware_status = {
+        "valid": firmware_status_valid,
+        "signature_matched": firmware_signature_matched,
+        "protocol_valid": firmware_protocol_valid,
+        "panda_count": firmware_panda_count,
+        "request_id": firmware_request_id,
+        "state": firmware_state,
+        "button": getattr(CC_SP, "icbm_firmware_button", 0),
+        "reason": getattr(CC_SP, "icbm_firmware_reason", 0),
+        "tx_counter": getattr(CC_SP, "icbm_firmware_tx_counter", 0),
+        "status_mono_time_ns": getattr(CC_SP, "icbm_firmware_status_mono_time_ns", 0),
+      }
+      paired_firmware = (firmware_status_valid and firmware_signature_matched
+                         and firmware_protocol_valid and firmware_panda_count == 1)
+      input_timestamp_ns = getattr(CC_SP, "icbm_input_timestamp_ns", 0)
+      input_valid = getattr(CC_SP, "icbm_input_valid", False) is True
+      now_s = now_nanos * 1e-9
+      input_s = input_timestamp_ns * 1e-9 if type(input_timestamp_ns) is int and input_timestamp_ns > 0 else 0
+      input_fresh = (input_valid and input_s > 0 and 0 <= now_s - input_s <= self.ICBM_INPUT_MAX_AGE_S)
+      icbm = CC_SP.intelligentCruiseButtonManagement
+      fb = CS.icbm_feedback_snapshot["ACC_GRA_Anzeige"]
+      readiness_ts = CS.icbm_feedback_snapshot["readiness_timestamps"]
+      feedback_ts_ns = fb["timestamp_nanos"]
+      feedback_s = feedback_ts_ns * 1e-9 if type(feedback_ts_ns) is int and feedback_ts_ns > 0 else 0
+      feedback_fresh = feedback_s > 0 and 0 <= now_s - feedback_s <= self.ICBM_FEEDBACK_MAX_AGE_S
+      unit = "kph" if fb["ACA_kmh_mph"] == 0 else "mph" if fb["ACA_kmh_mph"] == 1 else "unknown"
+      planner_unit = str(icbm.speedUnit)
+      target = icbm.vTarget
+      target_eligible = (icbm.sendButton in (structs.IntelligentCruiseButtonManagement.SendButtonState.increase,
+                                             structs.IntelligentCruiseButtonManagement.SendButtonState.decrease)
+                         and gra_send_ready
+                         and ((target > fb["ACA_V_Wunsch"]) ==
+                              (icbm.sendButton == structs.IntelligentCruiseButtonManagement.SendButtonState.increase)))
+      readiness_fresh = all(type(ts) is int and ts > 0 and 0 <= now_nanos-ts <= int(self.ICBM_INPUT_MAX_AGE_S*1e9)
+                            for ts in readiness_ts.values())
+      radar = CS.icbm_feedback_snapshot["ACC_System"]
+      radar_ts = radar["timestamp_nanos"]
+      radar_fresh = (type(radar_ts) is int and radar_ts > 0
+                     and 0 <= now_nanos-radar_ts <= int(self.ICBM_INPUT_MAX_AGE_S*1e9)
+                     and radar["ACS_Sta_ADR"] == 1 and radar["ACS_FreigSollB"] == 1)
+      manual_button_pressed = any(button.pressed for button in CS.out.buttonEvents)
+      active = bool(CS.out.cruiseState.enabled and CS.out.cruiseState.available
+                    and not CS.out.accFaulted and not CS.out.gasPressed and not CS.out.brakePressed
+                    and not manual_button_pressed
+                    and not CC.cruiseControl.cancel and not CC.cruiseControl.resume)
+      feedback_speed = fb["ACA_V_Wunsch"]
+      feedback = StockFeedback(feedback_speed, feedback_s, feedback_fresh)
+      self.icbm_coordinator.update(
+        now=now_s, target=target, speed_unit=planner_unit if planner_unit == unit else "unit_mismatch",
+        ready=input_fresh and readiness_fresh and active, readiness_fresh=readiness_fresh,
+        active=active, radar_fresh=radar_fresh, target_fresh=input_fresh,
+        target_eligible=target_eligible, feedback=feedback, paired_firmware=paired_firmware,
+        firmware_status=firmware_status)
+      pending = self.icbm_coordinator.transaction.pending
+      if pending is not None:
+        status_owns_request = (firmware_status_valid and firmware_signature_matched and firmware_protocol_valid
+                               and firmware_request_id == pending.sequence and firmware_state in (1, 2, 3, 4, 5, 6, 7))
+        if not status_owns_request:
+          button_id = {"UP": 1, "DOWN": 2, "SET": 3, "RES": 4}[pending.button]
+          self.icbm_command = (pending.sequence, button_id)
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.apply_torque_last / self.CCP.STEER_MAX
