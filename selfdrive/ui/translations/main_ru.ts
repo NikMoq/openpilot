@@ -86,6 +86,13 @@
         <source>for &quot;%1&quot;</source>
         <translation>для «%1»</translation>
     </message>
+
+    <message><source>Prevent large data uploads when on a metered cellular connection</source><translation>Запрещать отправку больших объёмов данных через лимитный мобильный интернет</translation></message>
+    <message><source>default</source><translation>по умолчанию</translation></message>
+    <message><source>metered</source><translation>лимитное</translation></message>
+    <message><source>unmetered</source><translation>безлимитное</translation></message>
+    <message><source>Wi-Fi Network Metered</source><translation>Лимитное подключение Wi-Fi</translation></message>
+    <message><source>Prevent large data uploads when on a metered Wi-Fi connection</source><translation>Запрещать отправку больших объёмов данных через лимитное подключение Wi-Fi</translation></message>
 </context>
 <context>
     <name>AdvancedNetworkingSP</name>
@@ -508,6 +515,23 @@ Please use caution when using this feature. Only use the blinker when traffic an
         <source>sunnypilot requires the device to be mounted within 4° left or right and within 5° up or 9° down. sunnypilot is continuously calibrating, resetting is rarely required.</source>
         <translation>Устройство sunnypilot должно быть установлено с отклонением не более 4° влево или вправо, не более 5° вверх или 9° вниз. Калибровка выполняется постоянно, сброс требуется редко.</translation>
     </message>
+
+    <message><source>Disengage to Reset Calibration</source><translation>Отключите управление для сброса калибровки</translation></message>
+    <message><source>Review the rules, features, and limitations of sunnypilot</source><translation>Правила, возможности и ограничения sunnypilot</translation></message>
+    <message><source>sunnypilot requires the device to be mounted within 4° left or right and within 5° up or 9° down.</source><translation>Устройство sunnypilot должно быть установлено с отклонением не более 4° влево или вправо, не более 5° вверх или 9° вниз.</translation></message>
+    <message><source>
+
+Steering lag calibration is %1% complete.</source><translation>
+
+Калибровка задержки рулевого управления завершена на %1%.</translation></message>
+    <message><source>
+
+Steering lag calibration is complete.</source><translation>
+
+Калибровка задержки рулевого управления завершена.</translation></message>
+    <message><source> Steering torque response calibration is %1% complete.</source><translation> Калибровка отклика рулевого момента завершена на %1%.</translation></message>
+    <message><source> Steering torque response calibration is complete.</source><translation> Калибровка отклика рулевого момента завершена.</translation></message>
+    <message><source>openpilot is continuously calibrating, resetting is rarely required. Resetting calibration will restart openpilot if the car is powered on.</source><translation>openpilot постоянно выполняет калибровку, сброс требуется редко. Сброс калибровки перезапустит openpilot, если автомобиль включён.</translation></message>
 </context>
 <context>
     <name>DevicePanelSP</name>
@@ -607,6 +631,34 @@ Please use caution when using this feature. Only use the blinker when traffic an
         <source>Fleet Manager PIN:</source>
         <translation>PIN-код диспетчера автопарка:</translation>
     </message>
+
+    <message><source>Quiet Mode</source><translation>Тихий режим</translation></message>
+    <message><source>Driver Camera Preview</source><translation>Камера водителя</translation></message>
+    <message><source>Training Guide</source><translation>Обучение</translation></message>
+    <message><source>Regulatory</source><translation>Нормативная информация</translation></message>
+    <message><source>Language</source><translation>Язык</translation></message>
+    <message><source>Reset Settings</source><translation>Сбросить настройки</translation></message>
+    <message><source>Onroad Uploads</source><translation>Данные поездок</translation></message>
+    <message><source>Are you sure you want to review the training guide?</source><translation>Открыть обучающее руководство?</translation></message>
+    <message><source>Review</source><translation>Открыть</translation></message>
+    <message><source>Select a language</source><translation>Выберите язык</translation></message>
+    <message><source>Wake-Up Behavior</source><translation>Пробуждение</translation></message>
+    <message><source>Reboot</source><translation>Перезагрузить</translation></message>
+    <message><source>Power Off</source><translation>Выключить</translation></message>
+    <message><source>Offroad Mode</source><translation>Режим стоянки</translation></message>
+    <message><source>Are you sure you want to exit Always Offroad mode?</source><translation>Выйти из режима стоянки?</translation></message>
+    <message><source>Confirm</source><translation>Подтвердить</translation></message>
+    <message><source>Are you sure you want to enter Always Offroad mode?</source><translation>Включить режим стоянки?</translation></message>
+    <message><source>Disengage to Enter Always Offroad Mode</source><translation>Отключите управление для перехода в режим стоянки</translation></message>
+    <message><source>Are you sure you want to reset all sunnypilot settings to default? Once the settings are reset, there is no going back.</source><translation>Сбросить все настройки sunnypilot к значениям по умолчанию? Отменить сброс будет невозможно.</translation></message>
+    <message><source>The reset cannot be undone. You have been warned.</source><translation>Сброс нельзя отменить. Вы предупреждены.</translation></message>
+    <message><source>Exit Always Offroad</source><translation>Выйти из режима стоянки</translation></message>
+    <message><source>Enable Always Offroad</source><translation>Включить режим стоянки</translation></message>
+    <message><source>⁍ Default: Device will boot/wake-up normally &amp; will be ready to engage.</source><translation>⁍ Обычный: после загрузки или пробуждения устройство готово к включению управления.</translation></message>
+    <message><source>⁍ Offroad: Device will be in Always Offroad mode after boot/wake-up.</source><translation>⁍ Стоянка: после загрузки или пробуждения устройство останется в режиме стоянки. Чтобы включить управление, выйдите из этого режима.</translation></message>
+    <message><source>Controls state of the device after boot/sleep.</source><translation>Задаёт состояние устройства после загрузки или выхода из сна.</translation></message>
+    <message><source>Default</source><translation>Обычный</translation></message>
+    <message><source>Offroad</source><translation>Стоянка</translation></message>
 </context>
 <context>
     <name>DisplayPanel</name>
@@ -625,6 +677,28 @@ Please use caution when using this feature. Only use the blinker when traffic an
     <message>
         <source>Disabled: Wake the brightness of the screen to display critical events.</source>
         <translation>Выключено: включать подсветку только для критических событий.</translation>
+    </message>
+
+    <message><source>Onroad Screen: Reduced Brightness</source><translation>Затемнение экрана в поездке</translation></message>
+    <message><source>Turn off device screen or reduce brightness after driving starts. It automatically brightens again when screen is touched or a visible alert is displayed.</source><translation>Выключать экран устройства или снижать яркость после начала поездки. При касании экрана или появлении видимого предупреждения яркость автоматически восстанавливается.</translation></message>
+    <message><source>Sidebar Temperature</source><translation>Температура в боковой панели</translation></message>
+    <message><source>Choose what the sidebar temperature field displays.</source><translation>Выберите, что показывать в поле температуры боковой панели.</translation></message>
+    <message><source>Status</source><translation>Статус</translation></message>
+    <message><source>CPU</source><translation>CPU</translation></message>
+    <message><source>GPU</source><translation>GPU</translation></message>
+    <message><source>RAM</source><translation>RAM</translation></message>
+    <message><source>Maximum</source><translation>Максимум</translation></message>
+    <message><source>Interactivity Timeout</source><translation>Тайм-аут бездействия</translation></message>
+    <message><source>Apply a custom timeout for settings UI.
+This is the time after which settings UI closes automatically if user is not interacting with the screen.</source><translation>Задать время ожидания в настройках.
+Настройки автоматически закроются, если в течение этого времени не касаться экрана.</translation></message>
+    <message>
+        <source>Default</source>
+        <translation>Стандарт</translation>
+    </message>
+    <message>
+        <source>s</source>
+        <translation>с</translation>
     </message>
 </context>
 <context>
@@ -652,6 +726,14 @@ Please use caution when using this feature. Only use the blinker when traffic an
     <message>
         <source>Miles</source>
         <translation>Мили</translation>
+    </message>
+    <message>
+        <source>Recorded on this device</source>
+        <translation>По сохранённым данным устройства</translation>
+    </message>
+    <message>
+        <source>No trip data yet</source>
+        <translation>Данных о поездках пока нет</translation>
     </message>
 </context>
 <context>
@@ -769,6 +851,23 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
 Оставить активным: ALC продолжает работать после нажатия тормоза.
 Приостановить: ALC приостанавливается после нажатия тормоза.</translation>
     </message>
+
+    <message><source>Toggle with Main Cruise</source><translation>Переключать основной кнопкой круиз-контроля</translation></message>
+    <message><source>Unified Engagement Mode (UEM)</source><translation>Единый режим включения (UEM)</translation></message>
+    <message><source>Steering Mode on Brake Pedal</source><translation>Рулевое управление при торможении</translation></message>
+    <message><source>Note: For vehicles without LFA/LKAS button, disabling this will prevent lateral control engagement.</source><translation>Примечание: на автомобилях без кнопки LFA/LKAS отключение этого параметра не позволит включить поперечное управление.</translation></message>
+    <message><source>Engage lateral and longitudinal control with cruise control engagement.</source><translation>Включать поперечное и продольное управление при включении круиз-контроля.</translation></message>
+    <message><source>Note: Once lateral control is engaged via UEM, it will remain engaged until it is manually disabled via the MADS button or car shut off.</source><translation>Примечание: поперечное управление, включённое через UEM, останется включённым до отключения кнопкой MADS или выключения автомобиля.</translation></message>
+    <message><source>Start the vehicle to check vehicle compatibility.</source><translation>Запустите автомобиль для проверки совместимости.</translation></message>
+    <message><source>This feature defaults to OFF, and does not allow selection due to vehicle limitations.</source><translation>Из-за ограничений автомобиля эта функция всегда выключена и недоступна для выбора.</translation></message>
+    <message><source>This feature defaults to ON, and does not allow selection due to vehicle limitations.</source><translation>Из-за ограничений автомобиля эта функция всегда включена и недоступна для выбора.</translation></message>
+    <message><source>This platform only supports Disengage mode due to vehicle limitations.</source><translation>Из-за ограничений автомобиля эта платформа поддерживает только режим отключения.</translation></message>
+    <message><source>Remain Active: ALC will remain active when the brake pedal is pressed.</source><translation>Оставить активным: ALC остаётся активным при нажатии педали тормоза.</translation></message>
+    <message><source>Pause</source><translation>Приостановить</translation></message>
+    <message><source>Pause: ALC will pause when the brake pedal is pressed.</source><translation>Приостановить: ALC приостанавливается при нажатии педали тормоза.</translation></message>
+    <message><source>Disengage</source><translation>Отключить</translation></message>
+    <message><source>Disengage: ALC will disengage when the brake pedal is pressed.</source><translation>Отключить управление: ALC отключается при нажатии педали тормоза.</translation></message>
+    <message><source>Choose how Automatic Lane Centering (ALC) behaves after the brake pedal is manually pressed in sunnypilot.</source><translation>Выберите поведение автоматического удержания по центру полосы (ALC) после нажатия педали тормоза водителем в sunnypilot.</translation></message>
 </context>
 <context>
     <name>MapETA</name>
@@ -856,6 +955,10 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
         <source>Immediate</source>
         <translation>Немедленно</translation>
     </message>
+
+    <message><source>Device will automatically shutdown after set time once the engine is turned off.&lt;br/&gt;(30h is the default)</source><translation>Устройство автоматически выключится через заданное время после выключения двигателя.&lt;br/&gt;(По умолчанию — 30 ч)</translation></message>
+    <message><source>h</source><translation>ч</translation></message>
+    <message><source> (default)</source><translation> (стандарт)</translation></message>
 </context>
 <context>
     <name>MonitoringPanel</name>
@@ -989,6 +1092,9 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
         <source>sunnypilot is now in Forced Offroad mode. sunnypilot won&apos;t start until Forced Offroad mode is disabled. Go to &quot;Settings&quot; -&gt; &quot;Device&quot; -&gt; &quot;Unforce Offroad&quot; to exit Force Offroad mode.</source>
         <translation>Включён режим стоянки. Управление sunnypilot недоступно, пока этот режим не выключен. Для выхода откройте «Настройки» → «Система» → «Выйти из режима стоянки».</translation>
     </message>
+
+    <message><source>Acknowledge Excessive Actuation</source><translation>Принять предупреждение о чрезмерном воздействии</translation></message>
+    <message><source>Snooze Update</source><translation>Отложить обновление</translation></message>
 </context>
 <context>
     <name>OffroadHome</name>
@@ -1027,6 +1133,10 @@ Pause Steering: ALC will be paused after the brake pedal is manually pressed.</s
         <source>Reboot Device</source>
         <translation>Перезагрузите устройство</translation>
     </message>
+
+    <message><source>sunnypilot Unavailable</source><translation>sunnypilot недоступен</translation></message>
+    <message><source>Waiting to start</source><translation>Ожидание запуска</translation></message>
+    <message><source>System Unresponsive</source><translation>Система не отвечает</translation></message>
 </context>
 <context>
     <name>OnroadScreenOff</name>
@@ -1211,6 +1321,17 @@ Warning: You are on a metered connection!</source>
         <source>Time remaining: </source>
         <translation>Осталось времени: </translation>
     </message>
+
+    <message><source>Search Country</source><translation>Поиск страны</translation></message>
+    <message><source>Enter search keywords, or leave blank to list all countries.</source><translation>Введите слова для поиска или оставьте поле пустым для показа всех стран.</translation></message>
+    <message><source>Select Country</source><translation>Выберите страну</translation></message>
+    <message><source>Search State</source><translation>Поиск региона</translation></message>
+    <message><source>Enter search keywords, or leave blank to list all states.</source><translation>Введите слова для поиска или оставьте поле пустым для показа всех регионов.</translation></message>
+    <message><source>Select State</source><translation>Выберите регион</translation></message>
+    <message><source>No results found for keywords: %1</source><translation>По запросу «%1» ничего не найдено</translation></message>
+    <message><source>MB</source><translation>МБ</translation></message>
+    <message><source>GB</source><translation>ГБ</translation></message>
+    <message><source>All States (~4.8 GB)</source><translation>Все штаты (~4,8 ГБ)</translation></message>
 </context>
 <context>
     <name>PairingPopup</name>
@@ -1230,6 +1351,8 @@ Warning: You are on a metered connection!</source>
         <source>Bookmark connect.comma.ai to your home screen to use it like an app</source>
         <translation>Добавьте connect.comma.ai на главный экран телефона, чтобы использовать сайт как приложение</translation>
     </message>
+
+    <message><source>Please connect to Wi-Fi to complete initial pairing</source><translation>Подключитесь к Wi-Fi для завершения первоначальной привязки</translation></message>
 </context>
 <context>
     <name>ParamControl</name>
@@ -1317,6 +1440,8 @@ Warning: You are on a metered connection!</source>
         <source>Turn-by-turn navigation</source>
         <translation>Пошаговая навигация</translation>
     </message>
+
+    <message><source>Remote snapshots</source><translation>Удалённые снимки</translation></message>
 </context>
 <context>
     <name>PrimeUserWidget</name>
@@ -1407,6 +1532,85 @@ Warning: You are on a metered connection!</source>
         <source>Updating...</source>
         <translation>Обновление...</translation>
     </message>
+
+    <message><source>Never</source><translation>Никогда</translation></message>
+    <message>
+        <source>TARGET %1%2</source>
+        <translation>ЦЕЛЬ %1 %2</translation>
+    </message>
+    <message>
+        <source> m</source>
+        <translation> м</translation>
+    </message>
+    <message>
+        <source> km</source>
+        <translation> км</translation>
+    </message>
+    <message>
+        <source> ft</source>
+        <translation> фут.</translation>
+    </message>
+    <message>
+        <source> mi</source>
+        <translation> мил.</translation>
+    </message>
+    <message>
+        <source> km/h</source>
+        <translation> км/ч</translation>
+    </message>
+    <message>
+        <source> mph</source>
+        <translation> миль/ч</translation>
+    </message>
+    <message>
+        <source>km/h</source>
+        <translation>км/ч</translation>
+    </message>
+    <message>
+        <source>mph</source>
+        <translation>миль/ч</translation>
+    </message>
+    <message>
+        <source>not downloaded</source>
+        <translation>Не загружена</translation>
+    </message>
+    <message>
+        <source>update requested</source>
+        <translation>Запрошено обновление</translation>
+    </message>
+    <message>
+        <source>downloading</source>
+        <translation>Загрузка</translation>
+    </message>
+    <message>
+        <source>ready</source>
+        <translation>Готово</translation>
+    </message>
+    <message>
+        <source>error</source>
+        <translation>Ошибка</translation>
+    </message>
+    <message>
+        <source>retrying in %1s (%2/%3)</source>
+        <translation>Повтор через %1 с (%2/%3)</translation>
+    </message>
+    <message>
+        <source>CAMERA</source>
+        <translation>КАМЕРА</translation>
+    </message>
+    <message>
+        <source>WAITING FOR MAP</source>
+        <translation>ОЖИДАНИЕ КАРТЫ</translation>
+    </message>
+    <message>
+        <source>POSITION LOST</source>
+        <translation>ПОЗИЦИЯ ПОТЕРЯНА</translation>
+    </message>
+    <message>
+        <source>HOLDING</source>
+        <translation>УДЕРЖАНИЕ</translation>
+    </message>
+    <message><source>ACC TARGET %1 %2</source><translation>ЦЕЛЬ ACC %1 %2</translation></message>
 </context>
 <context>
     <name>Reset</name>
@@ -1616,6 +1820,9 @@ Reboot Required.</source>
         <source>Software</source>
         <translation>ПО</translation>
     </message>
+
+    <message><source>Firehose</source><translation>Данные</translation></message>
+    <message><source>Developer</source><translation>Отладка</translation></message>
 </context>
 <context>
     <name>SettingsWindowSP</name>
@@ -1671,6 +1878,12 @@ Reboot Required.</source>
         <source>Vehicle</source>
         <translation>Авто</translation>
     </message>
+
+    <message><source>Models</source><translation>Модели</translation></message>
+    <message><source>Steering</source><translation>Руль</translation></message>
+    <message><source>Cruise</source><translation>Круиз</translation></message>
+    <message><source>Firehose</source><translation>Данные</translation></message>
+    <message><source>Developer</source><translation>Отладка</translation></message>
 </context>
 <context>
     <name>Setup</name>
@@ -1867,6 +2080,10 @@ Reboot Required.</source>
 </context>
 <context>
     <name>SidebarSP</name>
+    <message><source>CPU</source><translation>CPU</translation></message>
+    <message><source>GPU</source><translation>GPU</translation></message>
+    <message><source>RAM</source><translation>RAM</translation></message>
+    <message><source>MAX</source><translation>МАКС.</translation></message>
     <message>
         <source>TEMP</source>
         <translation>ТЕМП.</translation>
@@ -2119,6 +2336,25 @@ Reboot Required.</source>
     <message>
         <source>on Metered</source>
         <translation>через лимитную сеть</translation>
+    </message>
+
+    <message><source>Select a branch</source><translation>Выберите ветку</translation></message>
+    <message><source>Search Branch</source><translation>Поиск ветки</translation></message>
+    <message><source>Enter search keywords, or leave blank to list all branches.</source><translation>Введите слова для поиска или оставьте поле пустым для показа всех веток.</translation></message>
+    <message><source>Disable Updates</source><translation>Отключить обновления</translation></message>
+    <message><source>When enabled, software updates will be disabled. &lt;b&gt;This requires a reboot to take effect.&lt;/b&gt;</source><translation>При включении обновления ПО отключаются. &lt;b&gt;Для применения требуется перезагрузка.&lt;/b&gt;</translation></message>
+    <message><source>No branches found for keywords: %1</source><translation>По запросу «%1» ветки не найдены</translation></message>
+    <message><source>%1 updates requires a reboot.&lt;br&gt;Reboot now?</source><translation>Обновление %1 требует перезагрузки.&lt;br&gt;Перезагрузить сейчас?</translation></message>
+    <message><source>Reboot</source><translation>Перезагрузить</translation></message>
+    <message><source>When enabled, software updates will be disabled.&lt;br&gt;&lt;b&gt;This requires a reboot to take effect.&lt;/b&gt;</source><translation>При включении обновления ПО отключаются.&lt;br&gt;&lt;b&gt;Для применения требуется перезагрузка.&lt;/b&gt;</translation></message>
+    <message><source>Please enable always offroad mode or turn off vehicle to adjust these toggles</source><translation>Чтобы изменить эти параметры, включите режим стоянки или выключите автомобиль.</translation></message>
+    <message>
+        <source>Disabling</source>
+        <translation>Отключение</translation>
+    </message>
+    <message>
+        <source>Enabling</source>
+        <translation>Включение</translation>
     </message>
 </context>
 <context>
@@ -2413,6 +2649,22 @@ Reboot Required.</source>
         <source>Restoring...</source>
         <translation>Восстановление...</translation>
     </message>
+
+    <message><source>🚀 sunnylink 🚀</source><translation>sunnylink</translation></message>
+    <message><source>For secure backup, restore, and remote configuration</source><translation>Для безопасного резервного копирования, восстановления и удалённой настройки</translation></message>
+    <message><source>Sponsorship isn't required for basic backup/restore</source><translation>Для обычного резервного копирования и восстановления спонсорство не требуется</translation></message>
+    <message><source>Click the sponsor button for more details</source><translation>Нажмите «Спонсор», чтобы узнать подробнее</translation></message>
+    <message><source>Enable sunnylink uploader to allow sunnypilot to upload your driving data to sunnypilot servers. (only for highest tiers, and does NOT bring ANY benefit to you. We are just testing data volume.)</source><translation>Разрешить sunnypilot отправлять данные ваших поездок на серверы sunnypilot через sunnylink. (Только для высших уровней поддержки. Это НЕ даёт вам НИКАКИХ преимуществ. Мы лишь тестируем объём данных.)</translation></message>
+    <message><source>Enable sunnylink uploader (infrastructure test)</source><translation>Отправка в sunnylink (тест инфраструктуры)</translation></message>
+    <message><source>Backup in progress %1%</source><translation>Резервное копирование: %1%</translation></message>
+    <message><source>Backup Failed</source><translation>Ошибка резервного копирования</translation></message>
+    <message><source>Settings backup completed.</source><translation>Резервное копирование настроек завершено.</translation></message>
+    <message><source>Restore in progress %1%</source><translation>Восстановление: %1%</translation></message>
+    <message><source>Restore Failed</source><translation>Ошибка восстановления</translation></message>
+    <message><source>Unable to restore the settings, try again later.</source><translation>Не удалось восстановить настройки. Повторите попытку позже.</translation></message>
+    <message><source>Settings restored. Confirm to restart the interface.</source><translation>Настройки восстановлены. Подтвердите перезапуск интерфейса.</translation></message>
+    <message><source>Device ID</source><translation>ID устройства</translation></message>
+    <message><source>THANKS ♥</source><translation>СПАСИБО ♥</translation></message>
 </context>
 <context>
     <name>SunnylinkSponsorPopup</name>
@@ -2452,6 +2704,9 @@ Reboot Required.</source>
         <source>Early Access: Become a sunnypilot Sponsor</source>
         <translation>Ранний доступ: станьте спонсором sunnypilot</translation>
     </message>
+
+    <message><source>If sponsorship status was not updated, please contact a moderator on our forum at https://community.sunnypilot.ai</source><translation>Если статус спонсорской поддержки не обновился, обратитесь к модератору форума: https://community.sunnypilot.ai</translation></message>
+    <message><source>Join our Community Forum at https://community.sunnypilot.ai and reach out to a moderator if you have issues</source><translation>Присоединяйтесь к форуму https://community.sunnypilot.ai и обратитесь к модератору при возникновении проблем</translation></message>
 </context>
 <context>
     <name>SunnypilotPanel</name>
@@ -2742,6 +2997,9 @@ Reboot Required.</source>
         <source>Agree</source>
         <translation>Принять</translation>
     </message>
+
+    <message><source>Welcome to sunnypilot</source><translation>Добро пожаловать в sunnypilot</translation></message>
+    <message><source>You must accept the Terms and Conditions to use sunnypilot. Read the latest terms at &lt;span style='color: #465BEA;'&gt;https://comma.ai/terms&lt;/span&gt; before continuing.</source><translation>Для использования sunnypilot необходимо принять условия использования. Перед продолжением прочитайте актуальные условия на &lt;span style='color: #465BEA;'&gt;https://comma.ai/terms&lt;/span&gt;.</translation></message>
 </context>
 <context>
     <name>TermsPageSP</name>
@@ -2888,6 +3146,19 @@ Reboot Required.</source>
 		<source>Use the sunnypilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature. Changing this setting takes effect when the car is powered off.</source>
 		<translation>Использовать sunnypilot для адаптивного круиз-контроля и помощи в удержании полосы. Водитель должен постоянно следить за дорогой. Изменение применяется после выключения автомобиля.</translation>
 	</message>
+
+    <message><source>Use the sunnypilot system for adaptive cruise control and lane keep driver assistance. Your attention is required at all times to use this feature.</source><translation>Использовать sunnypilot для адаптивного круиз-контроля и помощи в удержании полосы. При использовании этой функции вы должны постоянно следить за дорогой.</translation></message>
+    <message><source>When enabled, pressing the accelerator pedal will disengage sunnypilot.</source><translation>При включении нажатие педали газа отключает sunnypilot.</translation></message>
+    <message><source>Enable driver monitoring even when sunnypilot is not engaged.</source><translation>Контролировать внимание водителя, даже когда управление sunnypilot не включено.</translation></message>
+    <message><source>Record and Upload Microphone Audio</source><translation>Запись и отправка звука микрофона</translation></message>
+    <message><source>Record and store microphone audio while driving. The audio will be included in the dashcam video in comma connect.</source><translation>Записывать и сохранять звук микрофона во время поездки. Звук будет включён в видео регистратора в comma connect.</translation></message>
+    <message><source>Standard is recommended. In aggressive mode, sunnypilot will follow lead cars closer and be more aggressive with the gas and brake. In relaxed mode sunnypilot will stay further away from lead cars. On supported cars, you can cycle through these personalities with your steering wheel distance button.</source><translation>Рекомендуется стандартный режим. В агрессивном режиме sunnypilot держит меньшую дистанцию и активнее использует газ и тормоз. В спокойном режиме sunnypilot держит большую дистанцию. На поддерживаемых автомобилях режимы можно переключать кнопкой дистанции на руле.</translation></message>
+    <message><source> Changing this setting will restart openpilot if the car is powered on.</source><translation> Изменение этого параметра перезапустит openpilot, если автомобиль включён.</translation></message>
+    <message><source>sunnypilot defaults to driving in &lt;b&gt;chill mode&lt;/b&gt;. Experimental mode enables &lt;b&gt;alpha-level features&lt;/b&gt; that aren't ready for chill mode. Experimental features are listed below:</source><translation>По умолчанию sunnypilot работает в &lt;b&gt;спокойном режиме&lt;/b&gt;. Экспериментальный режим включает &lt;b&gt;функции альфа-версии&lt;/b&gt;, ещё не готовые для спокойного режима. Эти функции перечислены ниже:</translation></message>
+    <message><source>Let the driving model control the gas and brakes. sunnypilot will drive as it thinks a human would, including stopping for red lights and stop signs. Since the driving model decides the speed to drive, the set speed will only act as an upper bound. This is an alpha quality feature; mistakes should be expected.</source><translation>Передать модели вождения управление газом и тормозами. sunnypilot будет ехать так, как, по мнению модели, поступил бы человек, в том числе останавливаться на красный свет и перед знаками STOP. Модель сама выбирает скорость, а заданная скорость служит только верхним пределом. Это функция альфа-версии: следует ожидать ошибок.</translation></message>
+    <message><source>sunnypilot longitudinal control may come in a future update.</source><translation>Продольное управление sunnypilot может появиться в будущем обновлении.</translation></message>
+    <message><source>An alpha version of sunnypilot longitudinal control can be tested, along with Experimental mode, on non-release branches.</source><translation>Альфа-версию продольного управления sunnypilot и экспериментальный режим можно проверять в ветках, не предназначенных для выпуска.</translation></message>
+    <message><source>Enable the sunnypilot longitudinal control (alpha) toggle to allow Experimental mode.</source><translation>Включите продольное управление sunnypilot (альфа), чтобы разрешить экспериментальный режим.</translation></message>
 </context>
 <context>
     <name>TogglesPanelSP</name>
@@ -3328,6 +3599,35 @@ This feature must be used along with SLC, and/or V-TSC, and/or M-TSC.</source>
         <source>Display Temperature on Sidebar</source>
         <translation>Температура на боковой панели</translation>
     </message>
+
+    <message><source>Show Blind Spot Warnings</source><translation>Показывать предупреждения о слепых зонах</translation></message>
+    <message><source>Enabling this will display warnings when a vehicle is detected in your blind spot as long as your car has BSM supported.</source><translation>Показывать предупреждения об автомобиле в слепой зоне, если автомобиль поддерживает BSM.</translation></message>
+    <message><source>Enable Tesla Rainbow Mode</source><translation>Радужный режим Tesla</translation></message>
+    <message><source>A beautiful rainbow effect on the path the model wants to take.</source><translation>Радужный эффект на траектории, выбранной моделью.</translation></message>
+    <message><source>It</source><translation>Это</translation></message>
+    <message><source>does not</source><translation>не</translation></message>
+    <message><source>affect driving in any way.</source><translation>влияет на управление автомобилем.</translation></message>
+    <message><source>Enable Standstill Timer</source><translation>Таймер остановки</translation></message>
+    <message><source>Show a timer on the HUD when the car is at a standstill.</source><translation>Показывать на экране таймер остановки автомобиля.</translation></message>
+    <message><source>Display Road Name</source><translation>Название дороги</translation></message>
+    <message><source>Displays the name of the road the car is traveling on. The OpenStreetMap database of the location must be downloaded from the OSM panel to fetch the road name.</source><translation>Показывать название текущей дороги. Для получения названия загрузите базу OpenStreetMap вашей местности в разделе OSM.</translation></message>
+    <message><source>Green Traffic Light Alert (Beta)</source><translation>Зелёный сигнал светофора (бета)</translation></message>
+    <message><source>A chime and on-screen alert will play when the traffic light you are waiting for turns green and you have no vehicle in front of you.</source><translation>Звуковой сигнал и уведомление на экране появятся, когда светофор, перед которым вы стоите, переключится на зелёный и перед вами нет автомобиля.</translation></message>
+    <message><source>Note: This chime is only designed as a notification. It is the driver's responsibility to observe their environment and make decisions accordingly.</source><translation>Примечание: сигнал служит только уведомлением. Водитель обязан следить за обстановкой и самостоятельно принимать решения.</translation></message>
+    <message><source>Lead Departure Alert (Beta)</source><translation>Начало движения впереди (бета)</translation></message>
+    <message><source>A chime and on-screen alert will play when you are stopped, and the vehicle in front of you start moving.</source><translation>Звуковой сигнал и уведомление на экране появятся, когда вы стоите, а автомобиль впереди начинает движение.</translation></message>
+    <message><source>Speedometer: Always Display True Speed</source><translation>Спидометр: фактическая скорость</translation></message>
+    <message><source>Always display the true vehicle current speed from wheel speed sensors.</source><translation>Всегда показывать фактическую текущую скорость автомобиля по датчикам скорости колёс.</translation></message>
+    <message><source>When enabled, the speedometer on the onroad screen is not displayed.</source><translation>Скрывать спидометр на экране поездки.</translation></message>
+    <message><source>Display Turn Signals</source><translation>Поворотники на экране</translation></message>
+    <message><source>When enabled, visual turn indicators are drawn on the HUD.</source><translation>При включении на экране отображаются указатели поворота.</translation></message>
+    <message><source> Changing this setting will restart openpilot if the car is powered on.</source><translation> Изменение этого параметра перезапустит openpilot, если автомобиль включён.</translation></message>
+    <message><source>Display useful metrics below the chevron that tracks the lead car (only applicable to cars with sunnypilot longitudinal control).</source><translation>Показывать полезные показатели под указателем автомобиля впереди. Только для автомобилей с продольным управлением sunnypilot.</translation></message>
+    <message><source>Right</source><translation>Справа</translation></message>
+    <message><source>Right &amp;&amp;
+Bottom</source><translation>Справа &amp;&amp;
+снизу</translation></message>
+    <message><source>This feature requires sunnypilot longitudinal control to be available.</source><translation>Для этой функции требуется поддержка продольного управления sunnypilot.</translation></message>
 </context>
 <context>
     <name>WiFiPromptWidget</name>
@@ -3351,6 +3651,10 @@ This feature must be used along with SLC, and/or V-TSC, and/or M-TSC.</source>
         <source>Training data will be pulled periodically while your device is on Wi-Fi</source>
         <translation>Данные для обучения будут периодически отправляться, пока устройство подключено к Wi-Fi</translation>
     </message>
+
+    <message><source>sunnypilot Community</source><translation>Сообщество sunnypilot</translation></message>
+    <message><source>Need help or have ideas?&lt;br&gt;&lt;b&gt;Join&lt;/b&gt; our community now!</source><translation>Нужна помощь или есть идеи?&lt;br&gt;&lt;b&gt;Присоединяйтесь&lt;/b&gt; к сообществу!</translation></message>
+    <message><source>Learn More</source><translation>Подробнее</translation></message>
 </context>
 <context>
     <name>WifiUI</name>
@@ -3397,5 +3701,537 @@ This feature must be used along with SLC, and/or V-TSC, and/or M-TSC.</source>
         <source>Forget</source>
         <translation>Забыть</translation>
     </message>
+</context>
+
+<context>
+    <name>Brightness</name>
+    <message><source>Global Brightness</source><translation>Общая яркость</translation></message>
+    <message><source>Overrides the brightness of the device. This applies to both onroad and offroad screens. </source><translation>Задаёт яркость устройства в поездке и на стоянке. </translation></message>
+    <message><source>Auto (Dark)</source><translation>Авто (темнее)</translation></message>
+    <message><source>Auto</source><translation>Авто</translation></message>
+</context>
+
+<context>
+    <name>DeveloperPanel</name>
+    <message><source>Enable ADB</source><translation>Включить ADB</translation></message>
+    <message><source>ADB (Android Debug Bridge) allows connecting to your device over USB or over the network. See https://docs.comma.ai/how-to/connect-to-comma for more info.</source><translation>ADB (Android Debug Bridge) позволяет подключаться к устройству через USB или сеть. Подробнее: https://docs.comma.ai/how-to/connect-to-comma</translation></message>
+    <message><source>Joystick Debug Mode</source><translation>Отладка с джойстиком</translation></message>
+    <message><source>Longitudinal Maneuver Mode</source><translation>Режим продольных манёвров</translation></message>
+    <message><source>sunnypilot Longitudinal Control (Alpha)</source><translation>Продольное управление sunnypilot (альфа)</translation></message>
+    <message><source>WARNING: sunnypilot longitudinal control is in alpha for this car and will disable Automatic Emergency Braking (AEB).</source><translation>ВНИМАНИЕ: продольное управление sunnypilot на этом автомобиле находится на стадии альфа-тестирования и отключит автоматическое экстренное торможение (AEB).</translation></message>
+    <message><source>On this car, sunnypilot defaults to the car's built-in ACC instead of sunnypilot's longitudinal control. Enable this to switch to sunnypilot longitudinal control. Enabling Experimental mode is recommended when enabling sunnypilot longitudinal control alpha.</source><translation>По умолчанию на этом автомобиле используется штатный ACC вместо продольного управления sunnypilot. Включите этот параметр для перехода на продольное управление sunnypilot. При использовании его альфа-версии рекомендуется включить экспериментальный режим.</translation></message>
+</context>
+
+<context>
+    <name>DeveloperPanelSP</name>
+    <message><source>Show Advanced Controls</source><translation>Показать расширенные настройки</translation></message>
+    <message><source>Toggle visibility of advanced sunnypilot controls.
+This only toggles the visibility of the controls; it does not toggle the actual control enabled/disabled state.</source><translation>Показывать расширенные настройки sunnypilot.
+Это меняет только видимость элементов управления, но не их фактическое состояние.</translation></message>
+    <message><source>Enable GitHub runner service</source><translation>Включить службу GitHub runner</translation></message>
+    <message><source>Enables or disables the github runner service.</source><translation>Включает или отключает службу GitHub runner.</translation></message>
+    <message><source>Enable Copyparty service</source><translation>Включить службу Copyparty</translation></message>
+    <message><source>Copyparty is a very capable file server, you can use it to download your routes, view your logs and even make some edits on some files from your browser. Requires you to connect to your comma locally via it's IP.</source><translation>Copyparty — многофункциональный файловый сервер: позволяет скачивать записи поездок, просматривать журналы и редактировать некоторые файлы через браузер. Требуется локальное подключение к устройству comma по его IP-адресу.</translation></message>
+    <message><source>Enable Quickboot Mode</source><translation>Включить быструю загрузку</translation></message>
+    <message><source>Error Log</source><translation>Журнал ошибок</translation></message>
+    <message><source>VIEW</source><translation>ПРОСМОТР</translation></message>
+    <message><source>View the error log for sunnypilot crashes.</source><translation>Просмотр журнала ошибок при сбоях sunnypilot.</translation></message>
+    <message><source>When toggled on, this creates a prebuilt file to allow accelerated boot times. When toggled off, it immediately removes the prebuilt file so compilation of locally edited cpp files can be made. &lt;br&gt;&lt;br&gt;&lt;b&gt;To edit C++ files locally on device, you MUST first turn off this toggle so the changes can recompile.&lt;/b&gt;</source><translation>При включении создаётся файл prebuilt для ускорения загрузки. При выключении он сразу удаляется, чтобы можно было скомпилировать изменённые локальные файлы C++. &lt;br&gt;&lt;br&gt;&lt;b&gt;Перед редактированием файлов C++ на устройстве ОБЯЗАТЕЛЬНО отключите этот параметр, чтобы изменения могли скомпилироваться.&lt;/b&gt;</translation></message>
+    <message><source>Quickboot mode requires updates to be disabled.&lt;br&gt;Enable 'Disable Updates' in the Software panel first.</source><translation>Для быстрой загрузки необходимо отключить обновления.&lt;br&gt;Сначала включите «Отключить обновления» в разделе «ПО».</translation></message>
+</context>
+
+<context>
+    <name>ExitOffroadButton</name>
+    <message><source>Are you sure you want to exit Always Offroad mode?</source><translation>Выйти из режима стоянки?</translation></message>
+    <message><source>Confirm</source><translation>Подтвердить</translation></message>
+    <message><source>EXIT ALWAYS OFFROAD MODE</source><translation>ВЫЙТИ ИЗ РЕЖИМА СТОЯНКИ</translation></message>
+</context>
+
+<context>
+    <name>ExternalStorageControl</name>
+    <message><source>External Storage</source><translation>Внешний накопитель</translation></message>
+    <message><source>Extend your comma device's storage by inserting a USB drive into the aux port.</source><translation>Расширьте память устройства comma, подключив USB-накопитель к дополнительному разъёму.</translation></message>
+    <message><source>CHECK</source><translation>ПРОВЕРИТЬ</translation></message>
+    <message><source>MOUNT</source><translation>ПОДКЛЮЧИТЬ</translation></message>
+    <message><source>UNMOUNT</source><translation>ОТКЛЮЧИТЬ</translation></message>
+    <message><source>FORMAT</source><translation>ФОРМАТ</translation></message>
+    <message><source>Are you sure you want to format this drive? This will erase all data.</source><translation>Отформатировать накопитель? Все данные будут удалены.</translation></message>
+    <message><source>Format</source><translation>Форматировать</translation></message>
+    <message><source>formatting</source><translation>форматирование</translation></message>
+    <message><source>insert drive</source><translation>подключите накопитель</translation></message>
+    <message><source>needs format</source><translation>требуется форматирование</translation></message>
+    <message><source>mounting</source><translation>подключение</translation></message>
+    <message><source>unmounting</source><translation>отключение</translation></message>
+    <message>
+        <source>drive detected</source>
+        <translation>Накопитель обнаружен</translation>
+    </message>
+</context>
+
+<context>
+    <name>FirehosePanel</name>
+    <message><source>Firehose Mode</source><translation>Режим Firehose</translation></message>
+    <message><source>sunnypilot learns to drive by watching humans, like you, drive.
+
+Firehose Mode allows you to maximize your training data uploads to improve openpilot's driving models. More data means bigger models, which means better Experimental Mode.</source><translation>sunnypilot учится вождению, наблюдая за такими водителями, как вы.
+
+Режим Firehose позволяет отправлять больше обучающих данных для улучшения моделей вождения openpilot. Больше данных — больше модели и лучшее поведение экспериментального режима.</translation></message>
+    <message><source>Firehose Mode: ACTIVE</source><translation>Режим Firehose: АКТИВЕН</translation></message>
+    <message><source>For maximum effectiveness, bring your device inside and connect to a good USB-C adapter and Wi-Fi weekly.&lt;br&gt;&lt;br&gt;Firehose Mode can also work while you're driving if connected to a hotspot or unlimited SIM card.&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;Frequently Asked Questions&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;i&gt;Does it matter how or where I drive?&lt;/i&gt; Nope, just drive as you normally would.&lt;br&gt;&lt;br&gt;&lt;i&gt;Do all of my segments get pulled in Firehose Mode?&lt;/i&gt; No, we selectively pull a subset of your segments.&lt;br&gt;&lt;br&gt;&lt;i&gt;What's a good USB-C adapter?&lt;/i&gt; Any fast phone or laptop charger should be fine.&lt;br&gt;&lt;br&gt;&lt;i&gt;Does it matter which software I run?&lt;/i&gt; Yes, only upstream sunnypilot (and particular forks) are able to be used for training.</source><translation>Для максимальной эффективности раз в неделю заносите устройство домой и подключайте его к качественному адаптеру USB-C и Wi-Fi.&lt;br&gt;&lt;br&gt;Режим Firehose может работать и в поездке при подключении к точке доступа или SIM-карте с безлимитным интернетом.&lt;br&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;Частые вопросы&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;i&gt;Имеет ли значение, как и где я езжу?&lt;/i&gt; Нет, просто ездите как обычно.&lt;br&gt;&lt;br&gt;&lt;i&gt;Все ли фрагменты моих поездок загружаются в режиме Firehose?&lt;/i&gt; Нет, мы загружаем только часть фрагментов.&lt;br&gt;&lt;br&gt;&lt;i&gt;Какой адаптер USB-C подойдёт?&lt;/i&gt; Подойдёт любое зарядное устройство для телефона или ноутбука с поддержкой быстрой зарядки.&lt;br&gt;&lt;br&gt;&lt;i&gt;Имеет ли значение, какое ПО я использую?&lt;/i&gt; Да, для обучения подходят только исходный sunnypilot и некоторые его ответвления.</translation></message>
+    <message numerus="yes"><source>&lt;b&gt;%n segment(s)&lt;/b&gt; of your driving is in the training dataset so far.</source><translation><numerusform>В обучающий набор уже включён &lt;b&gt;%n фрагмент&lt;/b&gt; ваших поездок.</numerusform><numerusform>В обучающий набор уже включены &lt;b&gt;%n фрагмента&lt;/b&gt; ваших поездок.</numerusform><numerusform>В обучающий набор уже включено &lt;b&gt;%n фрагментов&lt;/b&gt; ваших поездок.</numerusform></translation></message>
+    <message><source>ACTIVE</source><translation>АКТИВЕН</translation></message>
+    <message><source>&lt;span stylesheet='font-size: 60px; font-weight: bold; color: #e74c3c;'&gt;INACTIVE&lt;/span&gt;: connect to an unmetered network</source><translation>&lt;span stylesheet='font-size: 60px; font-weight: bold; color: #e74c3c;'&gt;НЕАКТИВЕН&lt;/span&gt;: подключитесь к безлимитной сети</translation></message>
+</context>
+
+<context>
+    <name>HudRenderer</name>
+    <message><source>MAX</source><translation>МАКС</translation></message>
+    <message><source>km/h</source><translation>км/ч</translation></message>
+    <message><source>mph</source><translation>миль/ч</translation></message>
+</context>
+
+<context>
+    <name>HudRendererSP</name>
+    <message><source>km/h</source><translation>км/ч</translation></message>
+    <message><source>mph</source><translation>миль/ч</translation></message>
+    <message><source>GREEN
+LIGHT</source><translation>ЗЕЛЁНЫЙ
+СИГНАЛ</translation></message>
+    <message><source>LEAD VEHICLE
+DEPARTING</source><translation>АВТО ВПЕРЕДИ
+ТРОНУЛОСЬ</translation></message>
+    <message><source>STOPPED</source><translation>ОСТАНОВКА</translation></message>
+    <message><source>m</source><translation>мин</translation></message>
+    <message><source>km</source><translation>км</translation></message>
+    <message><source>ft</source><translation>футы</translation></message>
+    <message><source>mi</source><translation>мили</translation></message>
+    <message><source>CAMERA</source><translation>КАМЕРА</translation></message>
+    <message><source>SPEED</source><translation>СКОРОСТЬ</translation></message>
+    <message><source>LIMIT</source><translation>ПРЕДЕЛ</translation></message>
+    <message><source>Near</source><translation>Близко</translation></message>
+    <message><source>AHEAD</source><translation>ВПЕРЕДИ</translation></message>
+    <message><source>MAX</source><translation>МАКС</translation></message>
+</context>
+
+<context>
+    <name>HyundaiSettings</name>
+    <message><source>Off</source><translation>Выкл.</translation></message>
+    <message><source>Dynamic</source><translation>Динамический</translation></message>
+    <message><source>Predictive</source><translation>Прогнозирующий</translation></message>
+    <message><source>Custom Longitudinal Tuning</source><translation>Своя настройка продольного управления</translation></message>
+    <message><source>This feature can only be used with sunnypilot longitudinal control enabled.</source><translation>Эта функция доступна только при включённом продольном управлении sunnypilot.</translation></message>
+    <message><source>Enable "Always Offroad" in Device panel, or turn vehicle off to select an option.</source><translation>Для выбора включите режим стоянки в разделе «Система» или выключите автомобиль.</translation></message>
+    <message><source>Off: Uses default tuning</source><translation>Выкл.: стандартная настройка</translation></message>
+    <message><source>Dynamic: Adjusts acceleration limits based on current speed</source><translation>Динамическая: меняет пределы ускорения с учётом текущей скорости</translation></message>
+    <message><source>Predictive: Uses future trajectory data to anticipate needed adjustments</source><translation>Прогнозная: заранее учитывает необходимые корректировки по будущей траектории</translation></message>
+    <message><source>Fine-tune your driving experience by adjusting acceleration smoothness with sunnypilot longitudinal control.</source><translation>Настройте плавность ускорения при продольном управлении sunnypilot.</translation></message>
+</context>
+
+<context>
+    <name>LateralPanel</name>
+    <message><source>Modular Assistive Driving System (MADS)</source><translation>Модульная система помощи водителю (MADS)</translation></message>
+    <message><source>Enable the beloved MADS feature. Disable toggle to revert back to stock sunnypilot engagement/disengagement.</source><translation>Включить MADS. При отключении используется штатная логика включения и отключения управления sunnypilot.</translation></message>
+    <message><source>Customize MADS</source><translation>Настройка MADS</translation></message>
+    <message><source>Customize Lane Change</source><translation>Настроить перестроение</translation></message>
+    <message><source>Pause Lateral Control with Blinker</source><translation>Приостановка руления по поворотнику</translation></message>
+    <message><source>Pause lateral control with blinker when traveling below the desired speed selected.</source><translation>Приостанавливать поперечное управление при включённом поворотнике на скорости ниже выбранной.</translation></message>
+    <message><source>Enforce Torque Lateral Control</source><translation>Принудительное управление по моменту</translation></message>
+    <message><source>Enable this to enforce sunnypilot to steer with Torque lateral control.</source><translation>Принудительно использовать поперечное управление sunnypilot по рулевому моменту.</translation></message>
+    <message><source>Customize Params</source><translation>Настроить параметры</translation></message>
+    <message><source>Enables independent engagements of Automatic Lane Centering (ALC) and Adaptive Cruise Control (ACC).</source><translation>Разрешает раздельное включение автоматического удержания по центру полосы (ALC) и адаптивного круиз-контроля (ACC).</translation></message>
+    <message><source>Start the vehicle to check vehicle compatibility.</source><translation>Запустите автомобиль для проверки совместимости.</translation></message>
+    <message><source>This platform supports all MADS settings.</source><translation>Эта платформа поддерживает все настройки MADS.</translation></message>
+    <message><source>This platform supports limited MADS settings.</source><translation>Эта платформа поддерживает ограниченный набор настроек MADS.</translation></message>
+</context>
+
+<context>
+    <name>LongitudinalPanel</name>
+    <message><source>Intelligent Cruise Button Management (ICBM) (Alpha)</source><translation>Управление круизом (ICBM)</translation></message>
+    <message><source>Dynamic Experimental Control (DEC)</source><translation>Динамический режим (DEC)</translation></message>
+    <message><source>Enable toggle to allow the model to determine when to use sunnypilot ACC or sunnypilot End to End Longitudinal.</source><translation>Модель выбирает между ACC sunnypilot и продольным управлением нейросетью.</translation></message>
+    <message><source>Smart Cruise Control - Vision</source><translation>Умный круиз-контроль — камера</translation></message>
+    <message><source>Use vision path predictions to estimate the appropriate speed to drive through turns ahead.</source><translation>Оценивает скорость для поворотов впереди по прогнозу траектории с камер.</translation></message>
+    <message><source>Smart Cruise Control - Map</source><translation>Умный круиз-контроль — карта</translation></message>
+    <message><source>Use map data to estimate the appropriate speed to drive through turns ahead.</source><translation>Оценивает скорость для поворотов впереди по данным карты.</translation></message>
+    <message><source>Custom ACC Speed Increments</source><translation>Свои шаги скорости ACC</translation></message>
+    <message><source>Speed Limit</source><translation>Ограничение скорости</translation></message>
+    <message><source>When enabled, sunnypilot will attempt to manage the built-in cruise control buttons by emulating button presses for limited longitudinal control.</source><translation>Управляет штатным круиз-контролем, имитируя нажатия его кнопок. Возможности продольного управления ограничены.</translation></message>
+    <message><source>Intelligent Cruise Button Management is currently unavailable on this platform.</source><translation>Управление круизом (ICBM) недоступно на этом автомобиле.</translation></message>
+    <message><source>Disable the sunnypilot Longitudinal Control (alpha) toggle to allow Intelligent Cruise Button Management.</source><translation>Чтобы включить ICBM, отключите продольное управление sunnypilot (альфа).</translation></message>
+    <message><source>sunnypilot Longitudinal Control is the default longitudinal control for this platform.</source><translation>Продольное управление sunnypilot используется на этой платформе по умолчанию.</translation></message>
+    <message><source>Start the vehicle to check vehicle compatibility.</source><translation>Запустите автомобиль для проверки совместимости.</translation></message>
+    <message><source>Enable custom Short &amp; Long press increments for cruise speed increase/decrease.</source><translation>Задаёт шаг изменения скорости круиза при коротком и долгом нажатии кнопок.</translation></message>
+    <message><source>This feature can only be used with sunnypilot longitudinal control enabled.</source><translation>Эта функция доступна только при включённом продольном управлении sunnypilot.</translation></message>
+    <message><source>This feature is not supported on this platform due to vehicle limitations.</source><translation>Эта функция не поддерживается на данной платформе из-за ограничений автомобиля.</translation></message>
+    <message><source>Intelligent Cruise Button Management (ICBM)</source><translation>Управление круизом (ICBM)</translation></message>
+</context>
+
+<context>
+    <name>ModelsPanel</name>
+    <message><source>Current Model</source><translation>Текущая модель</translation></message>
+    <message><source>SELECT</source><translation>ВЫБРАТЬ</translation></message>
+    <message><source>Refresh Model List</source><translation>Обновить список моделей</translation></message>
+    <message><source>REFRESH</source><translation>ОБНОВИТЬ</translation></message>
+    <message><source>Fetching Latest Models</source><translation>Получение новых моделей</translation></message>
+    <message><source>Clear Model Cache</source><translation>Очистить кэш моделей</translation></message>
+    <message><source>CLEAR</source><translation>ОЧИСТИТЬ</translation></message>
+    <message><source>Driving Model</source><translation>Модель вождения</translation></message>
+    <message><source>Navigation Model</source><translation>Модель навигации</translation></message>
+    <message><source>Vision Model</source><translation>Модель компьютерного зрения</translation></message>
+    <message><source>Policy Model</source><translation>Модель принятия решений</translation></message>
+    <message><source>Use Lane Turn Desires</source><translation>Планирование поворотов по поворотнику</translation></message>
+    <message><source>Adjust Lane Turn Speed</source><translation>Макс. скорость планирования поворота</translation></message>
+    <message><source>Set the maximum speed for lane turn desires. Default is 19 %1.</source><translation>Задайте максимальную скорость планирования поворота по поворотнику. По умолчанию — 19 %1.</translation></message>
+    <message><source>Live Learning Steer Delay</source><translation>Автообучение задержки рулевого управления</translation></message>
+    <message><source>Adjust Software Delay</source><translation>Программная задержка</translation></message>
+    <message><source>Adjust the software delay when Live Learning Steer Delay is toggled off.
+The default software delay value is 0.2</source><translation>Настройка программной задержки при отключённом автообучении задержки рулевого управления.
+По умолчанию: 0.2</translation></message>
+    <message><source>  %1 - %2</source><translation>  %1 — %2</translation></message>
+    <message><source>downloaded</source><translation>загружено</translation></message>
+    <message><source>ready</source><translation>готово</translation></message>
+    <message><source>from cache</source><translation>из кэша</translation></message>
+    <message><source>  download failed - %1</source><translation>  ошибка загрузки — %1</translation></message>
+    <message><source>  pending - %1</source><translation>  ожидание — %1</translation></message>
+    <message><source>Fetching models...</source><translation>Получение списка моделей...</translation></message>
+    <message><source>Select a Model</source><translation>Выберите модель</translation></message>
+    <message><source>Default</source><translation>По умолчанию</translation></message>
+    <message><source>Enable this for the car to learn and adapt its steering response time. Disable to use a fixed steering response time. Keeping this on provides the stock openpilot experience.</source><translation>Включите обучение и адаптацию времени отклика рулевого управления. Отключите для фиксированного времени отклика. Включённый параметр соответствует штатному поведению openpilot.</translation></message>
+    <message><source>Live Steer Delay:</source><translation>Текущая задержка рулевого управления:</translation></message>
+    <message><source>Actuator Delay:</source><translation>Задержка исполнительного механизма:</translation></message>
+    <message><source>Software Delay:</source><translation>Программная задержка:</translation></message>
+    <message><source>Total Delay:</source><translation>Общая задержка:</translation></message>
+    <message><source>Model download has started in the background.</source><translation>Загрузка модели началась в фоне.</translation></message>
+    <message><source>We STRONGLY suggest you to reset calibration.</source><translation>Настоятельно рекомендуется сбросить калибровку.</translation></message>
+    <message><source>Would you like to do that now?</source><translation>Сделать это сейчас?</translation></message>
+    <message><source>Reset Calibration</source><translation>Сбросить калибровку</translation></message>
+    <message><source>Driving Model Selector</source><translation>Выбор модели вождения</translation></message>
+    <message><source>This will delete ALL downloaded models from the cache&lt;br/&gt;&lt;u&gt;except the currently active model&lt;/u&gt;.&lt;br/&gt;&lt;br/&gt;Are you sure you want to continue?</source><translation>Будут удалены ВСЕ загруженные модели из кэша&lt;br/&gt;&lt;u&gt;кроме текущей активной модели&lt;/u&gt;.&lt;br/&gt;&lt;br/&gt;Продолжить?</translation></message>
+    <message><source>Clear Cache</source><translation>Очистить кэш</translation></message>
+    <message><source>Warning: You are on a metered connection!</source><translation>Внимание: используется лимитное подключение!</translation></message>
+    <message><source>Continue</source><translation>Продолжить</translation></message>
+    <message><source>on Metered</source><translation>через лимитную сеть</translation></message>
+    <message><source>Cancel</source><translation>Отмена</translation></message>
+    <message><source>If you’re driving at 20 mph (32 km/h) or below and have your blinker on, the car will plan a turn in that direction at the nearest drivable path. This prevents situations (like at red lights) where the car might plan the wrong turn direction.</source><translation>На скорости до 32 км/ч (20 миль/ч) включённый поворотник задаёт направление поворота по ближайшей доступной траектории. Это помогает избежать выбора неверного направления, например при ожидании на красный свет.</translation></message>
+    <message><source>Firehose (Default)</source><translation>Firehose (по умолчанию)</translation></message>
+    <message><source>MB</source><translation>МБ</translation></message>
+    <message><source> - (Updated: </source><translation> — (обновлено: </translation></message>
+</context>
+
+<context>
+    <name>NeuralNetworkLateralControl</name>
+    <message><source>Neural Network Lateral Control (NNLC)</source><translation>Нейросетевое поперечное управление (NNLC)</translation></message>
+    <message><source>NNLC is currently not available on this platform.</source><translation>NNLC пока недоступно на этой платформе.</translation></message>
+    <message><source>Start the car to check car compatibility</source><translation>Включите автомобиль для проверки совместимости</translation></message>
+    <message><source>NNLC Not Loaded</source><translation>NNLC не загружено</translation></message>
+    <message><source>NNLC Loaded</source><translation>NNLC загружено</translation></message>
+    <message><source>Match</source><translation>Совпадение</translation></message>
+    <message><source>Exact</source><translation>Точное</translation></message>
+    <message><source>Fuzzy</source><translation>Приблизительное</translation></message>
+    <message><source>Match: "Exact" is ideal, but "Fuzzy" is fine too.</source><translation>Совпадение: предпочтительно точное, но приблизительное тоже допустимо.</translation></message>
+    <message><source>Formerly known as &lt;b&gt;"NNFF"&lt;/b&gt;, this replaces the lateral &lt;b&gt;"torque"&lt;/b&gt; controller, with one using a neural network trained on each car's (actually, each separate EPS firmware) driving data for increased controls accuracy.</source><translation>Ранее называлось &lt;b&gt;«NNFF»&lt;/b&gt;. Заменяет поперечный контроллер &lt;b&gt;рулевого момента&lt;/b&gt; нейросетью, обученной на данных поездок конкретного автомобиля — точнее, конкретной прошивки электроусилителя руля (EPS), — для повышения точности управления.</translation></message>
+    <message><source>Reach out to the sunnypilot team in the following channel at the sunnypilot Discord server</source><translation>Обратитесь к команде sunnypilot в следующем канале сервера Discord sunnypilot</translation></message>
+    <message><source>with feedback, or to provide log data for your car if your car is currently unsupported:</source><translation>с отзывом или журналами поездок, если ваш автомобиль пока не поддерживается:</translation></message>
+    <message><source>if there are any issues:</source><translation>при возникновении проблем:</translation></message>
+    <message><source>and donate logs to get NNLC loaded for your car:</source><translation>и предоставьте журналы поездок для подключения NNLC к вашему автомобилю:</translation></message>
+</context>
+
+<context>
+    <name>OffroadHomeSP</name>
+    <message><source>ALWAYS OFFROAD ACTIVE</source><translation>РЕЖИМ СТОЯНКИ ВКЛЮЧЁН</translation></message>
+</context>
+
+<context>
+    <name>PlatformSelector</name>
+    <message><source>Vehicle</source><translation>Авто</translation></message>
+    <message><source>SEARCH</source><translation>ПОИСК</translation></message>
+    <message><source>Search your vehicle</source><translation>Найдите свой автомобиль</translation></message>
+    <message><source>Enter model year (e.g., 2021) and model name (Toyota Corolla):</source><translation>Введите год выпуска (например, 2021) и название модели (Toyota Corolla):</translation></message>
+    <message><source>SEARCHING</source><translation>ПОИСК</translation></message>
+    <message><source>REMOVE</source><translation>УДАЛИТЬ</translation></message>
+    <message><source>This setting will take effect immediately.</source><translation>Эта настройка применяется немедленно.</translation></message>
+    <message><source>This setting will take effect once the device enters offroad state.</source><translation>Настройка применится после перехода устройства в режим стоянки.</translation></message>
+    <message><source>Vehicle Selector</source><translation>Выбор автомобиля</translation></message>
+    <message><source>Confirm</source><translation>Подтвердить</translation></message>
+    <message><source>Cancel</source><translation>Отмена</translation></message>
+    <message><source>No vehicles found for query: %1</source><translation>По запросу «%1» автомобили не найдены</translation></message>
+    <message><source>Select a vehicle</source><translation>Выберите автомобиль</translation></message>
+    <message><source>Unrecognized Vehicle</source><translation>Автомобиль не распознан</translation></message>
+    <message><source>Fingerprinted automatically</source><translation>Автомобиль определён автоматически</translation></message>
+    <message><source>Manually selected</source><translation>Выбран вручную</translation></message>
+    <message><source>Not fingerprinted or manually selected</source><translation>Автомобиль не определён и не выбран вручную</translation></message>
+    <message><source>Select vehicle to force fingerprint manually.</source><translation>Выберите автомобиль для ручной идентификации.</translation></message>
+    <message><source>Colors represent fingerprint status:</source><translation>Цвета обозначают статус определения автомобиля:</translation></message>
+</context>
+
+<context>
+    <name>SpeedLimitPolicy</name>
+    <message><source>Car
+Only</source><translation>Только
+авто</translation></message>
+    <message><source>Map
+Only</source><translation>Только
+карта</translation></message>
+    <message><source>Car
+First</source><translation>Сначала
+авто</translation></message>
+    <message><source>Map
+First</source><translation>Сначала
+карта</translation></message>
+    <message><source>Combined
+Data</source><translation>Авто +
+карта</translation></message>
+    <message><source>Back</source><translation>Назад</translation></message>
+    <message><source>Speed Limit Source</source><translation>Источник ограничения скорости</translation></message>
+    <message><source>⦿ Car Only: Use Speed Limit data only from Car</source><translation>⦿ Только автомобиль: использовать ограничение скорости только от автомобиля</translation></message>
+    <message><source>⦿ Map Only: Use Speed Limit data only from OpenStreetMaps</source><translation>⦿ Только карта: использовать ограничение скорости только из OpenStreetMaps</translation></message>
+    <message><source>⦿ Car First: Use Speed Limit data from Car if available, else use from OpenStreetMaps</source><translation>⦿ Сначала автомобиль: использовать ограничение скорости от автомобиля, если доступно, иначе — из OpenStreetMaps</translation></message>
+    <message><source>⦿ Map First: Use Speed Limit data from OpenStreetMaps if available, else use from Car</source><translation>⦿ Сначала карта: использовать ограничение скорости из OpenStreetMaps, если доступно, иначе — от автомобиля</translation></message>
+    <message><source>⦿ Combined: Use combined Speed Limit data from Car &amp; OpenStreetMaps</source><translation>⦿ Общие данные: использовать ограничения скорости от автомобиля и OpenStreetMaps</translation></message>
+</context>
+
+<context>
+    <name>SpeedLimitSettings</name>
+    <message><source>None</source><translation>Нет</translation></message>
+    <message><source>Fixed</source><translation>Фиксированный</translation></message>
+    <message><source>Percent</source><translation>Процент</translation></message>
+    <message><source>Off</source><translation>Выкл.</translation></message>
+    <message><source>Information</source><translation>Инфо</translation></message>
+    <message><source>Warning</source><translation>Предупр.</translation></message>
+    <message><source>Assist</source><translation>Помощь</translation></message>
+    <message><source>Back</source><translation>Назад</translation></message>
+    <message><source>Speed Limit</source><translation>Ограничение скорости</translation></message>
+    <message><source>Customize Source</source><translation>Настроить источник</translation></message>
+    <message><source>Speed Limit Offset</source><translation>Поправка к дорожному ограничению скорости</translation></message>
+    <message><source>Speed Cameras</source><translation>Камеры контроля скорости</translation></message>
+    <message><source>Download and use the speed-camera database for map warnings.</source><translation>Загружать и использовать базу камер контроля скорости для предупреждений на карте.</translation></message>
+    <message><source>Manual</source><translation>Вручную</translation></message>
+    <message><source>6 h</source><translation>6 ч</translation></message>
+    <message><source>24 h</source><translation>24 ч</translation></message>
+    <message><source>168 h</source><translation>168 ч</translation></message>
+    <message><source>Automatic Updates</source><translation>Автоматические обновления</translation></message>
+    <message><source>Choose how often the camera database is refreshed.</source><translation>Выберите частоту обновления базы камер.</translation></message>
+    <message><source>Warning Distance</source><translation>Дальность предупреждения</translation></message>
+    <message><source>Show camera warnings up to this distance ahead.</source><translation>Показывать предупреждения о камерах на указанном расстоянии впереди.</translation></message>
+    <message><source>Database Status</source><translation>Состояние базы</translation></message>
+    <message><source>Camera Count</source><translation>Количество камер</translation></message>
+    <message><source>Last Update</source><translation>Последнее обновление</translation></message>
+    <message><source>Last Error</source><translation>Последняя ошибка</translation></message>
+    <message><source>Update Camera Database Now</source><translation>Обновить базу камер</translation></message>
+    <message><source>not downloaded</source><translation>не загружено</translation></message>
+    <message><source>⦿ None: No Offset</source><translation>⦿ Нет: без поправки</translation></message>
+    <message><source>⦿ Fixed: Adds a fixed offset [Speed Limit + Offset]</source><translation>⦿ Фиксированная: прибавлять фиксированную поправку [ограничение скорости + поправка]</translation></message>
+    <message><source>⦿ Percent: Adds a percent offset [Speed Limit + (Offset % Speed Limit)]</source><translation>⦿ Процент: прибавлять процентную поправку [ограничение скорости + (поправка % ограничения скорости)]</translation></message>
+    <message><source>⦿ Off: Disables the Speed Limit functions.</source><translation>⦿ Выкл.: отключает функции ограничения скорости.</translation></message>
+    <message><source>⦿ Information: Displays the current road's speed limit.</source><translation>⦿ Информация: показывает ограничение скорости на текущей дороге.</translation></message>
+    <message><source>⦿ Warning: Provides a warning when exceeding the current road's speed limit.</source><translation>⦿ Предупреждение: предупреждать о превышении ограничения скорости на текущей дороге.</translation></message>
+    <message><source>⦿ Assist: Adjusts the vehicle's cruise speed based on the current road's speed limit when operating the +/- buttons.</source><translation>⦿ Помощь: изменяет заданную скорость круиз-контроля с учётом ограничения скорости при нажатии кнопок +/−.</translation></message>
+    <message>
+        <source>Show camera warnings from the downloaded database. Offline road maps are not required.</source>
+        <translation>Показывать предупреждения о камерах из загруженной базы. Офлайн-карты дорог не требуются.</translation>
+    </message>
+    <message>
+        <source>Automatic Camera Speed Control</source>
+        <translation>Управление скоростью у камер</translation>
+    </message>
+    <message>
+        <source>Requires ICBM and Speed Limit Assist. Physical steering-wheel buttons remain available to cancel or override control.</source>
+        <translation>Нужны ICBM и режим «Помощь». Управление можно отменить или изменить кнопками на руле.</translation>
+    </message>
+    <message>
+        <source>Database Source</source>
+        <translation>Источник базы</translation>
+    </message>
+    <message>
+        <source>EDIT</source>
+        <translation>ИЗМЕНИТЬ</translation>
+    </message>
+    <message>
+        <source>CityGuide 7.7: all camera types and all Russian regions. Updates use SpeedCamOnline, with a verified backup copy from this repository when the site is unreachable.
+Default: %1. Custom HTTPS sources do not use the backup. Source and direction data are retained; automatic control depends on camera type support.</source>
+        <translation>CityGuide 7.7: все типы камер и все регионы России. Обновления загружаются с SpeedCamOnline; если сайт недоступен, используется проверенная резервная копия из этого репозитория.
+По умолчанию: %1. Для других HTTPS-источников резервная копия не используется. Данные об источнике и направлении сохраняются; автоматическое управление зависит от поддержки типа камеры.</translation>
+    </message>
+    <message>
+        <source>Camera database URL</source>
+        <translation>URL базы камер</translation>
+    </message>
+    <message>
+        <source>SpeedCamOnline CityGuide 7.7 default: %1. Enter another HTTPS source to customize.</source>
+        <translation>По умолчанию используется SpeedCamOnline CityGuide 7.7: %1. Для другого источника укажите его HTTPS-адрес.</translation>
+    </message>
+    <message>
+        <source>Enter a valid HTTPS database URL without credentials.</source>
+        <translation>Введите корректный HTTPS-адрес базы без учётных данных.</translation>
+    </message>
+    <message>
+        <source>Database Version / Hash</source>
+        <translation>Версия / хеш базы</translation>
+    </message>
+    <message>
+        <source>Update Database</source>
+        <translation>Обновить базу</translation>
+    </message>
+    <message>
+        <source>km/h</source>
+        <translation>км/ч</translation>
+    </message>
+    <message>
+        <source>mph</source>
+        <translation>миль/ч</translation>
+    </message>
+    <message>
+        <source>SpeedCamOnline</source>
+        <translation>SpeedCamOnline</translation>
+    </message>
+    <message><source>%1 m</source><translation>%1 м</translation></message>
+    <message><source>+%1 km/h</source><translation>+%1 км/ч</translation></message>
+    <message><source>Add this offset to the camera limit for automatic camera speed control, up to your selected cruise speed. Always stored in km/h.</source><translation>Прибавлять это значение к ограничению у камеры при автоматическом управлении скоростью, не превышая заданную скорость круиза. Значение всегда хранится в км/ч.</translation></message>
+    <message><source>Camera Speed Offset</source><translation>Нештрафуемый лимит</translation></message>
+</context>
+
+<context>
+    <name>SubaruSettings</name>
+    <message><source>Stop and Go (Beta)</source><translation>Движение в пробке (бета)</translation></message>
+    <message><source>Stop and Go for Manual Parking Brake (Beta)</source><translation>Движение в пробке с ручным стояночным тормозом (бета)</translation></message>
+    <message><source>Experimental feature to enable auto-resume during stop-and-go for certain supported Subaru platforms.</source><translation>Экспериментальное автоматическое возобновление движения в пробках для некоторых поддерживаемых платформ Subaru.</translation></message>
+    <message><source>Experimental feature to enable stop and go for Subaru Global models with manual handbrake. Models with electric parking brake should keep this disabled. Thanks to martinl for this implementation!</source><translation>Экспериментальная функция движения в пробке для автомобилей платформы Subaru Global с ручным стояночным тормозом. На моделях с электрическим стояночным тормозом оставьте её отключённой. Спасибо martinl за реализацию!</translation></message>
+    <message><source>This feature is currently not available on this platform.</source><translation>Эта функция пока недоступна на данной платформе.</translation></message>
+    <message><source>Start the car to check car compatibility.</source><translation>Включите автомобиль для проверки совместимости.</translation></message>
+    <message><source>Enable "Always Offroad" in Device panel, or turn vehicle off to toggle.</source><translation>Для переключения включите режим стоянки в разделе «Система» или выключите автомобиль.</translation></message>
+</context>
+
+<context>
+    <name>SunnylinkCommunityPopup</name>
+    <message><source>Scan the QR code and join us!</source><translation>Отсканируйте QR-код и присоединяйтесь!</translation></message>
+    <message><source>Join the sunnypilot Community Forum</source><translation>Форум сообщества sunnypilot</translation></message>
+    <message><source>We're excited to announce our &lt;b&gt;sunnypilot Community Forum&lt;/b&gt;&lt;br&gt;&lt;br&gt;Over the years, Discord just hasn't scaled well for our growing community.&lt;br&gt;It's noisy, unsearchable, and great discussions disappear too easily.&lt;br&gt;Our new community forum aims to fix that by making it easier to &lt;b&gt;find answers, share ideas, track feedback, report bugs, help newcomers&lt;/b&gt; and more!&lt;br&gt;&lt;br&gt;&lt;b&gt;Here's what's waiting for you:&lt;/b&gt;&lt;br&gt;• Fully &lt;b&gt;indexable&lt;/b&gt; and discoverable through search engines 🔎&lt;br&gt;• &lt;b&gt;AI-powered&lt;/b&gt;🤖 topic and chat summaries, spam detection, and more&lt;br&gt;• A &lt;b&gt;trust-level system&lt;/b&gt;✅ that rewards meaningful contributions&lt;br&gt;• Designed to work &lt;b&gt;on your own time&lt;/b&gt;.🧘&lt;br&gt;&lt;br&gt;Scan the QR code on the right and join the discussion!</source><translation>Представляем &lt;b&gt;форум сообщества sunnypilot&lt;/b&gt;!&lt;br&gt;&lt;br&gt;Со временем Discord перестал справляться с ростом сообщества.&lt;br&gt;Много шума, неудобный поиск, а полезные обсуждения легко теряются.&lt;br&gt;Новый форум поможет &lt;b&gt;находить ответы, делиться идеями, отслеживать отзывы, сообщать об ошибках и помогать новичкам&lt;/b&gt;.&lt;br&gt;&lt;br&gt;&lt;b&gt;Вас ждут:&lt;/b&gt;&lt;br&gt;• Полная &lt;b&gt;индексация&lt;/b&gt; и поиск через поисковые системы 🔎&lt;br&gt;• &lt;b&gt;Искусственный интеллект&lt;/b&gt;🤖 для кратких сводок тем и чатов, обнаружения спама и других задач&lt;br&gt;• &lt;b&gt;Система уровней доверия&lt;/b&gt;✅ за полезный вклад&lt;br&gt;• Общение &lt;b&gt;в удобное для вас время&lt;/b&gt;.🧘&lt;br&gt;&lt;br&gt;Отсканируйте QR-код справа и присоединяйтесь к обсуждению!</translation></message>
+</context>
+
+<context>
+    <name>TeslaSettings</name>
+    <message><source>Warning: May experience steering oscillations below %5 %6 during turns, recommend disabling this feature if you experience these.</source><translation>Внимание: на поворотах при скорости ниже %5 %6 возможны колебания руля. При их появлении рекомендуется отключить эту функцию.</translation></message>
+    <message><source>Allows the driver to provide limited steering input while openpilot is engaged.</source><translation>Позволяет водителю вносить ограниченные корректировки рулём при включённом openpilot.</translation></message>
+    <message><source>Only works above %4 %6.</source><translation>Работает только на скорости выше %4 %6.</translation></message>
+    <message><source>Cooperative Steering (Beta)</source><translation>Совместное рулевое управление (бета)</translation></message>
+</context>
+
+<context>
+    <name>TorqueLateralControlCustomParams</name>
+    <message><source>Manual Real-Time Tuning</source><translation>Ручная настройка в реальном времени</translation></message>
+    <message><source>Enforces the torque lateral controller to use the fixed values instead of the learned values from Self-Tune. Enabling this toggle overrides Self-Tune values.</source><translation>Использовать в контроллере рулевого момента фиксированные значения вместо полученных при самообучении. Этот параметр имеет приоритет над значениями самообучения.</translation></message>
+    <message><source>Lateral Acceleration Factor</source><translation>Коэффициент бокового ускорения</translation></message>
+    <message><source>Friction</source><translation>Трение</translation></message>
+    <message><source>Real-time and Offline</source><translation>Текущие и сохранённые значения</translation></message>
+    <message><source>Offline Only</source><translation>Только сохранённые значения</translation></message>
+    <message>
+        <source>m/s²</source>
+        <translation>м/с²</translation>
+    </message>
+</context>
+
+<context>
+    <name>TorqueLateralControlSettings</name>
+    <message><source>Self-Tune</source><translation>Самообучение</translation></message>
+    <message><source>Enables self-tune for Torque lateral control for platforms that do not use Torque lateral control by default.</source><translation>Включить самообучение поперечного управления по моменту для платформ, где оно не используется по умолчанию.</translation></message>
+    <message><source>Less Restrict Settings for Self-Tune (Beta)</source><translation>Смягчённые условия самообучения (бета)</translation></message>
+    <message><source>Less strict settings when using Self-Tune. This allows torqued to be more forgiving when learning values.</source><translation>Менее строгие условия самообучения: служба torqued принимает больше значений при обучении.</translation></message>
+    <message><source>Enable Custom Tuning</source><translation>Своя настройка управления</translation></message>
+    <message><source>Enables custom tuning for Torque lateral control. Modifying Lateral Acceleration Factor and Friction below will override the offline values indicated in the YAML files within "opendbc/car/torque_data". The values will also be used live when "Manual Real-Time Tuning" toggle is enabled.</source><translation>Включает свою настройку поперечного управления по моменту. Коэффициент бокового ускорения и трение ниже заменяют значения из YAML-файлов в «opendbc/car/torque_data». При включённой «Ручной настройке в реальном времени» значения также применяются во время работы.</translation></message>
+</context>
+
+<context>
+    <name>TreeOptionDialog</name>
+    <message><source>Favorites</source><translation>Избранное</translation></message>
+    <message><source>Select</source><translation>Выбрать</translation></message>
+    <message><source>Cancel</source><translation>Отмена</translation></message>
+</context>
+<context>
+    <name>AccIncrementOptionControl</name>
+    <message>
+        <source>Short Press</source>
+        <translation>Короткое нажатие</translation>
+    </message>
+    <message>
+        <source>Long Press</source>
+        <translation>Долгое нажатие</translation>
+    </message>
+    <message>
+        <source>Default</source>
+        <translation>По умолчанию</translation>
+    </message>
+</context>
+<context>
+    <name>OnroadScreenBrightnessControl</name>
+    <message>
+        <source>Onroad Brightness Delay</source>
+        <translation>Задержка яркости в движении</translation>
+    </message>
+    <message>
+        <source>Onroad Brightness</source>
+        <translation>Яркость в движении</translation>
+    </message>
+    <message>
+        <source>s</source>
+        <translation>с</translation>
+    </message>
+    <message>
+        <source>m</source>
+        <translation>мин</translation>
+    </message>
+    <message>
+        <source>Screen Off</source>
+        <translation>Экран выключен</translation>
+    </message>
+</context>
+<context>
+    <name>CameraError</name>
+    <message><source>duplicate mirror manifest field</source><translation>Повтор поля в манифесте резервной базы</translation></message>
+    <message><source>iGo snapshot is truncated: missing line terminator</source><translation>Файл iGo обрезан: нет завершения строки</translation></message>
+    <message><source>invalid iGo CSV quoting</source><translation>Ошибка кавычек CSV в базе iGo</translation></message>
+    <message><source>invalid iGo speed-camera header</source><translation>Неверный заголовок базы камер iGo</translation></message>
+    <message><source>invalid iGo speed-camera schema</source><translation>Неверная структура базы камер iGo</translation></message>
+    <message><source>invalid mirror asset_name</source><translation>Неверное имя файла резервной базы (asset_name)</translation></message>
+    <message><source>invalid mirror fetched_at</source><translation>Неверное время загрузки резервной базы (fetched_at)</translation></message>
+    <message><source>invalid mirror manifest JSON/encoding</source><translation>Ошибка JSON или кодировки манифеста резервной базы</translation></message>
+    <message><source>invalid mirror record_count</source><translation>Неверное число записей резервной базы (record_count)</translation></message>
+    <message><source>invalid mirror sha256</source><translation>Неверный SHA-256 резервной базы (sha256)</translation></message>
+    <message><source>invalid mirror size_bytes</source><translation>Неверный размер резервной базы (size_bytes)</translation></message>
+    <message><source>invalid mirror timestamp</source><translation>Неверная временная метка резервной базы</translation></message>
+    <message><source>mirror asset SHA-256 does not match manifest</source><translation>SHA-256 резервной базы не совпадает с манифестом</translation></message>
+    <message><source>mirror asset length does not match manifest</source><translation>Размер файла резервной базы не совпадает с манифестом</translation></message>
+    <message><source>mirror manifest exceeds size limit</source><translation>Манифест резервной базы превышает допустимый размер</translation></message>
+    <message><source>mirror manifest must be an object</source><translation>Манифест резервной базы должен быть объектом</translation></message>
+    <message><source>mirror parsed record count does not match manifest</source><translation>Число записей резервной базы не совпадает с манифестом</translation></message>
+    <message><source>mirror source_url does not match SpeedCamOnline CG77</source><translation>Источник резервной базы (source_url) не соответствует SpeedCamOnline CG77</translation></message>
+    <message><source>mirror timestamp is stale or too far in the future</source><translation>Временная метка резервной базы устарела или слишком далеко в будущем</translation></message>
+    <message><source>non-finite JSON constant in mirror manifest</source><translation>Недопустимая числовая константа JSON в манифесте резервной базы</translation></message>
+    <message><source>speed-camera Content-Length is invalid</source><translation>Неверный Content-Length базы камер</translation></message>
+    <message><source>speed-camera HTTP host resolved to no addresses</source><translation>Для HTTP-сервера базы камер не найден IP-адрес</translation></message>
+    <message><source>speed-camera URL must use http or https</source><translation>Адрес базы камер должен использовать HTTP или HTTPS</translation></message>
+    <message><source>speed-camera download wallclock timeout</source><translation>Истекло общее время загрузки базы камер</translation></message>
+    <message><source>speed-camera endpoint returned Content-Range instead of a complete snapshot</source><translation>Сервер базы камер вернул Content-Range вместо полного файла</translation></message>
+    <message><source>speed-camera endpoint returned HTML</source><translation>Сервер базы камер вернул HTML вместо данных</translation></message>
+    <message><source>speed-camera path and version are required</source><translation>Не заданы путь и версия базы камер</translation></message>
+    <message><source>speed-camera redirect must remain HTTP or HTTPS</source><translation>Перенаправление базы камер должно использовать HTTP или HTTPS</translation></message>
+    <message><source>speed-camera response length does not match Content-Length</source><translation>Размер ответа базы камер не совпадает с Content-Length</translation></message>
+    <message><source>speed-camera size limit must be a positive integer</source><translation>Ограничение размера базы камер должно быть положительным целым числом</translation></message>
+    <message><source>speed-camera size limit must be positive</source><translation>Ограничение размера базы камер должно быть положительным</translation></message>
+    <message><source>speed-camera snapshot contains no valid cameras</source><translation>В базе нет корректных записей камер</translation></message>
+    <message><source>speed-camera snapshot exceeds size limit</source><translation>База камер превышает допустимый размер</translation></message>
+    <message><source>speed-camera snapshot is empty or HTML</source><translation>База камер пуста или содержит HTML</translation></message>
+    <message><source>speed-camera snapshot is empty or header-only</source><translation>База камер пуста или содержит только заголовок</translation></message>
+    <message><source>speed-camera source delivery total deadline exceeded</source><translation>Истекло общее время получения базы камер из источников</translation></message>
+    <message><source>speed-camera timeout must be positive</source><translation>Время ожидания базы камер должно быть положительным</translation></message>
+    <message><source>unsupported mirror schema_version</source><translation>Неподдерживаемая версия манифеста резервной базы (schema_version)</translation></message>
+    <message><source>speed-camera HTTP deadline/read timeout after %1s; wire_bytes=%2</source><translation>Истекло время ожидания HTTP базы камер: %1 с; wire_bytes=%2</translation></message>
+    <message><source>speed-camera download read timeout; body_bytes=%1; %2</source><translation>Истекло время чтения базы камер; body_bytes=%1; %2</translation></message>
+    <message><source>speed-camera download connection timeout; body_bytes=%1; %2</source><translation>Истекло время подключения к базе камер; body_bytes=%1; %2</translation></message>
+    <message><source>speed-camera endpoint requires complete HTTP 200; got %1</source><translation>Для загрузки базы камер нужен HTTP 200; получен %1</translation></message>
+    <message><source>invalid iGo row %1</source><translation>Ошибка в строке iGo %1</translation></message>
+</context>
+<context>
+    <name>PanelBackButton</name>
+    <message><source>Back</source><translation>Назад</translation></message>
 </context>
 </TS>
