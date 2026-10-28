@@ -43,7 +43,7 @@ class IntelligentCruiseButtonManagement:
     self.v_target_ms_last = 0.0
     self.is_metric = False
 
-    self.cruise_button_timers = CRUISE_BUTTON_TIMER
+    self.cruise_button_timers = CRUISE_BUTTON_TIMER.copy()
 
   @property
   def v_cruise_equal(self) -> bool:
@@ -105,13 +105,22 @@ class IntelligentCruiseButtonManagement:
 
     return send_button
 
-  def update_readiness(self, CS: car.CarState, CC: car.CarControl) -> None:
+  def update_readiness(self, CS: car.CarState, CC: car.CarControl, LP_SP: custom.LongitudinalPlanSP) -> None:
     update_manual_button_timers(CS, self.cruise_button_timers)
 
-    ready = CC.enabled and not CC.cruiseControl.override and not CC.cruiseControl.cancel and not CC.cruiseControl.resume
+    # Observe the physical pedals/ACC directly as well as carControl: its
+    # override flag can arrive a control frame later. Driver priority only
+    # suspends button transmission; it must not erase the requested setpoint.
+    ready = (CC.enabled and CS.cruiseState.enabled and not CS.gasPressed and not CS.brakePressed and
+             not CC.cruiseControl.override and not CC.cruiseControl.cancel and not CC.cruiseControl.resume)
     button_pressed = any(self.cruise_button_timers[k] > 0 for k in self.cruise_button_timers)
+    camera = LP_SP.speedCameraControl
+    # A temporary native correction owns the buttons until this episode ends.
+    # The planner can still publish a lower constraint, but ICBM must not fight
+    # the driver's correction, including one above the remembered base speed.
+    camera_manual = camera.state == "manual" and camera.manualTakeover
 
-    self.is_ready = ready and not button_pressed
+    self.is_ready = ready and not button_pressed and not camera_manual
 
   def run(self, CS: car.CarState, CC: car.CarControl, LP_SP: custom.LongitudinalPlanSP, is_metric: bool) -> None:
     if self.CP_SP.pcmCruiseSpeed:
@@ -120,7 +129,7 @@ class IntelligentCruiseButtonManagement:
     self.is_metric = is_metric
 
     self.update_calculations(CS, LP_SP)
-    self.update_readiness(CS, CC)
+    self.update_readiness(CS, CC, LP_SP)
 
     self.cruise_button = self.update_state_machine()
 

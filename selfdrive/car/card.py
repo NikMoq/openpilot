@@ -71,8 +71,8 @@ class Car:
 
   def __init__(self, CI=None, RI=None) -> None:
     self.can_sock = messaging.sub_sock('can', timeout=20)
-    self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents'] + ['carControlSP', 'longitudinalPlanSP'])
-    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'liveTracks'] + ['carParamsSP', 'carStateSP'])
+    self.sm = messaging.SubMaster(['pandaStates', 'carControl', 'onroadEvents', 'customReserved11'] + ['carControlSP', 'longitudinalPlanSP'])
+    self.pm = messaging.PubMaster(['sendcan', 'carState', 'carParams', 'carOutput', 'liveTracks', 'customReserved10'] + ['carParamsSP', 'carStateSP'])
 
     self.can_rcv_cum_timeout_counter = 0
 
@@ -284,10 +284,44 @@ class Car:
     if self.sm.all_alive(['carControl']):
       # send car controls over can
       now_nanos = self.can_log_mono_time if REPLAY else int(time.monotonic() * 1e9)
-      self.last_actuators_output, can_sends = self.CI.apply(CC, convert_carControlSP(CC_SP), now_nanos)
+      control_sp = convert_carControlSP(CC_SP)
+      # Runtime observations, deliberately absent from the serialized/cached params.
+      # The PQ button sender must not treat a retained target as a fresh command.
+      control_sp.icbm_input_timestamp_ns = self.sm.logMonoTime['carControlSP']
+      control_sp.icbm_input_valid = self.sm.all_checks(['carControl', 'carControlSP', 'pandaStates'])
+      icbm_status = self.sm['customReserved11']
+      icbm_status_time = self.sm.logMonoTime['customReserved11']
+      icbm_status_valid = (self.sm.valid['customReserved11'] and icbm_status_time > 0
+                           and 0 <= now_nanos - icbm_status_time <= 300_000_000)
+      control_sp.icbm_status_valid = icbm_status_valid
+      control_sp.icbm_signature_matched = bool(icbm_status.signatureMatched)
+      control_sp.icbm_protocol_valid = bool(icbm_status.protocolValid)
+      control_sp.icbm_panda_count = int(icbm_status.pandaCount)
+      control_sp.icbm_firmware_state = int(icbm_status.state)
+      control_sp.icbm_firmware_button = int(icbm_status.button)
+      control_sp.icbm_firmware_reason = int(icbm_status.reason)
+      control_sp.icbm_firmware_request_id = int(icbm_status.requestId)
+      control_sp.icbm_firmware_tx_counter = int(icbm_status.txCounter)
+      control_sp.icbm_firmware_status_mono_time_ns = int(icbm_status.statusMonoTimeNs)
+      self.last_actuators_output, can_sends = self.CI.apply(CC, control_sp, now_nanos)
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
 
+      # The controller emits a correlated request side-channel. It never enters
+      # sendcan, where firmware would reject it as an unidentified button frame.
+      command = getattr(getattr(self.CI, 'CC', None), 'icbm_command', None)
+      self.publish_icbm_command(command)
+
       self.CC_prev = CC
+    else:
+      self.publish_icbm_command()
+
+  def publish_icbm_command(self, command=None):
+    command_msg = messaging.new_message('customReserved10')
+    if command is not None:
+      command_msg.customReserved10.requestId = command[0]
+      command_msg.customReserved10.button = command[1]
+      command_msg.customReserved10.valid = True
+    self.pm.send('customReserved10', command_msg)
 
   def step(self):
     CS, CS_SP, RD = self.state_update()
@@ -298,6 +332,10 @@ class Car:
                    self.sm.seen['onroadEvents'])
     if not self.CP.passive and initialized:
       self.controls_update(CS, self.sm['carControl'], self.sm['carControlSP'])
+    else:
+      # Clear a retained request when controls are not running. pandad also
+      # expires requests by event timestamp, so a stopped card cannot replay one.
+      self.publish_icbm_command()
 
     self.initialized_prev = initialized
     self.CS_prev = CS

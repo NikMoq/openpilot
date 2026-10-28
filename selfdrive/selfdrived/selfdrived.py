@@ -6,6 +6,7 @@ import threading
 import cereal.messaging as messaging
 
 from cereal import car, log, custom
+from opendbc.car.structs import IntelligentCruiseButtonManagement as IntelligentCruiseButtonManagementStruct
 from msgq.visionipc import VisionIpcClient, VisionStreamType
 
 
@@ -564,6 +565,7 @@ class SelfdriveD(CruiseHelper):
     icbm.state = self.icbm.state
     icbm.sendButton = self.icbm.cruise_button
     icbm.vTarget = self.icbm.v_target
+    icbm.speedUnit = IntelligentCruiseButtonManagementStruct.SpeedUnit.from_metric(self.icbm.is_metric).value
 
     self.pm.send('selfdriveStateSP', ss_sp_msg)
 

@@ -52,7 +52,7 @@ class VCruiseHelperSP:
     self.short_increment = self.params.get("CustomAccShortPressIncrement", return_default=True)
     self.long_increment = self.params.get("CustomAccLongPressIncrement", return_default=True)
 
-    self.enable_button_timers = CRUISE_BUTTON_TIMER
+    self.enable_button_timers = CRUISE_BUTTON_TIMER.copy()
 
     # Speed Limit Assist
     self.sla_state = SpeedLimitAssistState.disabled
@@ -63,11 +63,40 @@ class VCruiseHelperSP:
     self.prev_speed_limit_final_last_kph = 0.
     self.req_plus = False
     self.req_minus = False
+    self.camera_manual_takeover = False
+    self.camera_episode_active = False
+    self._stock_virtual_cruise_initialized = False
+    self._stock_set_pending = False
+    self._stock_set_held = False
+    self._stock_set_from_camera = False
+
+  @property
+  def remember_stock_cruise(self) -> bool:
+    # ICBM owns only the setpoint; stock ACC still owns engagement.
+    return (self.CP.pcmCruise and not self.CP_SP.pcmCruiseSpeed and
+            self.CP_SP.intelligentCruiseButtonManagementAvailable and not self.CP.openpilotLongitudinalControl)
 
   def read_custom_set_speed_params(self) -> None:
     self.custom_acc_enabled = self.params.get_bool("CustomAccIncrementsEnabled")
     self.short_increment = self.params.get("CustomAccShortPressIncrement", return_default=True)
     self.long_increment = self.params.get("CustomAccLongPressIncrement", return_default=True)
+
+  def update_stock_set_intent(self, CS: car.CarState, enabled: bool) -> None:
+    # Only SET used to reengage stock ACC replaces the remembered target.
+    # Active SET keeps its existing behavior; RES explicitly keeps the memory.
+    for button in CS.buttonEvents:
+      if button.type == ButtonType.setCruise:
+        if button.pressed:
+          self._stock_set_held = True
+          self._stock_set_from_camera = self.camera_episode_active
+        if (not self.camera_episode_active and not self._stock_set_from_camera and
+            (not enabled or not CS.cruiseState.enabled or not self.enabled_prev)):
+          self._stock_set_pending = True
+        if not button.pressed:
+          self._stock_set_held = False
+          self._stock_set_from_camera = False
+      elif button.type in (ButtonType.resumeCruise, ButtonType.cancel, ButtonType.mainCruise):
+        self._stock_set_pending = False
 
   def update_v_cruise_delta(self, long_press: bool, v_cruise_delta: float) -> tuple[bool, float]:
     if not self.custom_acc_enabled:
@@ -108,6 +137,17 @@ class VCruiseHelperSP:
     return enabled
 
   def update_speed_limit_assist(self, is_metric, LP_SP: custom.LongitudinalPlanSP) -> None:
+    camera = LP_SP.speedCameraControl
+    self.camera_manual_takeover = camera.manualTakeover
+    if self.remember_stock_cruise:
+      temporary_reasons = ("manual_button", "button_override", "gas", "brake", "brake_waiting_resume")
+      if camera.state in ("passed", "cancelled"):
+        self.camera_episode_active = False
+      elif camera.state in ("approach", "hold", "manual", "suspended") or (
+          camera.manualTakeover and camera.reason in temporary_reasons):
+        self.camera_episode_active = True
+      elif camera.state == "inactive" and camera.reason not in ("acc_disengaged", *temporary_reasons):
+        self.camera_episode_active = False
     resolver = LP_SP.speedLimit.resolver
     self.has_speed_limit = resolver.speedLimitValid or resolver.speedLimitLastValid
     self.speed_limit_final_last = LP_SP.speedLimit.resolver.speedLimitFinalLast
