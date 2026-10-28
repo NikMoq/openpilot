@@ -13,7 +13,7 @@ TEXT_AREA_HEIGHT_REDUCTION = 200
 BACKGROUND_COLOR = rl.Color(27, 27, 27, 255)
 
 class ConfirmDialog(Widget):
-  def __init__(self, text: str, confirm_text: str, cancel_text: str = "Cancel"):
+  def __init__(self, text: str, confirm_text: str, cancel_text: str = "Отмена"):
     super().__init__()
     self._label = Label(text, 70, FontWeight.BOLD)
     self._cancel_button = Button(cancel_text, self._cancel_button_callback)
@@ -66,7 +66,7 @@ class ConfirmDialog(Widget):
 
     return self._dialog_result
 
-def confirm_dialog(message: str, confirm_text: str, cancel_text: str = "Cancel") -> DialogResult:
+def confirm_dialog(message: str, confirm_text: str, cancel_text: str = "Отмена") -> DialogResult:
   dialog_x = (gui_app.width - DIALOG_WIDTH) / 2
   dialog_y = (gui_app.height - DIALOG_HEIGHT) / 2
   dialog_rect = rl.Rectangle(dialog_x, dialog_y, DIALOG_WIDTH, DIALOG_HEIGHT)
@@ -118,5 +118,5 @@ def confirm_dialog(message: str, confirm_text: str, cancel_text: str = "Cancel")
   return result
 
 
-def alert_dialog(message: str, button_text: str = "OK") -> DialogResult:
+def alert_dialog(message: str, button_text: str = "ОК") -> DialogResult:
   return confirm_dialog(message, button_text, cancel_text="")

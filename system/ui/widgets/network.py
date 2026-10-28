@@ -49,7 +49,7 @@ class WifiManagerUI(Widget):
     self._networks: list[Network] = []
     self._networks_buttons: dict[str, Button] = {}
     self._forget_networks_buttons: dict[str, Button] = {}
-    self._confirm_dialog = ConfirmDialog("", "Forget", "Cancel")
+    self._confirm_dialog = ConfirmDialog("", "Забыть", "Отмена")
 
     self.wifi_manager.set_callbacks(need_auth=self._on_need_auth,
                                     activated=self._on_activated,
@@ -72,15 +72,15 @@ class WifiManagerUI(Widget):
     self.wifi_manager.process_callbacks()
 
     if not self._networks:
-      gui_label(rect, "Scanning Wi-Fi networks...", 72, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
+      gui_label(rect, "Поиск сетей Wi-Fi…", 72, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
       return
 
     if self.state == UIState.NEEDS_AUTH and self._state_network:
-      self.keyboard.set_title("Wrong password" if self._password_retry else "Enter password", f"for {self._state_network.ssid}")
+      self.keyboard.set_title("Неверный пароль" if self._password_retry else "Введите пароль", f"Сеть: {self._state_network.ssid}")
       self.keyboard.reset()
       gui_app.set_modal_overlay(self.keyboard, lambda result: self._on_password_entered(cast(Network, self._state_network), result))
     elif self.state == UIState.SHOW_FORGET_CONFIRM and self._state_network:
-      self._confirm_dialog.set_text(f'Forget Wi-Fi Network "{self._state_network.ssid}"?')
+      self._confirm_dialog.set_text(f'Забыть сеть Wi-Fi "{self._state_network.ssid}"?')
       self._confirm_dialog.reset()
       gui_app.set_modal_overlay(self._confirm_dialog, callback=lambda result: self.on_forgot_confirm_finished(self._state_network, result))
     else:
@@ -131,11 +131,11 @@ class WifiManagerUI(Widget):
     if self.state == UIState.CONNECTING and self._state_network:
       if self._state_network.ssid == network.ssid:
         self._networks_buttons[network.ssid].set_enabled(False)
-        status_text = "CONNECTING..."
+        status_text = "ПОДКЛЮЧЕНИЕ…"
     elif self.state == UIState.FORGETTING and self._state_network:
       if self._state_network.ssid == network.ssid:
         self._networks_buttons[network.ssid].set_enabled(False)
-        status_text = "FORGETTING..."
+        status_text = "УДАЛЕНИЕ…"
     elif network.security_type == SecurityType.UNSUPPORTED:
       self._networks_buttons[network.ssid].set_enabled(False)
     else:
@@ -147,7 +147,7 @@ class WifiManagerUI(Widget):
       status_text_rect = rl.Rectangle(security_icon_rect.x - 410, rect.y, 410, ITEM_HEIGHT)
       gui_label(status_text_rect, status_text, font_size=48, alignment=rl.GuiTextAlignment.TEXT_ALIGN_CENTER)
     else:
-      # If the network is saved, show the "Forget" button
+      # If the network is saved, show the "Забыть" button
       if network.is_saved:
         forget_btn_rect = rl.Rectangle(
           security_icon_rect.x - self.btn_width - spacing,
@@ -214,7 +214,7 @@ class WifiManagerUI(Widget):
     for n in self._networks:
       self._networks_buttons[n.ssid] = Button(n.ssid, partial(self._networks_buttons_callback, n), font_size=55, text_alignment=TextAlignment.LEFT,
                                               button_style=ButtonStyle.NO_EFFECT)
-      self._forget_networks_buttons[n.ssid] = Button("Forget", partial(self._forget_networks_buttons_callback, n), button_style=ButtonStyle.FORGET_WIFI,
+      self._forget_networks_buttons[n.ssid] = Button("Забыть", partial(self._forget_networks_buttons_callback, n), button_style=ButtonStyle.FORGET_WIFI,
                                                      font_size=45)
 
   def _on_need_auth(self, ssid):

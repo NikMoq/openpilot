@@ -35,7 +35,7 @@ def register(show_spinner=False) -> str | None:
   if dongle_id in (None, UNREGISTERED_DONGLE_ID):
     if show_spinner:
       spinner = Spinner()
-      spinner.update("registering device")
+      spinner.update("Регистрация устройства")
 
     # Create registration token, in the future, this key will make JWTs directly
     with open(Paths.persist_root()+"/comma/id_rsa.pub") as f1, open(Paths.persist_root()+"/comma/id_rsa") as f2:
@@ -54,7 +54,7 @@ def register(show_spinner=False) -> str | None:
         cloudlog.exception("Error getting imei, trying again...")
         time.sleep(1)
       if time.monotonic() - start_time > 60 and show_spinner:
-        spinner.update(f"registering device - serial: {serial}, IMEI: ({imei1}, {imei2})")
+        spinner.update(f"Регистрация устройства — серийный номер: {serial}, IMEI: ({imei1}, {imei2})")
 
     backoff = 0
     start_time = time.monotonic()
@@ -70,7 +70,7 @@ def register(show_spinner=False) -> str | None:
           cloudlog.info(f"Unable to register device, got {resp.status_code}, retrying...")
           dongle_id = UNREGISTERED_DONGLE_ID
           if show_spinner:
-            spinner.update(f"registering device - serial: {serial}, contact MR.ONE")
+            spinner.update(f"Регистрация устройства — серийный номер: {serial}, обратитесь к MR.ONE")
           time.sleep(2)  # 避免请求过快
           continue  # 继续下一次注册尝试
         # =====================================
@@ -86,7 +86,7 @@ def register(show_spinner=False) -> str | None:
         time.sleep(backoff)
 
       if time.monotonic() - start_time > 60 and show_spinner:
-        spinner.update(f"registering device - serial: {serial}, IMEI: ({imei1}, {imei2})")
+        spinner.update(f"Регистрация устройства — серийный номер: {serial}, IMEI: ({imei1}, {imei2})")
         #return UNREGISTERED_DONGLE_ID # hotfix to prevent an infinite wait for registration
 
     if show_spinner:

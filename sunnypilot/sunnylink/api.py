@@ -57,7 +57,7 @@ class SunnylinkApi(BaseApi):
       try:
         imei1, imei2 = HARDWARE.get_imei(0), HARDWARE.get_imei(1)
       except Exception:
-        self._status_update(f"Error getting imei, trying again... [{imei_try + 1}/{MAX_RETRIES}]")
+        self._status_update(f"Ошибка чтения IMEI, повторная попытка… [{imei_try + 1}/{MAX_RETRIES}]")
         time.sleep(1)
       imei_try += 1
     return imei1, imei2
@@ -72,7 +72,7 @@ class SunnylinkApi(BaseApi):
     sunnylink_dongle_id, comma_dongle_id = self._resolve_dongle_ids()
 
     if comma_dongle_id is None:
-      self._status_update("Comma dongle ID not found, deferring sunnylink's registration to comma's registration process.")
+      self._status_update("Идентификатор comma не найден. Регистрация sunnylink отложена до регистрации comma.")
       return None
 
     imei1, imei2 = self._resolve_imeis()
@@ -88,7 +88,7 @@ class SunnylinkApi(BaseApi):
     successful_registration = False
     if not pubkey_path.is_file():
       sunnylink_dongle_id = UNREGISTERED_SUNNYLINK_DONGLE_ID
-      self._status_update("Public key not found, setting dongle ID to unregistered.")
+      self._status_update("Открытый ключ не найден. Устройство отмечено как незарегистрированное.")
     else:
       Params().put("LastSunnylinkPingTime", 0)  # Reset the last ping time to 0 if we are trying to register
       with pubkey_path.open() as f1, privkey_path.open() as f2:
@@ -100,9 +100,9 @@ class SunnylinkApi(BaseApi):
         register_token = jwt.encode({'register': True, 'exp': datetime.utcnow() + timedelta(hours=1)}, private_key, algorithm='RS256')
         try:
           if verbose or time.monotonic() - start_time < timeout / 2:
-            self._status_update("Registering device to sunnylink...")
+            self._status_update("Регистрация устройства в sunnylink…")
           elif time.monotonic() - start_time >= timeout / 2:
-            self._status_update("Still registering device to sunnylink...")
+            self._status_update("Регистрация в sunnylink продолжается…")
 
           resp = self.api_get("v2/pilotauth/", method='POST', timeout=15, imei=imei1, imei2=imei2, serial=serial,
                               comma_dongle_id=comma_dongle_id, public_key=public_key, register_token=register_token)
@@ -123,12 +123,12 @@ class SunnylinkApi(BaseApi):
           dongleauth = json.loads(resp.text)
           sunnylink_dongle_id = dongleauth["device_id"]
           if sunnylink_dongle_id:
-            self._status_update("Device registered successfully.")
+            self._status_update("Устройство успешно зарегистрировано.")
             successful_registration = True
             break
         except Exception as e:
           if verbose:
-            self._status_update(f"Waiting {backoff}s before retry, Exception occurred during registration: [{str(e)}]")
+            self._status_update(f"Повторная попытка через {backoff} с. Ошибка регистрации: [{str(e)}]")
 
           if not os.path.exists(CRASH_LOG_DIR):
             os.makedirs(CRASH_LOG_DIR)
@@ -140,7 +140,7 @@ class SunnylinkApi(BaseApi):
           time.sleep(backoff)
 
         if time.monotonic() - start_time > timeout:
-          self._status_update(f"Giving up on sunnylink's registration after {timeout}s. Will retry on next boot.")
+          self._status_update(f"Регистрация sunnylink прервана через {timeout} с. Повторная попытка при следующем запуске.")
           time.sleep(3)
           break
 

@@ -27,6 +27,7 @@ def manager_init() -> None:
   build_metadata = get_build_metadata()
 
   params = Params()
+  params.put("LanguageSetting", "main_ru")
   params.clear_all(ParamKeyFlag.CLEAR_ON_MANAGER_START)
   params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
   params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)
@@ -233,7 +234,7 @@ if __name__ == "__main__":
 
     # Show last 3 lines of traceback
     error = traceback.format_exc(-3)
-    error = "Manager failed to start\n\n" + error
+    error = "Не удалось запустить диспетчер процессов\n\n" + error
     with TextWindow(error) as t:
       t.wait_for_exit()
 

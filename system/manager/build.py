@@ -72,7 +72,7 @@ def build(spinner: Spinner, dirty: bool = False, minimal: bool = False) -> None:
     # Show TextWindow
     spinner.close()
     if not os.getenv("CI"):
-      with TextWindow("openpilot failed to build\n \n" + error_s) as t:
+      with TextWindow("Не удалось собрать openpilot\n \n" + error_s) as t:
         t.wait_for_exit()
     exit(1)
 
