@@ -382,7 +382,7 @@ class Updater:
     remote_ref = f"refs/remotes/origin/{branch}"
     git_fetch_output = run([
       "git", "fetch", "--no-tags", "origin",
-      f"refs/heads/{branch}:{remote_ref}",
+      f"+refs/heads/{branch}:{remote_ref}",
     ], OVERLAY_MERGED)
     cloudlog.info("git fetch success: %s", git_fetch_output)
 
