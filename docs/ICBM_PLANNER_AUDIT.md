@@ -28,3 +28,28 @@ UNKNOWN: physical radar acceptance and equivalence on every PQ35/PQ46 variant.
 The verified selector is kph only. Supporting mph requires evidence for native
 fine/coarse ECU step behavior; unit conversion alone does not establish it.
 Software tests do not establish vehicle readiness.
+
+## Camera producer integration
+
+The initial stable source lacked the camera target publisher despite the new
+schema. The port now includes the dev camera controller/planner and its binding
+in `sunnypilot/selfdrive/controls/lib/longitudinal_planner.py`, plus physical
+button observation in `selfdrive/controls/plannerd.py`. `mapd_manager.py` ticks
+the camera updater; `OsmMapData` selects independent warning/control cameras and
+`BaseMapData.publish` emits the versioned control contract. Dependencies are
+`camera_database.py`, `camera_source.py`, `camera_updater.py`, `cityguide.py`, and
+`speed_cameras.py`. Existing stable UI, map installer and release workflow remain
+outside this transplant. The runtime consumes the configured database/mirror;
+snapshot publication tools and automatic publication workflow are excluded.
+
+On the actual port, controller/planner/control selection/override test group:
+348 passed, 2 skipped. Source/transport/index/config/CityGuide/replay group:
+422 passed, 4 skipped. Skips include explicitly opt-in runtime checks; those
+results do not claim native msgq integration. The missing native persistent
+offset parameter was supplied by the coordinator; its targeted registry test
+passed. Linux Cereal/native runtime integration remains a separate check.
+
+CONFIRMED compatibility boundary: the PQ backend requires fresh ACC_System
+readiness and ACC_GRA_Anzeige native target feedback. It is an ACC path; ordinary
+CC without those messages is unsupported. The user confirmed factory ACC for
+the current Caddy. Firmware pairing and physical acceptance still gate operation.

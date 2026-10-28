@@ -1,15 +1,34 @@
 # ICBM PQ35/PQ46 integration status
 
-Status: SOURCE_CANDIDATE; task incomplete. Base: stable 3b9179406c4a43319af3383157fc83e1098cba4d. Donor: aabf70a.
+2026-10-28. Goal ACTIVE; functional equivalence to the original on vehicles is NOT established.
+Base stable: 3b9179406c4a43319af3383157fc83e1098cba4d. Source donor: aabf70a, with additional integration fixes.
+Primary user vehicle: VW Caddy IV 2019, PQ35, factory radar ACC, comma3, Panda dos/F4 class observed. Installed commit 665152c and packaged firmware hash verified read-only; live firmware signature is only cached Params evidence. PQ46 validation vehicle UNKNOWN.
 
-The Hyundai reference reaches the planner target using stock ACC RES/SET button actions. PQ requires native coarse UP/DOWN and fine RES/SET, fresh stock feedback, single transaction ownership, release tracking and driver/pedal priority. This branch ports those source layers and preserves stable safety limits.
+## Implemented and checked offline
 
-Validation on 2026-10-28: 333 focused tests passed in pq35-camera-runtime Docker, covering selector, echo, transaction, pairing, coordinator, Card runtime, Cereal serialized status, services, encoder, speed units, pedal priority and cruise base memory. Three pytest configuration warnings concern absent optional plugins. The Windows checkout represents symlinks as text; cereal/car.capnp and openpilot package links were restored in the container before testing. These are software checks, not hardware evidence.
+- PQ coarse UP/DOWN and fine RES/SET selection, one outstanding transaction, stock setpoint feedback, correlated release and driver priority.
+- Camera database/source/updater -> liveMapDataSP -> planner -> ICBM target chain restored.
+- Target publishers invalidate ICBM when upstream plan/state sources fail checks instead of restamping retained targets.
+- Driver base speed preserved through pedal suspension and temporary camera corrections.
+- Native ARM64 QCOM2 pandad built from current inputs; native protocol harness passed. SHA256: 5087d67cf22c58e95311c633c5266a2d3ef792a2b6fc18867908f3f02a84a4de.
+- Separately authorized unsigned Panda F413 offline candidate built with unchanged stable300 cNm safety; legacy standstill RES interception fixed. See ICBM_PANDA_OFFLINE.md.
 
-Remaining requirements:
-- Restore matching full build dependencies and regenerate/rebuild Cereal and ARM64 pandad. Stable is a prebuilt distribution without the full build graph.
-- Independently review/build a matched Panda protocol implementation; provision verified pairing identity. No firmware binary or automatic activation is included here.
-- Verify imperial native button steps before supporting mph (currently explicitly rejected).
-- Perform a separately scoped physical validation of PQ35 and PQ46 ACC acceptance, driver intervention, camera speed reduction and baseline recovery. Software tests cannot establish equivalence to Hyundai on hardware.
+## Evidence
 
-See ICBM_BACKEND_GAPS.md. Existing development binaries are offline candidates and are not evidence of vehicle operation. This branch is not an installable completed ICBM release.
+- Broad focused Docker suite: 1233 passed, 9 skipped. Skips are not passes.
+- Separate real Cereal/schema/freshness suite: 42 passed.
+- Actual native msgq/Params/camera/planner integration: 18 passed, without mocks for those components.
+- Production CarController.update with real coordinator/transaction/echo and injected unrelated callbacks: 9 passed.
+- Source staging integrity: 12 passed.
+- Panda ARM emulation: 13 test-only, 4 production and 3 ICBM-disabled control checks passed; two linker violations and a wrong1000 safety input were rejected.
+
+Groups overlap; counts must not be added. Software checks do not measure physical ECU acceptance. Artifact hashes and source provenance are in ICBM_BACKEND_GAPS.md, ICBM_PANDA_OFFLINE.md and tools/icbm_build. Test artifacts stay outside Git.
+
+## Remaining requirements
+
+- Current device is confirmed at 665152c, with original packaged Panda and no ICBM pairing/status; validate compatibility and a separately authorized release before activation.
+- Complete separately authorized release pairing/signing/installation preparation; no current firmware or daemon binary is replaced by this source branch.
+- Verify native imperial units/steps before enabling mph; selector currently rejects mph.
+- Obtain synchronized physical evidence of request, native CAN output, stock ACC setpoint response, release and interruption/recovery on PQ35 and PQ46.
+
+The published branch remains a source candidate, not a completed installable ICBM release. See ICBM_WORK_LEDGER.md for active assignments/authorization and ICBM_TRACE_READINESS.md for existing trace evidence.

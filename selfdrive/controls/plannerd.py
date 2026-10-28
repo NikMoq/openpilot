@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import time
 from cereal import car, custom
 from openpilot.common.gps import get_gps_location_service
 from openpilot.common.params import Params
@@ -33,6 +34,8 @@ def main():
   while True:
     sm.update()
     longitudinal_planner.sla.update_car_state(sm['carState'])
+    if sm.updated['carState']:
+      longitudinal_planner.camera.observe_car_state(sm['carState'], time.time())  # noqa: TID251 - same epoch as GPS/planner
     if sm.updated['modelV2']:
       longitudinal_planner.update(sm)
       longitudinal_planner.publish(sm, pm)

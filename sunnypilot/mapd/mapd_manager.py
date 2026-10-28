@@ -19,6 +19,7 @@ from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.sunnypilot.mapd.live_map_data.osm_map_data import OsmMapData
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd import MAPD_PATH
+from openpilot.sunnypilot.mapd.camera_updater import CameraDatabaseUpdater, CameraParams
 from openpilot.sunnypilot.mapd.mapd_installer import VERSION, update_installed_version
 
 # PFEIFER - MAPD {{
@@ -125,12 +126,14 @@ def main_thread():
 
   rk = Ratekeeper(1, print_delay_threshold=None)
   live_map_sp = OsmMapData()
+  camera_updater = CameraDatabaseUpdater(
+    params=CameraParams(),
+    default_path=os.path.join(Paths.mapd_root(), "speed_cameras.json"),
+  )
 
-  # Create folder needed for OSM
+  # Camera updates also run without offline OSM or an existing media tree.
   try:
-    os.mkdir(Paths.mapd_root())
-  except FileExistsError:
-    pass
+    os.makedirs(Paths.mapd_root(), exist_ok=True)
   except PermissionError:
     cloudlog.exception(f"mapd: failed to make {Paths.mapd_root()}")
 
@@ -139,6 +142,7 @@ def main_thread():
     set_offroad_alert("Offroad_OSMUpdateRequired", show_alert, "This alert will be cleared when new maps are downloaded.")
 
     update_osm_db()
+    camera_updater.tick()
     live_map_sp.tick()
     rk.keep_time()
 

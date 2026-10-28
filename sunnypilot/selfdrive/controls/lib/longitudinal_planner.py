@@ -5,6 +5,9 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 
+import math
+import time
+
 from cereal import messaging, custom
 from opendbc.car import structs
 from openpilot.common.constants import CV
@@ -16,6 +19,11 @@ from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.speed_limit_assist 
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.speed_limit_resolver import SpeedLimitResolver
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
 from openpilot.sunnypilot.models.helpers import get_active_bundle
+from openpilot.sunnypilot.mapd.camera_updater import CameraParams
+from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.helpers import get_minimum_set_speed
+from openpilot.sunnypilot.selfdrive.controls.lib.speed_camera_planner import SpeedCameraPlanner
+from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit import LIMIT_ADAPT_ACC
+from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode
 
 DecState = custom.LongitudinalPlanSP.DynamicExperimentalControl.DynamicExperimentalControlState
 LongitudinalPlanSource = custom.LongitudinalPlanSP.LongitudinalPlanSource
@@ -35,6 +43,14 @@ class LongitudinalPlannerSP:
 
     self.output_v_target = 0.
     self.output_a_target = 0.
+    self.camera = SpeedCameraPlanner()
+    self.camera_params = CameraParams()
+    self.camera_compatible = (CP_SP.intelligentCruiseButtonManagementAvailable and not CP_SP.pcmCruiseSpeed and
+                              not CP.openpilotLongitudinalControl)
+    self.camera_control_enabled = False
+    self.camera_minimum_speed = 30 * CV.KPH_TO_MS
+    self.camera_speed_offset_kph = 0.0
+    self._camera_config_frame = 0
 
   @property
   def mlsim(self) -> bool:
@@ -75,6 +91,41 @@ class LongitudinalPlannerSP:
 
     self.source = min(targets, key=lambda k: targets[k][0])
     self.output_v_target, self.output_a_target = targets[self.source]
+
+    # The driver's virtual cruise setpoint remains unchanged by temporary
+    # camera ceilings, so a verified passage can restore it through ICBM.
+    if self._camera_config_frame % 20 == 0:
+      self.camera_control_enabled = bool(
+        self.camera_compatible and self.camera_params.get("SpeedCameraControlEnabled") == "1" and
+        self.camera_params.get("SpeedCameraEnabled") != "0" and
+        self.resolver.params.get("SpeedLimitMode", return_default=True) == Mode.assist)
+      is_metric = self.resolver.params.get_bool("IsMetric")
+      self.camera_minimum_speed = get_minimum_set_speed(is_metric) * (CV.KPH_TO_MS if is_metric else CV.MPH_TO_MS)
+      try:
+        camera_offset = float(self.camera_params.get("SpeedCameraSpeedOffsetKph"))
+      except (TypeError, ValueError):
+        camera_offset = 0.0
+      self.camera_speed_offset_kph = (camera_offset if math.isfinite(camera_offset) and
+                                     0.0 <= camera_offset <= 30.0 and camera_offset.is_integer() else 0.0)
+    self._camera_config_frame += 1
+    gps_service = self.resolver._gps_location_service
+    output = self.camera.update(
+      CS, sm['carControl'], sm[gps_service], sm['liveMapDataSP'], enabled=self.camera_control_enabled,
+      gps_valid=sm.valid[gps_service], gps_alive=sm.alive[gps_service],
+      lmd_valid=sm.valid['liveMapDataSP'], lmd_alive=sm.alive['liveMapDataSP'],
+      lmd_age_s=time.monotonic() - sm.recv_time['liveMapDataSP'],
+      lmd_generation=sm.recv_time['liveMapDataSP'],
+      user_cruise_mps=v_cruise, minimum_speed_mps=self.camera_minimum_speed,
+      camera_speed_offset_kph=self.camera_speed_offset_kph,
+      now_s=time.time(), adapt_accel_mps2=LIMIT_ADAPT_ACC,  # noqa: TID251 - GPS fixes carry Unix timestamps
+    )
+    cap = output.speed_cap_mps
+    if output.manual_takeover:
+      stock_speed = CS.cruiseState.speedCluster
+      cap = stock_speed if math.isfinite(stock_speed) and stock_speed > 0 else 0.0
+    if cap is not None and cap < self.output_v_target:
+      self.output_v_target = cap
+      self.source = LongitudinalPlanSource.speedLimitAssist
     return self.output_v_target, self.output_a_target
 
   def update(self, sm: messaging.SubMaster) -> None:
@@ -92,6 +143,13 @@ class LongitudinalPlannerSP:
     longitudinalPlanSP.vTarget = float(self.output_v_target)
     longitudinalPlanSP.aTarget = float(self.output_a_target)
     longitudinalPlanSP.events = self.events_sp.to_msg()
+    camera_control = longitudinalPlanSP.speedCameraControl
+    camera_control.enabled = self.camera_control_enabled
+    camera_control.active = self.camera.output.speed_cap_mps is not None
+    camera_control.speedCap = self.camera.output.speed_cap_mps or 0.0
+    camera_control.state = self.camera.output.state.value
+    camera_control.reason = self.camera.output.reason
+    camera_control.manualTakeover = self.camera.output.manual_takeover
 
     # Dynamic Experimental Control
     dec = longitudinalPlanSP.dec

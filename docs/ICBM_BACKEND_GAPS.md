@@ -13,12 +13,28 @@ Existing stable torque values and safety headers are retained.
 The stable pandad Python launcher, firmware binary and daemon binary are unchanged.
 The release verification helper is inert: no wrapper import/call or release manifest.
 
-## Required build dependencies
+## Offline build result (2026-10-28)
 
-1. Restore the matching full source build graph: this stable distribution has no
-   root SConstruct or cereal/SConscript. Added selfdrive/pandad/SConscript alone
-   cannot build the complete runtime. Linux/ARM64 toolchain and libusb, Capn Proto,
-   Cereal messaging/common libraries and existing Panda headers are required.
+CONFIRMED: fresh ARM64 QCOM2 native daemon compiled and linked offline using
+`tools/icbm_build/build_aarch64_pandad.sh`, with generated Capn Proto/KJ 0.7
+schemas. Real Panda codec protocol test passed in ARM64 emulation; `ldd -r`
+resolved every symbol in the build container. Final daemon SHA-256:
+`5087d67cf22c58e95311c633c5266a2d3ef792a2b6fc18867908f3f02a84a4de`.
+The latest Params header, including SpeedCameraSpeedOffsetKph, was restaged
+and params.cc rebuilt before final link. Header SHA-256:
+`2d3cffc4a92fbb1267d6dd4eff42f82d8b6ff12ac509c3968ba4bee3acb14d80`.
+Artifact and validation log remain outside Git in the outer workspace
+`workspace/results/icbm_stable_port_build`. This does not establish device
+runtime, firmware pairing or physical ECU acceptance. Stable binaries remain
+unchanged. Direct compilation works without restoring root SConstruct; the
+full cached-source hashes and commands are recorded in tools/icbm_build.
+
+## Required release dependencies
+
+1. Use the hash-pinned direct recipe in tools/icbm_build. Root SConstruct and
+   cereal/SConscript are absent but not required by this recipe. Linux/ARM64
+   toolchain, libusb, Capn Proto, Cereal messaging/common sources and Panda
+   headers are required; the tested cache supplies the missing native sources.
 2. Regenerate custom.capnp C++ bindings and rebuild dependent Cereal/Python/native
    modules. Existing prebuilt bindings do not implement speedUnit, command/status,
    LongitudinalPlanSP.speedCameraControl, or LiveMapDataSP camera fields.
@@ -43,8 +59,31 @@ camera data producer. Planner/camera production integration is tracked separatel
 
 ## Validation and remaining evidence
 
-Twelve affected backend Python sources parse successfully. No native build or
+Twelve affected backend Python sources parse successfully. The native build and protocol check above passed; no
 physical test was performed. Fresh stock feedback and TX-return are not ECU
 application acknowledgements. Exact button acceptance, pedal interruption,
 manual RES after brake and restoration of base speed require separately scoped
 physical validation before any readiness claim.
+
+## Native Python pipeline verification
+
+On 2026-10-28, all 18 opt-in test_camera_runtime_integration.py checks passed
+in isolated pq35-camera-runtime:/icbm-port using actual compiled x86_64 native
+msgq and Params (Python3.12), current Cereal schema and current planner sources.
+Command: PQ35_RUNTIME_SMOKE=1 PARAMS_ROOT=/data/params
+PYTHONPATH=/icbm-port:/icbm-port/opendbc_repo:/icbm-port/msgq_repo
+python -m pytest -q -o addopts= --confcutdir=tools/tests
+tools/tests/test_camera_runtime_integration.py. Three unrelated pytest config
+options produced warnings. No Params, sockets or modules were mocked.
+
+The stable distribution lacked usable x86 extensions. Native sources came from
+the hash-pinned build foundation, while params_keys.h and pyx/schema/planner
+inputs came from the current port. Native Cereal C++ was regenerated with the
+container compiler (1.1) to match installed headers. Moving the ModelRunner
+import into get_model_path avoids loading an unrelated model execution backend
+while reading model bundle metadata. Model path callers retain the same import.
+
+Outer workspace results/icbm_stable_port_build contains runtime_smoke.log,
+runtime_native_build.log and runtime_inputs.sha256. /runtime remained untouched.
+This verifies map publication, real msgq decoding and planner integration in
+the test scope; it does not run model inference, an MPC solver or vehicle ECU.
