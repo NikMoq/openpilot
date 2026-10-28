@@ -60,3 +60,12 @@ SHA256c0c6a961ab7a30b1b5ad2d7deed69761288e8782388bcbfdb36a177e149947fc.
 This proves the current installed source candidate is not an activated ICBM pair.
 Standalone diagnostics helper and regression checks are maintained in the outer
 EPS project's mcp/comma_icbm_diagnostics.py and tests/test_comma_icbm_diagnostics.py.
+
+Native bridge follow-up: process_icbm_command now requires both Event.valid
+and command.valid. Its real native Cereal/msgq harness covers stale/future,
+invalid payload/envelope, offroad, pairing, Panda count, idempotence and status
+timestamp recovery. All checks passed. Clean ARM64 rebuild supersedes the old
+5087 candidate: SHA-256
+4a7153f4c8046af32906c1a4d2846234baa70dc95d7b2d27f6b1a3180d6dd875.
+No binary was committed or deployed. User requests MCP/console WinSCP only;
+Computer Use must not be used for device access.

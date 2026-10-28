@@ -10,7 +10,8 @@ Primary user vehicle: VW Caddy IV 2019, PQ35, factory radar ACC, comma3, Panda d
 - Camera database/source/updater -> liveMapDataSP -> planner -> ICBM target chain restored.
 - Target publishers invalidate ICBM when upstream plan/state sources fail checks instead of restamping retained targets.
 - Driver base speed preserved through pedal suspension and temporary camera corrections.
-- Native ARM64 QCOM2 pandad built from current inputs; native protocol harness passed. SHA256: 5087d67cf22c58e95311c633c5266a2d3ef792a2b6fc18867908f3f02a84a4de.
+- Native bridge rejects invalid Event envelopes as well as invalid command payloads; actual production-function/msgq integration harness passed.
+- Native ARM64 QCOM2 pandad built from current inputs; native protocol harness passed. SHA256: 4a7153f4c8046af32906c1a4d2846234baa70dc95d7b2d27f6b1a3180d6dd875.
 - Separately authorized unsigned Panda F413 offline candidate built with unchanged stable300 cNm safety; legacy standstill RES interception fixed. See ICBM_PANDA_OFFLINE.md.
 
 ## Evidence

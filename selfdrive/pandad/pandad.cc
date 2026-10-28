@@ -503,7 +503,7 @@ void process_icbm_command(std::vector<Panda *> &pandas, SubMaster *sm, PubMaster
     const bool command_fresh = command_time > 0 && now >= command_time && now - command_time <= 300'000'000ULL;
     const uint16_t request_id = command.getRequestId();
     const uint8_t button = command.getButton();
-    if (is_onroad && command_fresh && command.getValid() && request_id != 0 && button >= 1 && button <= 4 && status) {
+    if (is_onroad && command_fresh && command_event.getValid() && command.getValid() && request_id != 0 && button >= 1 && button <= 4 && status) {
       const bool terminal = status->state == 0 || status->state == 3 || status->state == 4 || status->state == 6 || status->state == 7;
       if (terminal && status->request_id != request_id) {
         panda->icbm_button_command(request_id, button);

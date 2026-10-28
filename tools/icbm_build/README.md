@@ -70,7 +70,7 @@ function sections and gc-sections, link in ARM64 container and execute there.
 
 Fresh source rebuild and ARM64 link passed, including refreshed Params header
 with SpeedCameraSpeedOffsetKph. Daemon SHA-256
-5087d67cf22c58e95311c633c5266a2d3ef792a2b6fc18867908f3f02a84a4de.
+4a7153f4c8046af32906c1a4d2846234baa70dc95d7b2d27f6b1a3180d6dd875.
 Protocol harness SHA-256
 44cd7742e272dd608158efce8ff91677d0a52f08a8286b2f71bde52dcadd4d5e.
 Harness output: ICBM native protocol: PASS (no hardware).
@@ -112,3 +112,51 @@ into /tmp/icbm_source_filter_check_20261028_1 with 185 source inputs and no
 snapshot was rejected for a custom.capnp hash mismatch before any output was
 created. Twelve staging regression tests passed. Filtering does not rebuild or
 change the historical daemon hashes recorded above.
+
+## Production native command bridge harness
+
+selfdrive/pandad/tests/test_icbm_bridge.cc calls the actual production
+process_icbm_command from pandad.cc and publishes/receives through real native
+PubMaster/SubMaster and Cereal. Only PandaCommsHandle is mocked; the protected
+TestPanda constructor bypasses USB/SPI opening. Linker gc-sections drops unrelated
+daemon hardware paths. No production source seam/refactor is needed.
+
+From a fresh hash-staged native source root, copy the CURRENT test file and
+pandad.cc plus current cereal/custom.capnp, regenerate schemas, then execute
+`sh /path/to/tools/icbm_build/test_native_bridge.sh`. It compiles all inputs
+with matching native Capn Proto headers/compiler. The tested source foundation
+is /tmp/pq_icbm_verify in pq35-camera-runtime; isolated output and source overlay
+are /tmp/icbm_native_bridge. Native clang19.1.7 and Capn Proto1.1.0 were used.
+The harness creates a unique /dev/shm/icbm-native-bridge-PID namespace and sets
+OPENPILOT_PREFIX before constructing real msgq sockets. It uses bounded1000ms
+polls and assertions; no inference, model runner, Panda or vehicle is opened.
+
+Result: ICBM production native bridge: PASS (real msgq/Cereal, no hardware).
+Checks fresh A9 write exactly once, same-ID idempotence including terminal
+status, stale/future command timestamps, invalid command payload, offroad,
+unpaired and multi-Panda inhibition, zero/out-of-range fields, and terminal
+status timestamp preservation across failed read/recovery plus advancement
+on a genuine new transition. Event.valid=false with payloadvalid=true is rejected too; production checks
+both the Event envelope and the command payload validity.
+
+Evidence outside Git: outer workspace results/icbm_stable_port_build/
+native_bridge_{inputs.sha256,validation.log,build.log}. ldd-r resolves all
+symbols in the disposable build container. This verifies native bridge policy
+and serialization, not USB/SPI transfer behavior or ECU application acceptance.
+
+## Event envelope validity follow-up
+
+Production process_icbm_command now requires both command Event.valid and
+payload.valid. Native bridge regression sends Event.valid=false while payload
+valid=true and verifies no A9 write. Actual bridge harness passed after the fix
+with real Cereal/native msgq and mock transport only.
+A full fresh ARM64 production rebuild (all 23 objects, no object reuse) used
+current source and regenerated Capn Proto0.7 Cereal, then linked in ARM64
+Ubuntu20.04. ldd-r resolves every symbol. Final production daemon SHA-256:
+4a7153f4c8046af32906c1a4d2846234baa70dc95d7b2d27f6b1a3180d6dd875
+This supersedes the earlier 5087d67c candidate. Output remains outside Git.
+Evidence: outer workspace results/icbm_stable_port_build/
+event_valid_arm_{inputs.json,build.log,validation.log}, plus refreshed
+native_bridge_{inputs.sha256,build.log,validation.log}.
+The fresh schema transfer includes cereal/include/c++.capnp. Staging normalizes
+shell scripts to LF before execution, supporting Windows source checkouts.

@@ -19,7 +19,7 @@ CONFIRMED: fresh ARM64 QCOM2 native daemon compiled and linked offline using
 `tools/icbm_build/build_aarch64_pandad.sh`, with generated Capn Proto/KJ 0.7
 schemas. Real Panda codec protocol test passed in ARM64 emulation; `ldd -r`
 resolved every symbol in the build container. Final daemon SHA-256:
-`5087d67cf22c58e95311c633c5266a2d3ef792a2b6fc18867908f3f02a84a4de`.
+`4a7153f4c8046af32906c1a4d2846234baa70dc95d7b2d27f6b1a3180d6dd875`.
 The latest Params header, including SpeedCameraSpeedOffsetKph, was restaged
 and params.cc rebuilt before final link. Header SHA-256:
 `2d3cffc4a92fbb1267d6dd4eff42f82d8b6ff12ac509c3968ba4bee3acb14d80`.
@@ -87,3 +87,20 @@ Outer workspace results/icbm_stable_port_build contains runtime_smoke.log,
 runtime_native_build.log and runtime_inputs.sha256. /runtime remained untouched.
 This verifies map publication, real msgq decoding and planner integration in
 the test scope; it does not run model inference, an MPC solver or vehicle ECU.
+
+## Event envelope validity follow-up
+
+Production process_icbm_command now requires both command Event.valid and
+payload.valid. Native bridge regression sends Event.valid=false while payload
+valid=true and verifies no A9 write. Actual bridge harness passed after the fix
+with real Cereal/native msgq and mock transport only.
+A full fresh ARM64 production rebuild (all 23 objects, no object reuse) used
+current source and regenerated Capn Proto0.7 Cereal, then linked in ARM64
+Ubuntu20.04. ldd-r resolves every symbol. Final production daemon SHA-256:
+4a7153f4c8046af32906c1a4d2846234baa70dc95d7b2d27f6b1a3180d6dd875
+This supersedes the earlier 5087d67c candidate. Output remains outside Git.
+Evidence: outer workspace results/icbm_stable_port_build/
+event_valid_arm_{inputs.json,build.log,validation.log}, plus refreshed
+native_bridge_{inputs.sha256,build.log,validation.log}.
+The fresh schema transfer includes cereal/include/c++.capnp. Staging normalizes
+shell scripts to LF before execution, supporting Windows source checkouts.
