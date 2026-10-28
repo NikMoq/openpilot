@@ -39,7 +39,7 @@ class Updater(Widget):
     self.current_screen = Screen.PROMPT
 
     self.progress_value = 0
-    self.progress_text = "Loading..."
+    self.progress_text = "Загрузка…"
     self.show_reboot_button = False
     self.process = None
     self.update_thread = None
@@ -48,7 +48,7 @@ class Updater(Widget):
   def install_update(self):
     self.current_screen = Screen.PROGRESS
     self.progress_value = 0
-    self.progress_text = "Downloading..."
+    self.progress_text = "Скачивание…"
     self.show_reboot_button = False
 
     # Start the update process in a separate thread
@@ -65,7 +65,7 @@ class Updater(Widget):
     for line in self.process.stdout:
       parts = line.strip().split(":")
       if len(parts) == 2:
-        self.progress_text = parts[0]
+        self.progress_text = parts[0].replace("Installing ", "Установка ")
         try:
           self.progress_value = int(float(parts[1]))
         except ValueError:
@@ -75,17 +75,17 @@ class Updater(Widget):
     if exit_code == 0:
       HARDWARE.reboot()
     else:
-      self.progress_text = "Update failed"
+      self.progress_text = "Ошибка обновления"
       self.show_reboot_button = True
 
   def render_prompt_screen(self, rect: rl.Rectangle):
     # Title
     title_rect = rl.Rectangle(MARGIN + 50, 250, rect.width - MARGIN * 2 - 100, TITLE_FONT_SIZE)
-    gui_label(title_rect, "Update Required", TITLE_FONT_SIZE, font_weight=FontWeight.BOLD)
+    gui_label(title_rect, "Требуется обновление", TITLE_FONT_SIZE, font_weight=FontWeight.BOLD)
 
     # Description
-    desc_text = ("An operating system update is required. Connect your device to Wi-Fi for the fastest update experience. " +
-                 "The download size is approximately 1GB.")
+    desc_text = ("Требуется обновление операционной системы. Для быстрой загрузки подключите устройство к Wi-Fi. " +
+                 "Объём загрузки — около 1 ГБ.")
 
     desc_rect = rl.Rectangle(MARGIN + 50, 250 + TITLE_FONT_SIZE + 75, rect.width - MARGIN * 2 - 100, BODY_FONT_SIZE * 3)
     gui_text_box(desc_rect, desc_text, BODY_FONT_SIZE)
@@ -96,13 +96,13 @@ class Updater(Widget):
 
     # WiFi button
     wifi_button_rect = rl.Rectangle(MARGIN, button_y, button_width, BUTTON_HEIGHT)
-    if gui_button(wifi_button_rect, "Connect to Wi-Fi"):
+    if gui_button(wifi_button_rect, "Подключить Wi-Fi"):
       self.current_screen = Screen.WIFI
       return  # Return to avoid processing other buttons after screen change
 
     # Install button
     install_button_rect = rl.Rectangle(MARGIN * 2 + button_width, button_y, button_width, BUTTON_HEIGHT)
-    if gui_button(install_button_rect, "Install", button_style=ButtonStyle.PRIMARY):
+    if gui_button(install_button_rect, "Установить", button_style=ButtonStyle.PRIMARY):
       self.install_update()
       return  # Return to avoid further processing after action
 
@@ -112,7 +112,7 @@ class Updater(Widget):
     self.wifi_manager_ui.render(wifi_rect)
 
     back_button_rect = rl.Rectangle(MARGIN, rect.height - MARGIN - BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_HEIGHT)
-    if gui_button(back_button_rect, "Back"):
+    if gui_button(back_button_rect, "Назад"):
       self.current_screen = Screen.PROMPT
       return  # Return to avoid processing other interactions after screen change
 
@@ -133,7 +133,7 @@ class Updater(Widget):
     # Show reboot button if needed
     if self.show_reboot_button:
       reboot_rect = rl.Rectangle(MARGIN + 100, rect.height - MARGIN - BUTTON_HEIGHT, BUTTON_WIDTH, BUTTON_HEIGHT)
-      if gui_button(reboot_rect, "Reboot"):
+      if gui_button(reboot_rect, "Перезапуск"):
         # Return True to signal main loop to exit before rebooting
         HARDWARE.reboot()
         return
@@ -156,7 +156,7 @@ def main():
   manifest_path = sys.argv[2]
 
   try:
-    gui_app.init_window("System Update")
+    gui_app.init_window("Обновление системы")
     updater = Updater(updater_path, manifest_path)
     for _ in gui_app.render():
       updater.render(rl.Rectangle(0, 0, gui_app.width, gui_app.height))

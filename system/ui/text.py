@@ -67,7 +67,7 @@ class TextWindow(Widget):
     rl.end_scissor_mode()
 
     button_bounds = rl.Rectangle(rect.width - MARGIN - BUTTON_SIZE.x - SPACING, rect.height - MARGIN - BUTTON_SIZE.y, BUTTON_SIZE.x, BUTTON_SIZE.y)
-    ret = gui_button(button_bounds, "Exit" if PC else "Reboot", button_style=ButtonStyle.TRANSPARENT)
+    ret = gui_button(button_bounds, "Выход" if PC else "Перезапуск", button_style=ButtonStyle.TRANSPARENT, font_size=48)
     if ret:
       if PC:
         gui_app.request_close()

@@ -282,7 +282,9 @@ class SelfdriveD(CruiseHelper):
     if self.calibrated_pose is not None:
       excessive_actuation = self.excessive_actuation_check.update(self.sm, CS, self.calibrated_pose)
       if not self.excessive_actuation and excessive_actuation is not None:
-        set_offroad_alert("Offroad_ExcessiveActuation", True, extra_text=str(excessive_actuation))
+        set_offroad_alert("Offroad_ExcessiveActuation", True,
+                          extra_text={"longitudinal": "продольное управление", "lateral": "рулевое управление"}.get(
+                            str(excessive_actuation), str(excessive_actuation)))
         self.excessive_actuation = True
 
     if self.excessive_actuation:

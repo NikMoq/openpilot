@@ -91,10 +91,10 @@ class MapdInstallManager:
         temp_archive.unlink(missing_ok=True)
         return
       except requests.exceptions.ReadTimeout:
-        self._spinner.update(f"ReadTimeout caught. Timeout is [{download_timeout}]. Retrying download... [{cnt}]")
+        self._spinner.update(f"Время ожидания истекло [{download_timeout}]. Повторная загрузка… [{cnt}]")
         time.sleep(0.5)
       except requests.exceptions.RequestException as e:
-        self._spinner.update(f"RequestException caught: {e}. Retrying download... [{cnt}]")
+        self._spinner.update(f"Ошибка запроса: {e}. Повторная загрузка… [{cnt}]")
         time.sleep(0.5)
 
     # Delete temp file if the process was not successful.
@@ -108,7 +108,7 @@ class MapdInstallManager:
   def wait_for_internet_connection(self, return_on_failure: bool = False) -> bool:
     max_retries = 10
     for retries in range(max_retries + 1):
-      self._spinner.update(f"Waiting for internet connection... [{retries}/{max_retries}]")
+      self._spinner.update(f"Ожидание подключения к интернету… [{retries}/{max_retries}]")
       time.sleep(2)
       try:
         _ = urlopen('https://sentry.io', timeout=10)
@@ -125,28 +125,28 @@ class MapdInstallManager:
     metered = sm['deviceState'].networkMetered
 
     if metered:
-      self._spinner.update("Can't proceed with mapd install since network is metered!")
+      self._spinner.update("Установка mapd недоступна в сети с ограничением трафика!")
       time.sleep(5)
       return
 
     try:
       self.ensure_directories_exist()
       if not self.download_needed():
-        self._spinner.update("Mapd is good!")
+        self._spinner.update("mapd готов к работе!")
         time.sleep(0.1)
         return
 
       if self.wait_for_internet_connection(return_on_failure=True):
-        self._spinner.update(f"Downloading pfeiferj's mapd [{self.get_installed_version()}] => [{VERSION}].")
+        self._spinner.update(f"Загрузка mapd [{self.get_installed_version()}] => [{VERSION}].")
         time.sleep(0.1)
         self.check_and_download()
       self._spinner.close()
 
     except Exception:
       for i in range(6):
-        self._spinner.update("Failed to download OSM maps won't work until properly downloaded!" +
-                             "Try again manually rebooting. " +
-                             f"Boot will continue in {5 - i}s...")
+        self._spinner.update("Не удалось загрузить mapd. Карты OSM пока недоступны. " +
+                             "Перезагрузите устройство для повторной попытки. " +
+                             f"Загрузка продолжится через {5 - i} с…")
         time.sleep(1)
 
       sentry.init(sentry.SentryProject.SELFDRIVE)
@@ -159,9 +159,9 @@ if __name__ == "__main__":
   install_manager = MapdInstallManager(spinner)
   install_manager.ensure_directories_exist()
   if is_prebuilt():
-    debug_msg = f"[DEBUG] This is prebuilt, no mapd install required. VERSION: [{VERSION}], Param [{install_manager.get_installed_version()}]"
+    debug_msg = f"Готовая сборка: установка mapd не требуется. Версия: [{VERSION}], параметр [{install_manager.get_installed_version()}]"
     spinner.update(debug_msg)
     update_installed_version(VERSION)
   else:
-    spinner.update(f"Checking if mapd is installed and valid. Prebuilt [{is_prebuilt()}]")
+    spinner.update(f"Проверка установки mapd. Готовая сборка [{is_prebuilt()}]")
     install_manager.non_prebuilt_install()
