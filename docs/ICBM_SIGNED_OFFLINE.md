@@ -1,5 +1,10 @@
 # Approved offline signing result
 
+Publication update: the user subsequently explicitly authorized publishing the
+generated firmware and matching runtime artifacts on GitHub for a normal
+branch update. They are now packaged; see ICBM_UPDATE.md. The source-only
+statements below describe the original offline-signing phase.
+
 2026-10-28. Status: OFFLINE_SIGNED_PAIR_VALIDATED. Not installed; ECU acceptance UNKNOWN.
 User explicitly authorized separate offline signing of the reviewed Panda300 candidate, without key output/transfer or installation.
 

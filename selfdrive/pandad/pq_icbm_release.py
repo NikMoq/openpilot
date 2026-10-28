@@ -10,6 +10,7 @@ KEY = "PQ35IcbmExpectedPandaSignature"
 FIRMWARE = "panda/board/obj/panda.bin.signed"
 DAEMON = "selfdrive/pandad/pandad"
 MANIFEST = "selfdrive/pandad/pq_icbm_release.json"
+PARAMS_EXTENSION = "common/params_pyx.so"
 
 
 def verified_signature(root):
@@ -20,6 +21,9 @@ def verified_signature(root):
   for name in (FIRMWARE, DAEMON):
     if hashlib.sha256((root / name).read_bytes()).hexdigest() != manifest["files"][name]:
       raise ValueError(f"ICBM release mismatch: {name}")
+  if "params_pyx_sha256" in manifest:
+    if hashlib.sha256((root / PARAMS_EXTENSION).read_bytes()).hexdigest() != manifest["params_pyx_sha256"]:
+      raise ValueError("ICBM Params extension mismatch")
   firmware = (root / FIRMWARE).read_bytes()
   if len(firmware) < 140 or struct.unpack_from("<I", firmware)[0] + 128 != len(firmware):
     raise ValueError("Invalid ICBM firmware length")

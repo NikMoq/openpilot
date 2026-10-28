@@ -45,6 +45,22 @@ def test_old_params_atomic_replacement(tmp_path):
   assert sorted(p.name for p in directory.iterdir()) == [release.KEY]
 
 
+def test_params_extension_is_verified_before_pairing(tmp_path):
+  params, directory = fixture_release(tmp_path)
+  extension = tmp_path / release.PARAMS_EXTENSION
+  extension.parent.mkdir(parents=True)
+  extension.write_bytes(b"matched params extension")
+  manifest_path = tmp_path / release.MANIFEST
+  manifest = json.loads(manifest_path.read_text())
+  manifest["params_pyx_sha256"] = hashlib.sha256(extension.read_bytes()).hexdigest()
+  manifest_path.write_text(json.dumps(manifest))
+  release.prepare_pairing(tmp_path, params)
+  extension.write_bytes(b"stale params extension")
+  with pytest.raises(ValueError, match="Params extension mismatch"):
+    release.prepare_pairing(tmp_path, params)
+  assert not (directory / release.KEY).exists()
+
+
 @pytest.mark.parametrize("name", [release.FIRMWARE, release.DAEMON, "selfdrive/pandad/pq_icbm_release.json"])
 def test_corruption_removes_stale_pairing(tmp_path, name):
   params, directory = fixture_release(tmp_path)

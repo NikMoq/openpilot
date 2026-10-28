@@ -1,5 +1,11 @@
 # ICBM PQ35/PQ46 integration status
 
+Current packaging update: the user requested publishing the signed firmware,
+matched daemon and repaired Params extension for normal branch updating.
+These artifacts are now included; see ICBM_UPDATE.md. Older source-only and
+separate-manual-install statements below describe the earlier review phase.
+Device update and physical acceptance have not yet been observed.
+
 2026-10-28. Goal ACTIVE; functional equivalence to the original on vehicles is NOT established.
 Base stable: 3b9179406c4a43319af3383157fc83e1098cba4d. Source donor: aabf70a, with additional integration fixes.
 Primary user vehicle: VW Caddy IV 2019, PQ35, factory radar ACC, comma3, Panda dos/F4 class observed. Installed commit 665152c and packaged firmware hash verified read-only; live firmware signature is only cached Params evidence. PQ46 validation vehicle UNKNOWN.

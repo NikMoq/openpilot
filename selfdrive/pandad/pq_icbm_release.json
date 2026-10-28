@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "status": "PUBLISHED_FOR_AUTHORIZED_BENCH_UPDATE",
+  "panda_version": "10.2.0",
+  "unsigned_sha256": "5453088eebc1faa119aa41f6f10f2a8ba9b2152d5b1859f30a370fc2b7c25670",
+  "files": {
+    "panda/board/obj/panda.bin.signed": "606c7f6dd713331350c2eaf264a3d5beae23b79b0e6f59edbeed6e95d82bd659",
+    "selfdrive/pandad/pandad": "4a7153f4c8046af32906c1a4d2846234baa70dc95d7b2d27f6b1a3180d6dd875"
+  },
+  "panda_signature_hex": "a24e33c8ccf65aeb22f68eba937c4f1a7275b50b3ef336067f1ce377b949f3664d7ef8be5e611ec054a6264e404106baa18d2b3fa4473e8a9622f251c7bbcb4887afc59b8165fb6f8e9c9fd9f1e5de9366440349b471ffb5793d9cfce95bc701d58856027f6301d114e759af9ca1956bb9ec293d4d3f80b24e819a35ac2455f3",
+  "validation": "Offline checks passed; device installation and physical ECU acceptance not yet verified",
+  "params_pyx_sha256": "667cb07f118989b8d09a0699008b071a79530bbaca8348ee73f08aed9c0e5ef7"
+}
