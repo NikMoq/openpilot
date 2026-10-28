@@ -10,8 +10,8 @@ PQ controller, raw TX-return observer, one outstanding transaction, stock feedba
 freshness guards, native Panda command/status transport, Cereal schema and services.
 Native Params key PQ35IcbmExpectedPandaSignature is declared; no value provisioned.
 Existing stable torque values and safety headers are retained.
-The stable pandad Python launcher, firmware binary and daemon binary are unchanged.
-The release verification helper is inert: no wrapper import/call or release manifest.
+The firmware and daemon binaries in Git are unchanged. The Python wrapper now performs optional release preflight before hardware access.
+Without a release manifest, preflight revokes stale ICBM identity and preserves stock wrapper behavior; no deployment manifest is committed.
 
 ## Offline build result (2026-10-28)
 

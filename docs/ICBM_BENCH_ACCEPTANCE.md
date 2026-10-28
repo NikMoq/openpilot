@@ -7,14 +7,14 @@ The package contains an unsigned Panda candidate and the ARM64 daemon, not an in
 
 ## Current authorization and identities
 
-User authorized offline Panda protocol changes/build/emulation, preserving stable300 cNm. Signing and device installation were excluded. A separate signing question is pending; no key content has been accessed. Device changes and physical tests need their own agreed bench task. No road test is authorized.
+User authorized offline Panda protocol changes/build/emulation, preserving stable300 cNm. The user subsequently separately authorized offline signing of the reviewed candidate, without key output/transfer or device installation. Signing completed and was verified; see ICBM_SIGNED_OFFLINE.md. Device changes and physical tests need their own agreed bench task. No road test is authorized.
 
 Current read-only device evidence: Caddy IV2019 PQ35 factory radar ACC, comma3, Panda dos/F4 class, branch ICBM665152c, ignition off, safety noOutput. Persistent CP identifies VOLKSWAGEN_CADDY_10_20 with native ACC. ICBM is available but not enabled: parameter absent and pcmCruiseSpeed=true. SpeedLimitMode=warning. No new ICBM firmware status/pairing is present. Cached PandaSignatures is not a direct flash readback.
 
 ## Release prerequisites
 
 1. Independently verify the candidate unsigned BIN and daemon against the review manifest and committed source/evidence.
-2. Complete separately authorized signing; verify the signed framing, signature with an appropriate public key, and unchanged application bytes except the documented signing length field. No keys belong in Git, chat, logs or transfer package.
+2. Signing completed; retain verification of the signed framing, signature with the matching public key, unchanged executable bytes, length field and appended VERS2 tag. No keys belong in Git, chat, logs or transfer package.
 3. Pin signed firmware and daemon hashes/public signature in a release manifest. Confirm loader/ABI compatibility on the intended device before launch.
 4. Agree a bench task with exact artifacts, identity/rollback checks, controlled conditions, data capture and stop criteria. Existing rollback_packaged files match device packaged hashes; they are not a Panda flash readback.
 5. Only after compatible runtime/pairing is established, agree activation of ICBM and the required settings. An update alone must not be labeled activation or successful operation.

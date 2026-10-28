@@ -9,11 +9,12 @@ import tempfile
 KEY = "PQ35IcbmExpectedPandaSignature"
 FIRMWARE = "panda/board/obj/panda.bin.signed"
 DAEMON = "selfdrive/pandad/pandad"
+MANIFEST = "selfdrive/pandad/pq_icbm_release.json"
 
 
 def verified_signature(root):
   root = Path(root)
-  manifest = json.loads((root / "selfdrive/pandad/pq_icbm_release.json").read_text())
+  manifest = json.loads((root / MANIFEST).read_text())
   if manifest["schema"] != 1 or set(manifest["files"]) != {FIRMWARE, DAEMON}:
     raise ValueError("Invalid ICBM release manifest")
   for name in (FIRMWARE, DAEMON):
@@ -55,3 +56,23 @@ def prepare_pairing(root, params):
   finally:
     if os.path.exists(temporary):
       os.unlink(temporary)
+
+
+def release_preflight(root, params):
+  """Validate an optional release before the wrapper touches any hardware.
+
+  An absent manifest preserves the stock wrapper flow, after revoking any
+  retained ICBM identity. A broken symlink or unreadable/corrupt manifest is
+  present-but-invalid and fails closed through prepare_pairing().
+  """
+  manifest = Path(root) / MANIFEST
+  try:
+    manifest.lstat()
+  except FileNotFoundError:
+    (Path(params.get_param_path()) / KEY).unlink(missing_ok=True)
+    return False
+  except OSError:
+    (Path(params.get_param_path()) / KEY).unlink(missing_ok=True)
+    raise
+  prepare_pairing(root, params)
+  return True

@@ -69,3 +69,19 @@ timestamp recovery. All checks passed. Clean ARM64 rebuild supersedes the old
 4a7153f4c8046af32906c1a4d2846234baa70dc95d7b2d27f6b1a3180d6dd875.
 No binary was committed or deployed. User requests MCP/console WinSCP only;
 Computer Use must not be used for device access.
+
+Signed release follow-up (2026-10-28): user authorized offline signing only.
+Candidate signed SHA-256606c7f6dd713331350c2eaf264a3d5beae23b79b0e6f59edbeed6e95d82bd659;
+original unsigned body preserved with standard SETLEN/VERS2/RSA128 framing.
+Public verification and three tamper rejections passed. Matched daemon remains4a7153f4.
+Package outside Git: workspace/results/icbm_signed_review_20261028_af1182e6.
+No installation, hardware change or configuration activation occurred.
+
+Optional wrapper release_preflight now validates/provisions a present pair or
+revokes stale identity when manifest absent. Invalid manifest/metadata revokes
+identity, logs once per bounded retry and sleeps1s before retry, prior to any
+Panda discovery/recovery/DFU/flash call. Linux tests15passed/1intentional skip.
+Source-only releases remain operable without a deployment manifest.
+
+User reports existing PQ46/mph evidence is available and will supply it.
+Do not infer unit-step behavior from metric-only Caddy captures while waiting.

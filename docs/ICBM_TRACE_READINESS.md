@@ -22,3 +22,13 @@ Inputs outside Git:
 - Existing primary_verified.json SHA256 7fb2bdea6350fea34f618ad9fec8fad5d563caecc4670a4960577221feeb35ff
 
 All counted frames were RX/channel1 in the recording. Recording channel numbering is not evidence of Panda bus numbering. Vehicle identity follows trace provenance; VIN was not inspected. These observations do not prove acceptance of newly generated presses or mph behavior.
+
+## Unit evidence boundary
+
+The retained PQ DBC declares ACA_V_Wunsch in km/h independently of the
+ACA_kmh_mph display flag; CarState also always converts the raw value using
+KPH_TO_MS. Both recorded traces contain only flag0. Thus treating the raw byte
+as mph when flag1 is set, or enabling a guessed 5mph coarse model, is unproven.
+Current selector rejects mph and mismatched/unknown units. Full unit parity
+requires a trace linking raw setpoint, actual displayed units and each manual
+button response in imperial mode. Metric Caddy evidence cannot establish it.
