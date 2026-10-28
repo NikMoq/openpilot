@@ -21,7 +21,7 @@ EVENT_NAME_SP = {v: k for k, v in EventNameSP.schema.enumerants.items()}
 def speed_limit_adjust_alert(CP: car.CarParams, CS: car.CarState, sm: messaging.SubMaster, metric: bool, soft_disable_time: int, personality) -> Alert:
   speedLimit = sm['longitudinalPlanSP'].speedLimit.resolver.speedLimit
   speed = round(speedLimit * (CV.MS_TO_KPH if metric else CV.MS_TO_MPH))
-  message = f'Применяется {speed} {'км/ч' if metric else 'миль/ч'} — ограничение скорости'
+  message = f'Adjusting to {speed} {"km/h" if metric else "mph"} speed limit'
   return Alert(
     message,
     "",
@@ -42,10 +42,10 @@ def speed_limit_pre_active_alert(CP: car.CarParams, CS: car.CarState, sm: messag
     cst_low, cst_high = PCM_LONG_REQUIRED_MAX_SET_SPEED[metric]
     pcm_long_required_max = cst_low if speed_limit_final_last_conv < CONFIRM_SPEED_THRESHOLD[metric] else cst_high
     pcm_long_required_max_set_speed_conv = round(pcm_long_required_max * speed_conv)
-    speed_unit = 'км/ч' if metric else 'миль/ч'
+    speed_unit = "km/h" if metric else "mph"
 
-    alert_1_str = 'Помощник ограничения скорости: требуется включение'
-    alert_2_str = f"Вручную задайте скорость {pcm_long_required_max_set_speed_conv} {speed_unit} для включения"
+    alert_1_str = "Speed Limit Assist: Activation Required"
+    alert_2_str = f"Manually change set speed to {pcm_long_required_max_set_speed_conv} {speed_unit} to activate"
     alert_size = AlertSize.mid
 
   return Alert(
@@ -82,16 +82,16 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventNameSP.manualSteeringRequired: {
     ET.USER_DISABLE: Alert(
-      'Автоматическое удержание в полосе выключено',
-      'Управляйте рулём самостоятельно',
+      "Automatic Lane Centering is OFF",
+      "Manual Steering Required",
       AlertStatus.normal, AlertSize.mid,
       Priority.LOW, VisualAlert.none, AudibleAlert.disengage, 1.),
   },
 
   EventNameSP.manualLongitudinalRequired: {
     ET.WARNING: Alert(
-      'Умный/адаптивный круиз-контроль выключен',
-      'Управляйте скоростью самостоятельно',
+      "Smart/Adaptive Cruise Control: OFF",
+      "Manual Speed Control Required",
       AlertStatus.normal, AlertSize.mid,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 1.),
   },
@@ -106,7 +106,7 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventNameSP.silentBrakeHold: {
     ET.WARNING: EngagementAlert(AudibleAlert.none),
-    ET.NO_ENTRY: NoEntryAlert('Активно удержание тормоза'),
+    ET.NO_ENTRY: NoEntryAlert("Brake Hold Active"),
   },
 
   EventNameSP.silentWrongGear: {
@@ -116,19 +116,19 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
       AlertStatus.normal, AlertSize.none,
       Priority.LOWEST, VisualAlert.none, AudibleAlert.none, 0.),
     ET.NO_ENTRY: Alert(
-      'Выбрана передача, отличная от D',
-      'openpilot недоступен',
+      "Gear not D",
+      "openpilot Unavailable",
       AlertStatus.normal, AlertSize.mid,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 0.),
   },
 
   EventNameSP.silentReverseGear: {
     ET.PERMANENT: Alert(
-      'Задняя\nпередача',
+      "Reverse\nGear",
       "",
       AlertStatus.normal, AlertSize.full,
       Priority.LOWEST, VisualAlert.none, AudibleAlert.none, .2, creation_delay=0.5),
-    ET.NO_ENTRY: NoEntryAlert('Задняя передача'),
+    ET.NO_ENTRY: NoEntryAlert("Reverse Gear"),
   },
 
   EventNameSP.silentDoorOpen: {
@@ -137,7 +137,7 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
       "",
       AlertStatus.normal, AlertSize.none,
       Priority.LOWEST, VisualAlert.none, AudibleAlert.none, 0.),
-    ET.NO_ENTRY: NoEntryAlert('Дверь открыта'),
+    ET.NO_ENTRY: NoEntryAlert("Door Open"),
   },
 
   EventNameSP.silentSeatbeltNotLatched: {
@@ -146,7 +146,7 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
       "",
       AlertStatus.normal, AlertSize.none,
       Priority.LOWEST, VisualAlert.none, AudibleAlert.none, 0.),
-    ET.NO_ENTRY: NoEntryAlert('Ремень безопасности не пристёгнут'),
+    ET.NO_ENTRY: NoEntryAlert("Seatbelt Unlatched"),
   },
 
   EventNameSP.silentParkBrake: {
@@ -155,16 +155,16 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
       "",
       AlertStatus.normal, AlertSize.none,
       Priority.LOWEST, VisualAlert.none, AudibleAlert.none, 0.),
-    ET.NO_ENTRY: NoEntryAlert('Стояночный тормоз включён'),
+    ET.NO_ENTRY: NoEntryAlert("Parking Brake Engaged"),
   },
 
   EventNameSP.controlsMismatchLateral: {
-    ET.IMMEDIATE_DISABLE: ImmediateDisableAlert('Несогласованность рулевого управления'),
-    ET.NO_ENTRY: NoEntryAlert('Несогласованность рулевого управления'),
+    ET.IMMEDIATE_DISABLE: ImmediateDisableAlert("Controls Mismatch: Lateral"),
+    ET.NO_ENTRY: NoEntryAlert("Controls Mismatch: Lateral"),
   },
 
   EventNameSP.experimentalModeSwitched: {
-    ET.WARNING: NormalPermanentAlert('Экспериментальный режим переключён', duration=1.5)
+    ET.WARNING: NormalPermanentAlert("Experimental Mode Switched", duration=1.5)
   },
 
   EventNameSP.wrongCarModeAlertOnly: {
@@ -172,12 +172,12 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
   },
 
   EventNameSP.pedalPressedAlertOnly: {
-    ET.WARNING: NoEntryAlert('Нажата педаль')
+    ET.WARNING: NoEntryAlert("Pedal Pressed")
   },
 
   EventNameSP.laneTurnLeft: {
     ET.WARNING: Alert(
-      'Поворот налево',
+      "Turning Left",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 1.),
@@ -185,7 +185,7 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventNameSP.laneTurnRight: {
     ET.WARNING: Alert(
-      'Поворот направо',
+      "Turning Right",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlert.none, 1.),
@@ -193,7 +193,7 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventNameSP.speedLimitActive: {
     ET.WARNING: Alert(
-      'Применяется установленное ограничение скорости',
+      "Automatically adjusting to the posted speed limit",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlertSP.promptSingleHigh, 5.),
@@ -201,7 +201,7 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventNameSP.speedLimitChanged: {
     ET.WARNING: Alert(
-      'Заданная скорость изменена',
+      "Set speed changed",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlertSP.promptSingleHigh, 5.),
@@ -213,7 +213,7 @@ EVENTS_SP: dict[int, dict[str, Alert | AlertCallbackType]] = {
 
   EventNameSP.speedLimitPending: {
     ET.WARNING: Alert(
-      'Применяется последнее ограничение скорости',
+      "Automatically adjusting to the last speed limit",
       "",
       AlertStatus.normal, AlertSize.small,
       Priority.LOW, VisualAlert.none, AudibleAlertSP.promptSingleHigh, 5.),
