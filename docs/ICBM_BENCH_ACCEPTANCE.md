@@ -30,6 +30,7 @@ Current read-only device evidence: Caddy IV2019 PQ35 factory radar ACC, comma3, 
 | Recovery | Gas release resumes only with verified idle; after brake only driver's RES reengages ACC; no spontaneous engagement |
 | Fault handling | Stale/invalid plan/state/CAN, unit mismatch and pairing loss stop new requests; owned release remains tracked and no blind retry |
 | Protection preservation | No unexplained rejection/fault; original torque/rate/driver/control policy preserved in actual system |
+| Active ACC at standstill | Native fine SET/RES semantics and no unintended resume; current PQ motion guard differs from original and remains unresolved |
 | Units | Kph behavior confirmed; mph needs independent native unit/step evidence before enabling |
 | Platform scope | PQ35 Caddy evidence does not prove PQ46; obtain a separately identified PQ46 configuration and validation |
 

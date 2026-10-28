@@ -30,6 +30,7 @@ Groups overlap; counts must not be added. Software checks do not measure physica
 
 - Current device is confirmed at 665152c, with original packaged Panda and no ICBM pairing/status; validate compatibility and a separately authorized release before activation.
 - Pair and install the signed artifacts only under a separately agreed device/bench task; no current firmware or daemon binary is replaced by this source branch.
+- Resolve active-ACC standstill fine adjustment: original permits the state, current PQ motion guard blocks it; no suitable native response evidence yet.
 - Verify native imperial units/steps before enabling mph; selector currently rejects mph.
 - Obtain synchronized physical evidence of request, native CAN output, stock ACC setpoint response, release and interruption/recovery on PQ35 and PQ46.
 
