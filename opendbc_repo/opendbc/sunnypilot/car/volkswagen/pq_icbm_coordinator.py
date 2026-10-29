@@ -40,6 +40,8 @@ class PQICBMCoordinator:
     self._last_firmware_request_id = None
     self._confirmed_idle_release = None
     self._no_press_clearance_id = None
+    self._terminal_clearance_id = None
+    self._terminal_clearance_at = None
 
   @property
   def state(self):
@@ -141,14 +143,34 @@ class PQICBMCoordinator:
                                and snapshot.last_idle_return_timestamp is not None
                                and snapshot.last_idle_return_timestamp > self._blocked_at)
       if not observer_owns_release:
-        return False
-      observed_at = snapshot.last_idle_return_timestamp
+        # A manual press can invalidate the owned observer just after firmware
+        # COMPLETE, while the host is still settling. That older terminal
+        # timestamp must not become a new release merely because it is polled.
+        # Matching terminal lease proof permits abandoning owned observation;
+        # NEW correlated native idle/TXOK evidence must then establish release.
+        expected_button = {"UP": 1, "DOWN": 2, "SET": 3, "RES": 4}[unresolved.button]
+        if firmware_status.get("button") != expected_button:
+          return False
+        if self._terminal_clearance_id != unresolved.sequence:
+          self.observer.disarm()
+          self._terminal_clearance_id = unresolved.sequence
+          self._terminal_clearance_at = now
+          return False
+        snapshot = self.observer.snapshot()
+        observed_at = snapshot.last_idle_return_timestamp
+        if (snapshot.state != EchoState.DISARMED or observed_at is None
+            or observed_at <= max(self._blocked_at, self._terminal_clearance_at)):
+          return False
+      else:
+        observed_at = snapshot.last_idle_return_timestamp
     release = NativeRelease(True, observed_at, 0 <= now-observed_at <= self.transaction.release_max_age_s)
     cleared = self.clear_after_external_confirmation(
       now=now, transport_idle_confirmed=True, feedback=feedback, release=release)
     if cleared:
       self._confirmed_idle_release = release
       self._no_press_clearance_id = None
+      self._terminal_clearance_id = None
+      self._terminal_clearance_at = None
     return cleared
 
   def update(self, *, now: float, target: int | float, speed_unit: str,
@@ -277,4 +299,5 @@ class PQICBMCoordinator:
       return False
     self._blocked_reason = self._blocked_at = None
     self.observer.disarm()  # Explicit caller clearance; never an automatic INVALID reset.
+    self._terminal_clearance_id = self._terminal_clearance_at = None
     return True

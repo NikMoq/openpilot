@@ -39,3 +39,26 @@ workspace/results/icbm_retest_28c197e: continuous/manifest.json,
 local-retest-review.json, local-gate-review.json, local-parser-review.json,
 activation-retest.json. Captures continue independently of sequential downloads.
 No application code or firmware was changed on the moving vehicle.
+
+## Manual-input recovery correction
+
+Actual b1418cb capture confirms8SETleases, each7modifiedTXOK130frames,
+withstock40->39->38->37->36->35->34 then40->39->38. First responses
+50-80ms afterfirstsyntheticpress. Exactrawstockdata and full hashes remain
+outsideGit under workspace/results/icbm_retest_b1418cb/native-press-review.json.
+
+Afterlease8COMPLETE, manualUP invalidated ownedobservation whilehostsettling.
+Oldterminaltimestamp precededblock, INVALIDobserver ignorednewidle, leaving
+>34secondsdecreaseintent withoutfurtherleases. Productioncoordinatorfixture
+reproducedthisdeadlock beforefix.
+
+Correction keeps terminallease/pairing checks. Matchingolderterminal3/6 permits
+one-shotresetofownedobservation; clearancestillrequiresNEWmatchingnativeidle
+andgenuineTXOKafterbothblockandreset, freshfeedbackandnormalnewpressguards.
+Polling neverrenewsoldCOMPLETEtime. Panda/daemon/steering/MADS unchanged.
+
+Validation240passed, including28newrecoverycases; newregression failsagainst
+previousHEAD. Independentread-onlyreviewfoundnoblockingissue. Physicalretest
+ofnewrecoverybehavior remains pending. Testlog and baselinefailureproof:
+workspace/results/icbm_retest_b1418cb/recovery-tests.log and
+recovery-baseline-negative.json.
