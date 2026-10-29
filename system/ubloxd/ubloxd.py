@@ -498,7 +498,8 @@ def main():
   sock = messaging.sub_sock('ubloxRaw', timeout=100, conflate=False)
 
   while True:
-    msg = messaging.recv_one_or_none(sock)
+    # Honor the socket's 100 ms timeout instead of spinning between GNSS packets.
+    msg = messaging.recv_one(sock)
     if msg is None:
       continue
 
