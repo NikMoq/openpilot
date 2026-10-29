@@ -9,6 +9,7 @@ from abc import abstractmethod, ABC
 import cereal.messaging as messaging
 from openpilot.common.params import Params
 from openpilot.common.constants import CV
+from openpilot.common.gps import get_gps_location_service
 from openpilot.selfdrive.car.cruise import V_CRUISE_UNSET
 from openpilot.sunnypilot.navd.helpers import coordinate_from_param
 
@@ -19,7 +20,8 @@ class BaseMapData(ABC):
   def __init__(self):
     self.params = Params()
 
-    self.sm = messaging.SubMaster(['liveLocationKalman'])
+    self.camera_gps_service = get_gps_location_service(self.params)
+    self.sm = messaging.SubMaster(['liveLocationKalman', self.camera_gps_service])
     self.pm = messaging.PubMaster(['liveMapDataSP'])
 
     self.localizer_valid = False
@@ -67,8 +69,23 @@ class BaseMapData(ABC):
     live_map_data.roadName = self.get_current_road_name()
     # Always mark the new contract, including an explicitly empty selection.
     live_map_data.speedCameraControlVersion = 1
+    selection = getattr(self, 'camera_selection', None)
+    if selection is not None:
+      live_map_data.speedCameraControlEventId = selection.camera_id
+      live_map_data.speedCameraControlState = selection.state
+      live_map_data.speedCameraControlReason = selection.reason
+      live_map_data.speedCameraControlPassProven = selection.pass_proven
+      # Preserve the selected identity and position on invalid/pass messages.
+      if selection.camera is not None:
+        live_map_data.speedCameraControlLatitude = selection.camera.latitude
+        live_map_data.speedCameraControlLongitude = selection.camera.longitude
+        live_map_data.speedCameraControlType = selection.camera.camera_type
+        live_map_data.speedCameraControlSpeedLimit = (selection.camera.speed_limit_kph or 0.) / 3.6
+        live_map_data.speedCameraControlDistance = selection.distance_m
 
     if camera is not None:
+      from openpilot.sunnypilot.mapd.camera_speed_source import camera_identity
+      live_map_data.speedCameraEventId = camera_identity(camera.camera)
       live_map_data.speedCameraAheadValid = True
       live_map_data.speedCameraAheadDistance = camera.distance_m
       live_map_data.speedCameraSpeedLimit = (camera.camera.speed_limit_kph or 0.) / 3.6

@@ -4,6 +4,7 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+import math
 import time
 
 import cereal.messaging as messaging
@@ -15,6 +16,9 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.sunnypilot import PARAMS_UPDATE_PERIOD, get_sanitize_int_param
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit import LIMIT_MAX_MAP_DATA_AGE, LIMIT_ADAPT_ACC
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Policy, OffsetType
+from openpilot.sunnypilot.mapd.camera_updater import CameraParams
+from openpilot.sunnypilot.selfdrive.controls.lib.camera_speed_adapter import CameraSpeedAdapter
+from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.helpers import get_minimum_set_speed
 
 SpeedLimitSource = custom.LongitudinalPlanSP.SpeedLimit.Source
 
@@ -73,6 +77,15 @@ class SpeedLimitResolver:
     self.speed_limit_final = 0.
     self.speed_limit_final_last = 0.
     self.speed_limit_offset = 0.
+    self.camera_params = CameraParams()
+    self.camera = CameraSpeedAdapter()
+    self.camera_mode = False
+    self._camera_requested = False
+    self.camera_reaction_distance = 300
+    self._camera_final_hold = None
+    self.camera_display_raw_limit = 0.0
+    self.camera_display_offset = 0.0
+    self.camera_target_below_minimum = False
 
   def update_speed_limit_states(self) -> None:
     self.speed_limit_final = self.speed_limit + self.speed_limit_offset
@@ -96,13 +109,13 @@ class SpeedLimitResolver:
       self.offset_type = self.params.get("SpeedLimitOffsetType", return_default=True)
       self.offset_value = self.params.get("SpeedLimitValueOffset", return_default=True)
 
-  def _get_speed_limit_offset(self) -> float:
+  def _get_speed_limit_offset(self, raw_limit: float | None = None) -> float:
     if self.offset_type == OffsetType.off:
       return 0
     elif self.offset_type == OffsetType.fixed:
       return float(self.offset_value * (CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS))
     elif self.offset_type == OffsetType.percentage:
-      return float(self.offset_value * 0.01 * self.speed_limit)
+      return float(self.offset_value * 0.01 * (self.speed_limit if raw_limit is None else raw_limit))
     else:
       raise NotImplementedError("Offset not supported")
 
@@ -123,8 +136,8 @@ class SpeedLimitResolver:
     gps_data = sm[self._gps_location_service]
     map_data = sm['liveMapDataSP']
 
-    gps_fix_age = time.monotonic() - gps_data.unixTimestampMillis * 1e-3
-    if gps_fix_age > LIMIT_MAX_MAP_DATA_AGE:
+    gps_fix_age = time.time() - gps_data.unixTimestampMillis * 1e-3  # noqa: TID251 - GPS timestamps are Unix
+    if not 0 <= gps_fix_age <= LIMIT_MAX_MAP_DATA_AGE:
       return
 
     speed_limit = map_data.speedLimit if map_data.speedLimitValid else 0.
@@ -136,7 +149,7 @@ class SpeedLimitResolver:
     gps_data = sm[self._gps_location_service]
     map_data = sm['liveMapDataSP']
 
-    distance_since_fix = self.v_ego * (time.monotonic() - gps_data.unixTimestampMillis * 1e-3)
+    distance_since_fix = self.v_ego * (time.time() - gps_data.unixTimestampMillis * 1e-3)  # noqa: TID251
     distance_to_speed_limit_ahead = max(0., map_data.speedLimitAheadDistance - distance_since_fix)
 
     self.limit_solutions[SpeedLimitSource.map] = speed_limit
@@ -178,9 +191,68 @@ class SpeedLimitResolver:
 
     return speed_limit, distance, source
 
-  def update(self, v_ego: float, sm: messaging.SubMaster) -> None:
+  def update(self, v_ego: float, sm: messaging.SubMaster, camera_compatible: bool = False) -> None:
     self.v_ego = v_ego
     self.update_params()
+
+    previous_mode = self.camera_mode
+    if self.frame < 0 or self.frame % 20 == 0:
+      self._camera_requested = self.camera_params.get("SpeedCameraControlEnabled") == "1"
+      try:
+        reaction = int(self.camera_params.get("SpeedCameraReactionDistance"))
+      except (TypeError, ValueError):
+        reaction = 300
+      self.camera_reaction_distance = reaction if 50 <= reaction <= 1000 and reaction % 50 == 0 else 300
+    self.camera_mode = bool(camera_compatible and self._camera_requested)
+    if previous_mode != self.camera_mode:
+      # Never carry a road limit into camera mode, or a camera into road mode.
+      self.speed_limit_last = self.speed_limit_final_last = 0.0
+      self._camera_final_hold = None
+    if self.camera_mode:
+      self.camera_target_below_minimum = False
+      gps = sm[self._gps_location_service]
+      lmd = sm['liveMapDataSP']
+      unix_age = time.time() - gps.unixTimestampMillis * 1e-3  # noqa: TID251
+      map_age = time.monotonic() - sm.recv_time['liveMapDataSP']
+      reliable = bool(sm.valid[self._gps_location_service] and sm.alive[self._gps_location_service] and gps.hasFix and
+                      sm.valid['liveMapDataSP'] and sm.alive['liveMapDataSP'] and lmd.locationValid and
+                      0 <= unix_age <= 2.5 and 0 <= map_age <= 2.5 and
+                      math.isfinite(gps.horizontalAccuracy) and 0 < gps.horizontalAccuracy <= 20 and
+                      math.isfinite(gps.bearingAccuracyDeg) and 0 <= gps.bearingAccuracyDeg <= 30)
+      self.camera.observe_car_state(sm['carState'])
+      output = self.camera.update(lmd, enabled=True, reliable=reliable,
+                                  engaged=sm['carControl'].enabled and sm['carState'].cruiseState.enabled,
+                                  reaction_distance=self.camera_reaction_distance)
+      self.camera_display_raw_limit = output.raw_limit if output.event_id else 0.0
+      self.camera_display_offset = (self._get_speed_limit_offset(self.camera_display_raw_limit)
+                                    if self.camera_display_raw_limit > 0 else 0.0)
+      self.speed_limit = output.raw_limit if output.automatic else 0.0
+      self.distance = output.distance if output.automatic else 0.0
+      self.source = SpeedLimitSource.map if output.automatic else SpeedLimitSource.none
+      self.speed_limit_offset = self._get_speed_limit_offset() if output.automatic else 0.0
+      self.update_speed_limit_states()
+      if output.automatic:
+        final = self.speed_limit_final
+        self._camera_final_hold = final if self._camera_final_hold is None else min(self._camera_final_hold, final)
+        self.speed_limit_final = self.speed_limit_final_last = self._camera_final_hold
+        # Publish the APPLIED offset so raw + displayed offset always equals
+        # the effective ceiling, including while a larger setting is held.
+        self.speed_limit_offset = self.speed_limit_final - self.speed_limit
+        self.camera_display_offset = self.speed_limit_offset
+        minimum = get_minimum_set_speed(self.is_metric) * (CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS)
+        self.camera_target_below_minimum = self.speed_limit_final < minimum - 1e-5
+      else:
+        # Camera cache belongs only to this active event. PASSED/override/idle
+        # must not leave a permanent road limit in SLA's last-positive fallback.
+        self.speed_limit_last = self.speed_limit_final_last = 0.0
+        self._camera_final_hold = None
+      self.frame += 1
+      return
+
+    self.camera.update(sm['liveMapDataSP'], enabled=False, reliable=False, engaged=False,
+                       reaction_distance=self.camera_reaction_distance)
+    self.camera_display_raw_limit = self.camera_display_offset = 0.0
+    self.camera_target_below_minimum = False
 
     self.speed_limit, self.distance, self.source = self._resolve_limit_sources(sm)
     self.speed_limit_offset = self._get_speed_limit_offset()

@@ -1,0 +1,73 @@
+{
+  "status": "OFFLINE_NATIVE_UI_VALIDATED",
+  "source_branch": "cam",
+  "source_base": "5e049f491ac36a9e6efb9ee31e4871b0f1408a32",
+  "authorized_dev_source": "aabf70ac1f211c343cca0181f77777dd12c1ff6e",
+  "original_ui_sha256": "c7e674a43cb07fda5f0de20fe72fae2027645bee2d0fe95a999f2fc5e7ff0ba6",
+  "original_ui_unchanged": true,
+  "artifacts": {
+    "host_ui": {
+      "path": ".native-build/camera-native-host/ui",
+      "sha256": "d87fa8955b9fc436a1c8d26e1b0dacccfe3d1ebd8fe5bf2454bbe8ac9b0a4561",
+      "bytes": 8819120
+    },
+    "arm_ui": {
+      "path": ".native-build/camera-native-arm/ui",
+      "sha256": "76223afc43f6895bae02bfc1ac13aac02fbc003619d7d129a786938781371edc",
+      "bytes": 6750112
+    },
+    "native_fixture": {
+      "path": ".native-build/camera-native-qa/camera-preview",
+      "sha256": "c912a7527c17bb3d1bdfc5fcc344beee0fa2da409f697ed0249cb24a0ec6ca92",
+      "bytes": 8857392
+    }
+  },
+  "native_qt_assertions": {
+    "actual_native_sign": true,
+    "native_reaction_buttons_50_1000_step50": true,
+    "native_toggle_persistence": true,
+    "passed_stale_no_osm_fallback": true,
+    "same_sign_offset_preserved": true
+  },
+  "additional_native_assertions": [
+    "20+15=35 no below-min marker",
+    "20+0 below unchanged ACC-min marker",
+    "manual feedback pending distinguished from accepted override",
+    "empty/malformed/reaction range/step default300",
+    "road modeOFF and warningsOFF unchanged by camera toggle",
+    "same event 300->200 then pass clears prior OSM20",
+    "source off waits for fresh road plan"
+  ],
+  "sdk_link_dependency_closure": {
+    "elf_files": 65,
+    "missing": [],
+    "graphics_sonames": [
+      "libOpenCL.so",
+      "libEGL_adreno.so",
+      "libGLESv2_adreno.so"
+    ],
+    "max_glibc": "2.29"
+  },
+  "screenshots": [
+    ".native-build/camera-native-qa/threshold-1000.png",
+    ".native-build/camera-native-qa/threshold-300.png",
+    ".native-build/camera-native-qa/threshold-50.png",
+    ".native-build/camera-native-qa/camera-60-offset-15.png",
+    ".native-build/camera-native-qa/below-acc-minimum.png",
+    ".native-build/camera-native-qa/awaiting-acc.png",
+    ".native-build/camera-native-qa/manual-override.png",
+    ".native-build/camera-native-qa/gps-hold.png",
+    ".native-build/camera-native-qa/passed-no-osm.png",
+    ".native-build/camera-native-qa/settings-native-offset.png",
+    ".native-build/camera-native-qa/settings-50.png",
+    ".native-build/camera-native-qa/settings-300.png",
+    ".native-build/camera-native-qa/settings-1000.png"
+  ],
+  "device_installation": false,
+  "vehicle_or_hardware_validation": false,
+  "visual_qa": {
+    "native_countdown_same_sign_no_overlap": true,
+    "settings_back_button_readable": true,
+    "settings_style_source": "Exact LongitudinalPanel #back_btn ancestor rule applied directly to actual fixture Back controls; no product theme changes"
+  }
+}

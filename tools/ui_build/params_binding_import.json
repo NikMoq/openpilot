@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/NikMoq/openpilot",
+  "commit": "aabf70ac1f211c343cca0181f77777dd12c1ff6e",
+  "path": "tools/ui_build/build_params_binding.py",
+  "imported_sha256": "0e6114d1b3705613119a0c20dd6e45ca5e2057db32b70698da40ae227b042f5b",
+  "scope": "build script only; no donor objects or binaries",
+  "local_adaptations": [
+    "native CPython3.12 QA build profile",
+    "Windows car.capnp pointer resolution",
+    "fresh generated Cython source argument",
+    "candidate source/header SHA-256 manifest",
+    "remove unused imports and clarify isolated SDK usage after build; native inputs unchanged"
+  ],
+  "current_sha256": "b36bb40587b396f8833436a4f79dbb64859552bf6b4b271c8ba895cbff593887",
+  "build_helper_sha256_at_candidate_build": "3187c08241e4076efa8088ac1d3474250a944837dafc3bf1bfccff636137e07e"
+}

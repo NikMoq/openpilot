@@ -208,6 +208,13 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
     state @3 :Text;
     reason @4 :Text;
     manualTakeover @5 :Bool;
+    driverSetSpeed @6 :Float32;  # Driver-selected base, m/s; excludes temporary camera target.
+    eventId @7 :Text;  # Correlates sign, countdown, control and passage proof.
+    distance @8 :Float32;  # Metres along the matched road to this event.
+    countdownValid @9 :Bool;  # Current trustworthy match within reaction distance.
+    reactionDistance @10 :UInt16;  # Configured metres, 50..1000 in steps of 50.
+    rawLimit @11 :Float32;  # Selected event's unadjusted display limit, m/s.
+    appliedOffset @12 :Float32;  # Native offset actually used for this event, m/s.
   }
 
   struct DynamicExperimentalControl {
@@ -476,6 +483,11 @@ struct LiveMapDataSP @0xf416ec09499d9d19 {
   speedCameraControlLatitude @19 :Float64;
   speedCameraControlLongitude @20 :Float64;
   speedCameraControlAutoControlAllowed @21 :Bool;
+  speedCameraControlEventId @22 :Text;
+  speedCameraEventId @23 :Text;
+  speedCameraControlPassProven @24 :Bool;  # Valid only for speedCameraControlEventId.
+  speedCameraControlState @25 :Text;
+  speedCameraControlReason @26 :Text;
 }
 
 struct ModelDataV2SP @0xa1680744031fdb2d {

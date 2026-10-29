@@ -1,0 +1,9 @@
+FROM python:3.12-slim
+
+# Test dependencies only. No application source, objects or prior builds enter
+# the image. Versions match the ICBM base uv.lock for these packages.
+RUN python -m pip install --no-cache-dir --disable-pip-version-check \
+    pytest==8.4.1 numpy==2.3.2 pycapnp==2.0.0 pyzmq==27.0.2 \
+    requests==2.32.5 pycryptodome==3.23.0
+
+ENV PYTHONDONTWRITEBYTECODE=1

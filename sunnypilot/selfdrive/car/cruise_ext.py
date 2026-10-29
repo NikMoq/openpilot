@@ -65,6 +65,19 @@ class VCruiseHelperSP:
     self.req_minus = False
     self.camera_manual_takeover = False
     self.camera_episode_active = False
+    self.camera_mode = False
+    self.driver_set_speed_kph = V_CRUISE_UNSET
+    self._camera_manual_feedback_pending = False
+    self._camera_manual_feedback_baseline = None
+    self._camera_manual_feedback_direction = 0
+    self._camera_speed_buttons_held = set()
+    self._camera_release_seen = set()
+    self._camera_resume_session = False
+    self._camera_acc_engaged_prev = False
+    self._camera_manual_gesture = False
+    self._camera_manual_gesture_kind = None
+    self._camera_manual_changed_held = False
+    self._camera_manual_follow = False
     self._stock_virtual_cruise_initialized = False
     self._stock_set_pending = False
     self._stock_set_held = False
@@ -138,12 +151,27 @@ class VCruiseHelperSP:
 
   def update_speed_limit_assist(self, is_metric, LP_SP: custom.LongitudinalPlanSP) -> None:
     camera = LP_SP.speedCameraControl
+    self.camera_mode = camera.enabled
+    if not self.camera_mode:
+      self._camera_manual_feedback_pending = False
+      self._camera_manual_feedback_baseline = None
+      self._camera_manual_gesture = False
+      self._camera_manual_follow = False
+      self._camera_speed_buttons_held.clear()
+      self._camera_release_seen.clear()
     self.camera_manual_takeover = camera.manualTakeover
+    if self._camera_manual_follow and not self._camera_manual_gesture and not self._camera_manual_feedback_pending:
+      baseline = self._camera_manual_feedback_baseline
+      goal = LP_SP.vTarget * CV.MS_TO_KPH
+      if baseline is not None and (goal - baseline) * self._camera_manual_feedback_direction > .036:
+        # This published goal can explain later same-direction stock motion;
+        # it is no longer evidence of a delayed physical gesture response.
+        self._camera_manual_follow = False
     if self.remember_stock_cruise:
       temporary_reasons = ("manual_button", "button_override", "gas", "brake", "brake_waiting_resume")
       if camera.state in ("passed", "cancelled"):
         self.camera_episode_active = False
-      elif camera.state in ("approach", "hold", "manual", "suspended") or (
+      elif camera.state in ("active", "driverOverride", "approach", "hold", "manual", "suspended") or (
           camera.manualTakeover and camera.reason in temporary_reasons):
         self.camera_episode_active = True
       elif camera.state == "inactive" and camera.reason not in ("acc_disengaged", *temporary_reasons):
@@ -170,7 +198,7 @@ class VCruiseHelperSP:
     return False
 
   def update_speed_limit_assist_v_cruise_non_pcm(self) -> None:
-    if self.sla_state in SLA_ACTIVE_STATES and (self.prev_sla_state not in SLA_ACTIVE_STATES or
+    if not self.camera_mode and self.sla_state in SLA_ACTIVE_STATES and (self.prev_sla_state not in SLA_ACTIVE_STATES or
                                                 self.update_speed_limit_final_last_changed):
       self.v_cruise_kph = np.clip(round(self.speed_limit_final_last_kph, 1), self.v_cruise_min, V_CRUISE_MAX)
 

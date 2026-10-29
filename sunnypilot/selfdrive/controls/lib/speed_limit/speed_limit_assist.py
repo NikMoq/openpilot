@@ -379,7 +379,8 @@ class SpeedLimitAssist:
           self.update_active_event(events_sp)
 
   def update(self, long_enabled: bool, long_override: bool, v_ego: float, a_ego: float, v_cruise_cluster: float, speed_limit: float,
-             speed_limit_final_last: float, has_speed_limit: bool, distance: float, events_sp: EventsSP) -> None:
+             speed_limit_final_last: float, has_speed_limit: bool, distance: float, events_sp: EventsSP,
+             camera_mode: bool = False, camera_event_id: str = "", camera_auto_confirm: bool = False) -> None:
     self.long_enabled = long_enabled
     self.v_ego = v_ego
     self.a_ego = a_ego
@@ -393,7 +394,15 @@ class SpeedLimitAssist:
     self.update_calculations(v_cruise_cluster)
 
     self._state_prev = self.state
-    if self.pcm_op_long:
+    if camera_mode and not self.pcm_op_long:
+      # Only a resolver-validated active camera event bypasses manual SLA
+      # confirmation. Ordinary map/car limits keep their original machine.
+      accepted = bool(camera_event_id and camera_auto_confirm and has_speed_limit and
+                      self.long_enabled and not long_override)
+      self.state = SpeedLimitAssistState.active if accepted else SpeedLimitAssistState.inactive
+      self.is_enabled = self.long_enabled
+      self.is_active = accepted
+    elif self.pcm_op_long:
       self.is_enabled, self.is_active = self.update_state_machine_pcm_op_long()
     else:
       self.is_enabled, self.is_active = self.update_state_machine_non_pcm_long()

@@ -9,17 +9,18 @@ import math
 import os
 import platform
 import time
+import xml.etree.ElementTree as ET
 
 from cereal import log
-from openpilot.common.constants import CV
 from openpilot.common.params import Params
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import load_database
+from openpilot.sunnypilot.mapd.camera_road_graph import RoadGraph
+from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_gps_reliable
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
-from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera, find_nearest_control_camera
+from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera
 from openpilot.sunnypilot.navd.helpers import Coordinate
-from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.helpers import get_minimum_set_speed
 
 
 class OsmMapData(BaseMapData):
@@ -34,7 +35,12 @@ class OsmMapData(BaseMapData):
     self.camera_index = None
     self.camera_match = None
     self.camera_control_match = None
+    self.camera_speed_source = CameraSpeedSource()
+    self.camera_selection = self.camera_speed_source.selection
+    self.camera_road_graph = None
+    self.camera_road_graph_stamp = None
     self.camera_enabled = True
+    self.camera_warning_enabled = True
     self.camera_alert_distance_m = 1_000.0
 
   def _refresh_camera_config(self) -> None:
@@ -46,7 +52,8 @@ class OsmMapData(BaseMapData):
       self.camera_database_mtime = None
       self.camera_index = None
     enabled = str(self.camera_params.get("SpeedCameraEnabled") or "1").strip().lower()
-    self.camera_enabled = enabled not in ("0", "false", "no", "off")
+    self.camera_warning_enabled = enabled not in ("0", "false", "no", "off")
+    self.camera_enabled = self.camera_warning_enabled or self.camera_params.get("SpeedCameraControlEnabled") == "1"
     try:
       distance = float(self.camera_params.get("SpeedCameraAlertDistanceMeters") or 1_000)
       self.camera_alert_distance_m = min(max(distance, 100.0), 5_000.0) if math.isfinite(distance) else 1_000.0
@@ -88,15 +95,49 @@ class OsmMapData(BaseMapData):
         # A short warning preference must not postpone the ICBM speed target.
         max_distance_m=max(self.camera_alert_distance_m,
                            5_000.0 if self.camera_params.get("SpeedCameraControlEnabled") == "1" else 0.0),
-      )
+      ) if self.camera_warning_enabled else None
       if self.camera_params.get("SpeedCameraControlEnabled") == "1":
-        is_metric = self.params.get_bool("IsMetric")
-        minimum_speed_kph = get_minimum_set_speed(is_metric) * (1.0 if is_metric else CV.MPH_TO_MS / CV.KPH_TO_MS)
-        self.camera_control_match = find_nearest_control_camera(
-          self.camera_index, self.last_position.latitude, self.last_position.longitude,
-          heading_deg=self.last_bearing, minimum_speed_kph=minimum_speed_kph,
-        )
+        self._update_camera_source()
+    if self.camera_params.get("SpeedCameraControlEnabled") != "1":
+      self.camera_speed_source = CameraSpeedSource()
+      self.camera_selection = self.camera_speed_source.selection
+    elif not self.localizer_valid or self.camera_database is None or self.last_position is None:
+      self.camera_selection = self.camera_speed_source.update((), None, 0., 0., 0., gps_valid=False)
     return self.camera_match
+
+  def _update_camera_source(self):
+    path = self.camera_params.get("SpeedCameraRoadGraphPath") or os.path.join(Paths.mapd_root(), "camera_roads.osm")
+    status = 'ready'
+    try:
+      stamp = (path, os.path.getmtime(path), os.path.getsize(path), os.path.getmtime(path + '.manifest.json'))
+      if stamp != self.camera_road_graph_stamp:
+        self.camera_road_graph = RoadGraph.load(path)
+        self.camera_road_graph_stamp = stamp
+      if not 0 <= time.time() - self.camera_road_graph.acquired_at <= 30 * 86400:
+        raise ValueError('road_graph_stale')
+    except (OSError, ValueError, KeyError, ET.ParseError) as error:
+      self.camera_road_graph = None
+      self.camera_road_graph_stamp = None
+      status = 'missing' if isinstance(error, FileNotFoundError) else str(error)
+    try:
+      reaction = int(self.camera_params.get('SpeedCameraReactionDistance') or 300)
+    except (TypeError, ValueError):
+      reaction = 300
+    gps = self.sm[self.camera_gps_service]
+    now = time.time()
+    gps_valid = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK and
+                     self.sm.valid[self.camera_gps_service] and self.sm.alive[self.camera_gps_service] and
+                     camera_gps_reliable(gps, now))
+    # Camera topology uses one consistent raw GPS position/course/time tuple.
+    # Existing LLK coordinates and map/navigation behavior remain unchanged.
+    self.camera_selection = self.camera_speed_source.update(
+      self.camera_index, self.camera_road_graph, gps.latitude, gps.longitude, gps.bearingDeg,
+      gps_valid=gps_valid, fix_time_s=gps.unixTimestampMillis * .001, now_s=now,
+      reaction_distance_m=reaction)
+    self.camera_params.put('SpeedCameraRoadGraphStatus', status if status != 'ready' else self.camera_selection.reason)
+    if self.camera_selection.valid:
+      from openpilot.sunnypilot.mapd.speed_cameras import CameraMatch
+      self.camera_control_match = CameraMatch(self.camera_selection.camera, self.camera_selection.distance_m, 0.)
 
   def get_speed_camera_control(self):
     # BaseMapData.publish refreshes both selections once through get_speed_camera.

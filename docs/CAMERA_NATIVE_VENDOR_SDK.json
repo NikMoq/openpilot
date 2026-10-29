@@ -1,0 +1,126 @@
+{
+  "source": "existing installed device SDK DSOs only, stopped Docker container pq35-ui-ru:/work/.native-build/vendor",
+  "application_sources_or_objects_used": false,
+  "files": [
+    {
+      "name": "vendor/libEGL_adreno.so",
+      "bytes": 119624,
+      "sha256": "a3f32843d3d68bfc26fe4b1ddd1c6fe54dbe2d1b6318670e62035c57d94fde86",
+      "architecture": "AArch64",
+      "soname": "libEGL_adreno.so",
+      "needed": [
+        "libdl.so.2",
+        "libz.so.1",
+        "libcutils.so.0",
+        "liblog.so.0",
+        "libstdc++.so.6",
+        "libgcc_s.so.1",
+        "libpthread.so.0",
+        "libc.so.6"
+      ]
+    },
+    {
+      "name": "vendor/libGLESv2_adreno.so",
+      "bytes": 20152176,
+      "sha256": "4bb91eb4509771b9851e5610c5f721b56ba54718a72195d8538dec2651d55fb6",
+      "architecture": "AArch64",
+      "soname": "libGLESv2_adreno.so",
+      "needed": [
+        "libadreno_utils.so",
+        "libpthread.so.0",
+        "libcutils.so.0",
+        "libgsl.so",
+        "libdl.so.2",
+        "libz.so.1",
+        "liblog.so.0",
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libgcc_s.so.1",
+        "libc.so.6"
+      ]
+    },
+    {
+      "name": "vendor/libOpenCL.so",
+      "bytes": 89000,
+      "sha256": "3ee7a796512d1d63bd2d54d5864a954852aab58d2c2958d62e4a9c660799b64d",
+      "architecture": "AArch64",
+      "soname": "libOpenCL.so",
+      "needed": [
+        "libdl.so.2",
+        "libcutils.so.0",
+        "libpthread.so.0",
+        "libc.so.6"
+      ]
+    },
+    {
+      "name": "vendor/libadreno_utils.so",
+      "bytes": 59128,
+      "sha256": "6ca996226bb7b2088695f24661fea7834cb74466013c569580fb7a307ff0a9f0",
+      "architecture": "AArch64",
+      "soname": "libadreno_utils.so",
+      "needed": [
+        "libgsl.so",
+        "libpthread.so.0",
+        "libc.so.6"
+      ]
+    },
+    {
+      "name": "vendor/libcutils.so.0",
+      "bytes": 59320,
+      "sha256": "866fd957494615b439b156a4f36e9852e60fb7fa117687d4510e7977d50ca20e",
+      "architecture": "AArch64",
+      "soname": "libcutils.so.0",
+      "needed": [
+        "libpthread.so.0",
+        "liblog.so.0",
+        "libc.so.6",
+        "ld-linux-aarch64.so.1"
+      ]
+    },
+    {
+      "name": "vendor/libgsl.so",
+      "bytes": 1129912,
+      "sha256": "1c4a28ea9d6f9e50c0cc0fb3154f734dd43d2489d343eca8c0c628218759ebc6",
+      "architecture": "AArch64",
+      "soname": "libgsl.so",
+      "needed": [
+        "libpthread.so.0",
+        "libdl.so.2",
+        "libz.so.1",
+        "libm.so.6",
+        "libsync.so.0",
+        "liblog.so.0",
+        "libc.so.6"
+      ]
+    },
+    {
+      "name": "vendor/liblog.so.0",
+      "bytes": 38888,
+      "sha256": "745481d1f4a4d323d84670054779975bc7a3b0fb711c30bd357ecde3005da751",
+      "architecture": "AArch64",
+      "soname": "liblog.so.0",
+      "needed": [
+        "libstdc++.so.6",
+        "libm.so.6",
+        "libc.so.6",
+        "ld-linux-aarch64.so.1",
+        "libgcc_s.so.1"
+      ]
+    },
+    {
+      "name": "vendor/libsync.so.0",
+      "bytes": 9976,
+      "sha256": "9230ea58292227975fc5817a9de0edf9cc784f92b0c98459bd9186dd1bd5e3cd",
+      "architecture": "AArch64",
+      "soname": "libsync.so.0",
+      "needed": [
+        "liblog.so.0",
+        "libgthread-2.0.so.0",
+        "libglib-2.0.so.0",
+        "libpthread.so.0",
+        "libc.so.6",
+        "ld-linux-aarch64.so.1"
+      ]
+    }
+  ]
+}

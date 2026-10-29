@@ -44,7 +44,14 @@ class VCruiseHelper(VCruiseHelperSP):
     return self.v_cruise_kph != V_CRUISE_UNSET
 
   def update_v_cruise(self, CS, enabled, is_metric):
+    was_engaged = self._camera_acc_engaged_prev
+    engaged = bool(CS.cruiseState.enabled and not CS.brakePressed)
+    self._camera_acc_engaged_prev = engaged
+    if not engaged:
+      self._camera_manual_follow = False
     self.v_cruise_kph_last = self.v_cruise_kph
+    if 0 < self.v_cruise_kph <= V_CRUISE_MAX:
+      self.driver_set_speed_kph = self.v_cruise_kph
 
     self.get_minimum_set_speed(is_metric)
 
@@ -79,10 +86,76 @@ class VCruiseHelper(VCruiseHelperSP):
             self.update_enabled_state(CS, enabled)
             self.update_button_timers(CS, enabled)
             return
+      if self.remember_stock_cruise and self._stock_virtual_cruise_initialized:
+        action = None
+        released = None
+        if not CS.buttonEvents:
+          self._camera_release_seen.clear()
+        for b in CS.buttonEvents:
+          if b.type in (ButtonType.cancel, ButtonType.mainCruise):
+            self._camera_manual_feedback_pending = False
+            self._camera_manual_gesture = False
+            self._camera_manual_follow = False
+          if b.type not in (ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.setCruise, ButtonType.resumeCruise):
+            continue
+          kind = b.type.raw
+          if b.type == ButtonType.resumeCruise and b.pressed and kind not in self._camera_speed_buttons_held:
+            self._camera_resume_session = not (was_engaged and engaged)
+          session_resume = b.type == ButtonType.resumeCruise and (self._camera_resume_session or not (was_engaged and engaged))
+          if b.pressed:
+            if kind not in self._camera_speed_buttons_held:
+              action = None if session_resume else b.type
+            self._camera_speed_buttons_held.add(kind)
+            self._camera_release_seen.discard(kind)
+          else:
+            if kind in self._camera_speed_buttons_held and not session_resume:
+              released = kind
+            if kind not in self._camera_speed_buttons_held and kind not in self._camera_release_seen:
+              action = None if session_resume else b.type
+            self._camera_speed_buttons_held.discard(kind)
+            self._camera_release_seen.add(kind)
+            if b.type == ButtonType.resumeCruise:
+              self._camera_resume_session = False
+        stock_kph = CS.cruiseState.speed * CV.MS_TO_KPH
+        if action is not None and not self.camera_episode_active:
+          self._camera_manual_follow = False
+        if action is not None and (self.camera_episode_active or self._camera_manual_feedback_pending):
+          self._camera_manual_feedback_pending = True
+          self._camera_manual_feedback_baseline = stock_kph
+          self._camera_manual_gesture_kind = action.raw
+          self._camera_manual_gesture = action.raw in self._camera_speed_buttons_held
+          self._camera_manual_changed_held = self._camera_manual_follow = False
+          self._camera_manual_feedback_direction = 1 if action in (ButtonType.accelCruise, ButtonType.resumeCruise) else -1
+        if released == self._camera_manual_gesture_kind and self._camera_manual_gesture:
+          self._camera_manual_gesture = False
+          self._camera_manual_feedback_pending = not self._camera_manual_changed_held
+          self._camera_manual_follow = self._camera_manual_changed_held
+        if self._camera_manual_feedback_pending or self._camera_manual_gesture or self._camera_manual_follow:
+          # Preserve the driver's base until the attributed native response
+          # changes. No unproved ECU latency timeout may replace it with the
+          # old temporary ACC target. The planner marks this uncertainty as
+          # manual so the unchanged ICBM guard pauses requests meanwhile.
+          baseline = self._camera_manual_feedback_baseline
+          if not math.isfinite(stock_kph) or not 0 < stock_kph <= V_CRUISE_MAX:
+            self._camera_manual_feedback_pending = True
+          if (math.isfinite(stock_kph) and 0 < stock_kph <= V_CRUISE_MAX and baseline is not None and
+              math.isfinite(baseline) and baseline > 0 and
+              abs(stock_kph - baseline) > .036 and
+              (self._camera_manual_feedback_direction == 0 or
+               (stock_kph - baseline) * self._camera_manual_feedback_direction > 0)):
+            self.v_cruise_kph = self.driver_set_speed_kph = stock_kph
+            cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
+            self.v_cruise_cluster_kph = cluster_kph if math.isfinite(cluster_kph) and cluster_kph > 0 else stock_kph
+            self._camera_manual_feedback_pending = False
+            self._camera_manual_changed_held |= self._camera_manual_gesture
+            self._camera_manual_feedback_baseline = stock_kph
+          self.update_enabled_state(CS, enabled)
+          self.update_button_timers(CS, enabled)
+          return
       if self.remember_stock_cruise and self.camera_episode_active and self._stock_virtual_cruise_initialized:
         # Preserve the driver's base throughout a camera episode. Temporary
-        # physical corrections use stock feedback in the planner, not virtual
-        # increments here; pedal disengagement and RES do not replace the base.
+        # button corrections use the attributed native response above, not
+        # virtual increments; pedal disengagement and RES keep the base.
         self.update_enabled_state(CS, enabled)
         self.update_button_timers(CS, enabled)
         return

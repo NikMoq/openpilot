@@ -106,6 +106,7 @@ Pipfile
 .ionide
 
 ### JetBrains ###
+.native-build/
 !.idea/customTargets.xml
 !.idea/tools/*
 !.run/*

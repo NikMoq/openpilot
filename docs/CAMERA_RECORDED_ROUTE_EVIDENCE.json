@@ -1,0 +1,309 @@
+{
+  "status": "NEGATIVE_CURRENT_DATA_REPLAY_NOT_POSITIVE_CAMERA_ACCEPTANCE",
+  "graph": {
+    "sha256": "24c4cdb222f0487746ce5835c11ca04957a05bcf51f6b1f27d29a5b52b95f21c",
+    "directed_edges": 1696,
+    "acquired_utc": "2026-10-29T20:34:58.281830+00:00",
+    "source_service": "https://api.openstreetmap.org/api/0.6/map",
+    "scope": "unfiltered bounded region includes reliable recorded positions and three nearest actual directional camera candidates; bounds deliberately omitted"
+  },
+  "source_sha256": {
+    "sunnypilot/mapd/camera_speed_source.py": "f9a83f4f52b0928f91310691fb5523e286b8d2b61797e56c2a8fddbe4beb3afa",
+    "sunnypilot/mapd/camera_road_graph.py": "5f7e427b694943d138b0bd414b0214119ebff5c7fa04252ed00c135bf6ac89ae",
+    "tools/replay_camera_route.py": "91f8b7762bd5e47ea9aa168ce82c7a89377ff267f8f77d878d79f4c05f8d310c"
+  },
+  "runs": [
+    {
+      "input_sha256": "7c99a83b6d9036abe46f4be37690298ffe3955eb34ac5ed5c93c9b2cbf9c9d45",
+      "input_bytes": 36220944,
+      "gps_samples": 600,
+      "reliable_raw_samples": 600,
+      "llk_samples": 1200,
+      "clock_anchors": 6,
+      "utc_start": "2026-10-26T18:49:48.999000+00:00",
+      "utc_end": "2026-10-26T18:50:48.900000+00:00",
+      "producer_ticks": 60,
+      "reliable_ticks": 54,
+      "reaction_distance_m": 1000,
+      "clock_mode": "constant Unix rebase; original fix deltas/duplicates/order and transport ages preserved",
+      "replay_reference_utc": "2026-10-29T20:37:11.564000+00:00",
+      "gps_age_range_s": [
+        0.011510610580444336,
+        0.02700519561767578
+      ],
+      "graph_edges": 1696,
+      "graph_sha256": "24c4cdb222f0487746ce5835c11ca04957a05bcf51f6b1f27d29a5b52b95f21c",
+      "camera_sha256": "116d1748b9175ecc3a617264d2855ae4f5479121829cfb649e0e0962101c4579",
+      "camera_count": 74023,
+      "camera_acquired_utc": "2026-10-28T05:50:24+00:00",
+      "states": {
+        "IDLE": 60
+      },
+      "reasons": {
+        "gps_unreliable": 6,
+        "no_unambiguous_camera": 54
+      },
+      "association": {
+        "vehicle_associated_ticks": 37,
+        "directional_candidate_ticks": 54,
+        "nearest_camera_not_on_unique_vehicle_corridor_ticks": 54,
+        "vehicle_ambiguous_or_unmapped_ticks": 17
+      },
+      "unique_selected_events": 0,
+      "passed_events": 0,
+      "limitations": [
+        "current map/provider data replayed against older recorded positions",
+        "source/road-association replay only; no full controller/model/MPC/physical CAN execution",
+        "zero selected events cannot validate approach/pass/restoration behavior"
+      ],
+      "recording": "0010.rlog",
+      "unix_rebase_offset_ms": 265642565
+    },
+    {
+      "input_sha256": "7c99a83b6d9036abe46f4be37690298ffe3955eb34ac5ed5c93c9b2cbf9c9d45",
+      "input_bytes": 36220944,
+      "gps_samples": 600,
+      "reliable_raw_samples": 600,
+      "llk_samples": 1200,
+      "clock_anchors": 6,
+      "utc_start": "2026-10-26T18:49:48.999000+00:00",
+      "utc_end": "2026-10-26T18:50:48.900000+00:00",
+      "producer_ticks": 60,
+      "reliable_ticks": 54,
+      "reaction_distance_m": 300,
+      "clock_mode": "constant Unix rebase; original fix deltas/duplicates/order and transport ages preserved",
+      "replay_reference_utc": "2026-10-29T20:37:05.072000+00:00",
+      "gps_age_range_s": [
+        0.011510610580444336,
+        0.02700519561767578
+      ],
+      "graph_edges": 1696,
+      "graph_sha256": "24c4cdb222f0487746ce5835c11ca04957a05bcf51f6b1f27d29a5b52b95f21c",
+      "camera_sha256": "116d1748b9175ecc3a617264d2855ae4f5479121829cfb649e0e0962101c4579",
+      "camera_count": 74023,
+      "camera_acquired_utc": "2026-10-28T05:50:24+00:00",
+      "states": {
+        "IDLE": 60
+      },
+      "reasons": {
+        "gps_unreliable": 6,
+        "no_unambiguous_camera": 54
+      },
+      "association": {
+        "vehicle_associated_ticks": 37,
+        "directional_candidate_ticks": 54,
+        "nearest_camera_not_on_unique_vehicle_corridor_ticks": 54,
+        "vehicle_ambiguous_or_unmapped_ticks": 17
+      },
+      "unique_selected_events": 0,
+      "passed_events": 0,
+      "limitations": [
+        "current map/provider data replayed against older recorded positions",
+        "source/road-association replay only; no full controller/model/MPC/physical CAN execution",
+        "zero selected events cannot validate approach/pass/restoration behavior"
+      ],
+      "recording": "0010.rlog",
+      "unix_rebase_offset_ms": 265636073
+    },
+    {
+      "input_sha256": "0e6ee85c5591e6e749c3589241d50a51906f80017c24b1e7165a058afc7d1734",
+      "input_bytes": 29226280,
+      "gps_samples": 540,
+      "reliable_raw_samples": 540,
+      "llk_samples": 978,
+      "clock_anchors": 6,
+      "utc_start": "2026-10-26T18:50:49+00:00",
+      "utc_end": "2026-10-26T18:51:42.900000+00:00",
+      "producer_ticks": 54,
+      "reliable_ticks": 50,
+      "reaction_distance_m": 1000,
+      "clock_mode": "constant Unix rebase; original fix deltas/duplicates/order and transport ages preserved",
+      "replay_reference_utc": "2026-10-29T20:37:23.563000+00:00",
+      "gps_age_range_s": [
+        0.012060880661010742,
+        0.017507553100585938
+      ],
+      "graph_edges": 1696,
+      "graph_sha256": "24c4cdb222f0487746ce5835c11ca04957a05bcf51f6b1f27d29a5b52b95f21c",
+      "camera_sha256": "116d1748b9175ecc3a617264d2855ae4f5479121829cfb649e0e0962101c4579",
+      "camera_count": 74023,
+      "camera_acquired_utc": "2026-10-28T05:50:24+00:00",
+      "states": {
+        "IDLE": 54
+      },
+      "reasons": {
+        "no_unambiguous_camera": 50,
+        "gps_unreliable": 4
+      },
+      "association": {
+        "vehicle_associated_ticks": 43,
+        "directional_candidate_ticks": 50,
+        "nearest_camera_not_on_unique_vehicle_corridor_ticks": 7,
+        "vehicle_ambiguous_or_unmapped_ticks": 7,
+        "nearest_camera_projection_ambiguous_or_unmapped_ticks": 43
+      },
+      "unique_selected_events": 0,
+      "passed_events": 0,
+      "limitations": [
+        "current map/provider data replayed against older recorded positions",
+        "source/road-association replay only; no full controller/model/MPC/physical CAN execution",
+        "zero selected events cannot validate approach/pass/restoration behavior"
+      ],
+      "recording": "0011.rlog",
+      "unix_rebase_offset_ms": 265594563
+    },
+    {
+      "input_sha256": "0e6ee85c5591e6e749c3589241d50a51906f80017c24b1e7165a058afc7d1734",
+      "input_bytes": 29226280,
+      "gps_samples": 540,
+      "reliable_raw_samples": 540,
+      "llk_samples": 978,
+      "clock_anchors": 6,
+      "utc_start": "2026-10-26T18:50:49+00:00",
+      "utc_end": "2026-10-26T18:51:42.900000+00:00",
+      "producer_ticks": 54,
+      "reliable_ticks": 50,
+      "reaction_distance_m": 300,
+      "clock_mode": "constant Unix rebase; original fix deltas/duplicates/order and transport ages preserved",
+      "replay_reference_utc": "2026-10-29T20:37:17.540000+00:00",
+      "gps_age_range_s": [
+        0.012060880661010742,
+        0.017507553100585938
+      ],
+      "graph_edges": 1696,
+      "graph_sha256": "24c4cdb222f0487746ce5835c11ca04957a05bcf51f6b1f27d29a5b52b95f21c",
+      "camera_sha256": "116d1748b9175ecc3a617264d2855ae4f5479121829cfb649e0e0962101c4579",
+      "camera_count": 74023,
+      "camera_acquired_utc": "2026-10-28T05:50:24+00:00",
+      "states": {
+        "IDLE": 54
+      },
+      "reasons": {
+        "no_unambiguous_camera": 50,
+        "gps_unreliable": 4
+      },
+      "association": {
+        "vehicle_associated_ticks": 43,
+        "directional_candidate_ticks": 50,
+        "nearest_camera_not_on_unique_vehicle_corridor_ticks": 7,
+        "vehicle_ambiguous_or_unmapped_ticks": 7,
+        "nearest_camera_projection_ambiguous_or_unmapped_ticks": 43
+      },
+      "unique_selected_events": 0,
+      "passed_events": 0,
+      "limitations": [
+        "current map/provider data replayed against older recorded positions",
+        "source/road-association replay only; no full controller/model/MPC/physical CAN execution",
+        "zero selected events cannot validate approach/pass/restoration behavior"
+      ],
+      "recording": "0011.rlog",
+      "unix_rebase_offset_ms": 265588540
+    },
+    {
+      "input_sha256": "bb0b576b9d1430dae6dd04df7a2678eb0c2d2deb50da1fefea27f0b9b7d67da1",
+      "input_bytes": 46273824,
+      "gps_samples": 713,
+      "reliable_raw_samples": 18,
+      "llk_samples": 1526,
+      "clock_anchors": 94,
+      "utc_start": "2026-10-26T18:51:43+00:00",
+      "utc_end": "2026-10-26T18:52:54.199000+00:00",
+      "producer_ticks": 72,
+      "reliable_ticks": 2,
+      "reaction_distance_m": 1000,
+      "clock_mode": "constant Unix rebase; original fix deltas/duplicates/order and transport ages preserved",
+      "replay_reference_utc": "2026-10-29T20:37:39.188000+00:00",
+      "gps_age_range_s": [
+        0.008537054061889648,
+        0.017292022705078125
+      ],
+      "graph_edges": 1696,
+      "graph_sha256": "24c4cdb222f0487746ce5835c11ca04957a05bcf51f6b1f27d29a5b52b95f21c",
+      "camera_sha256": "116d1748b9175ecc3a617264d2855ae4f5479121829cfb649e0e0962101c4579",
+      "camera_count": 74023,
+      "camera_acquired_utc": "2026-10-28T05:50:24+00:00",
+      "states": {
+        "IDLE": 72
+      },
+      "reasons": {
+        "no_unambiguous_camera": 2,
+        "gps_unreliable": 70
+      },
+      "association": {
+        "vehicle_ambiguous_or_unmapped_ticks": 2,
+        "directional_candidate_ticks": 2,
+        "nearest_camera_projection_ambiguous_or_unmapped_ticks": 2
+      },
+      "unique_selected_events": 0,
+      "passed_events": 0,
+      "limitations": [
+        "current map/provider data replayed against older recorded positions",
+        "source/road-association replay only; no full controller/model/MPC/physical CAN execution",
+        "zero selected events cannot validate approach/pass/restoration behavior"
+      ],
+      "recording": "0012.rlog",
+      "unix_rebase_offset_ms": 265556188
+    },
+    {
+      "input_sha256": "bb0b576b9d1430dae6dd04df7a2678eb0c2d2deb50da1fefea27f0b9b7d67da1",
+      "input_bytes": 46273824,
+      "gps_samples": 713,
+      "reliable_raw_samples": 18,
+      "llk_samples": 1526,
+      "clock_anchors": 94,
+      "utc_start": "2026-10-26T18:51:43+00:00",
+      "utc_end": "2026-10-26T18:52:54.199000+00:00",
+      "producer_ticks": 72,
+      "reliable_ticks": 2,
+      "reaction_distance_m": 300,
+      "clock_mode": "constant Unix rebase; original fix deltas/duplicates/order and transport ages preserved",
+      "replay_reference_utc": "2026-10-29T20:37:31.831000+00:00",
+      "gps_age_range_s": [
+        0.008537054061889648,
+        0.017292022705078125
+      ],
+      "graph_edges": 1696,
+      "graph_sha256": "24c4cdb222f0487746ce5835c11ca04957a05bcf51f6b1f27d29a5b52b95f21c",
+      "camera_sha256": "116d1748b9175ecc3a617264d2855ae4f5479121829cfb649e0e0962101c4579",
+      "camera_count": 74023,
+      "camera_acquired_utc": "2026-10-28T05:50:24+00:00",
+      "states": {
+        "IDLE": 72
+      },
+      "reasons": {
+        "no_unambiguous_camera": 2,
+        "gps_unreliable": 70
+      },
+      "association": {
+        "vehicle_ambiguous_or_unmapped_ticks": 2,
+        "directional_candidate_ticks": 2,
+        "nearest_camera_projection_ambiguous_or_unmapped_ticks": 2
+      },
+      "unique_selected_events": 0,
+      "passed_events": 0,
+      "limitations": [
+        "current map/provider data replayed against older recorded positions",
+        "source/road-association replay only; no full controller/model/MPC/physical CAN execution",
+        "zero selected events cannot validate approach/pass/restoration behavior"
+      ],
+      "recording": "0012.rlog",
+      "unix_rebase_offset_ms": 265548831
+    }
+  ],
+  "inventory": {
+    "startup_segments_0000_to_0008": "zero policy-qualified moving GPS and zero fully valid LLK",
+    "segment0009": "six policy-qualified GPS, no valid LLK status",
+    "segment0013": "zero policy-qualified moving GPS",
+    "other_two_raw_sessions": "no GPS/LLK messages"
+  },
+  "conclusion": "No reliable unambiguous camera episode in available inputs. Both supported reaction settings reject candidates conservatively. This historical replay does not establish recorded ACTIVE/pass/restoration behavior. Per explicit user steering, acceptance uses modeled actual-native/Qt tests; absence of a positive recorded episode is not a task blocker. Matcher was not weakened.",
+  "node_limit_error": "You requested too many nodes (limit is 50000). Either request a smaller area, or use planet.osm",
+  "privacy": "No coordinates, graph bounds, raw trace samples, VIN, keys or credentials are included.",
+  "validation_scope": {
+    "user_steering": "User explicitly states no positive recorded log is available and requests modeled tests.",
+    "authoritative_acceptance": "Authorized simulated actual-native source/wire/Resolver/SLA/helper/ICBM tests and synthetic graph/native Qt tests.",
+    "recorded_replay": "Historical negative current-data replay only; no positive recorded camera episode was established.",
+    "positive_recorded_episode_is_task_blocker": false,
+    "physical_validation": "No physical CAN, bench or road-readiness acceptance is asserted."
+  }
+}
