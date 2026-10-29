@@ -1,10 +1,20 @@
 # ICBM PQ35/PQ46 integration status
 
+Current authoritative release basis and user constraints:
+[ICBM_EXACT_STABLE_BASE.md](ICBM_EXACT_STABLE_BASE.md). Earlier1020-based
+firmware work below is historical and is not the requested next release.
+
+2026-10-29 vehicle evidence and current installation status:
+see [ICBM_VEHICLE_20261029.md](ICBM_VEHICLE_20261029.md). The older installation
+and pairing statements below are historical; functional equivalence remains
+unproven.
+
 Current packaging update: the user requested publishing the signed firmware,
 matched daemon and repaired Params extension for normal branch updating.
 These artifacts are now included; see ICBM_UPDATE.md. Older source-only and
 separate-manual-install statements below describe the earlier review phase.
-Device update and physical acceptance have not yet been observed.
+Device update was observed on2026-10-29; physical ICBM setpoint acceptance
+remains unverified.
 
 2026-10-28. Goal ACTIVE; functional equivalence to the original on vehicles is NOT established.
 Base stable: 3b9179406c4a43319af3383157fc83e1098cba4d. Source donor: aabf70a, with additional integration fixes.

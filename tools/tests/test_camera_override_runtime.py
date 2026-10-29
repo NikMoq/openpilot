@@ -63,7 +63,9 @@ def native_cruise_pair(native_params):
 def decoded_sender_inputs():
   with ExitStack() as stack:
     def make(*, target_kph=130, gas=False, brake=False, acc_enabled=True):
-      cs = car.CarState.new_message(gasPressed=gas, brakePressed=brake)
+      # Explicit remembered driver base; target_kph may be a lower camera
+      # constraint. Capnp's default zero means uninitialized, not 130 kph.
+      cs = car.CarState.new_message(gasPressed=gas, brakePressed=brake, vCruise=130, vCruiseCluster=130)
       cs.cruiseState.available = True
       cs.cruiseState.enabled = acc_enabled
       cs.cruiseState.speed = cs.cruiseState.speedCluster = 80 / 3.6

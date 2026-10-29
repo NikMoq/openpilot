@@ -65,6 +65,20 @@ class VCruiseHelper(VCruiseHelperSP):
             self._stock_set_pending = False
           self.update_button_timers(CS, enabled)
           return
+        if (not self._stock_virtual_cruise_initialized and not self._stock_set_held and
+            enabled and CS.cruiseState.enabled):
+          stock_kph = CS.cruiseState.speed * CV.MS_TO_KPH
+          if math.isfinite(stock_kph) and 0 < stock_kph <= V_CRUISE_MAX:
+            # RES can engage before native speed feedback arrives. Initialize
+            # once it becomes valid, even after the first enabled edge; an
+            # already remembered driver target never enters this path.
+            self.v_cruise_kph = stock_kph
+            cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
+            self.v_cruise_cluster_kph = cluster_kph if math.isfinite(cluster_kph) and cluster_kph > 0 else stock_kph
+            self._stock_virtual_cruise_initialized = True
+            self.update_enabled_state(CS, enabled)
+            self.update_button_timers(CS, enabled)
+            return
       if self.remember_stock_cruise and self.camera_episode_active and self._stock_virtual_cruise_initialized:
         # Preserve the driver's base throughout a camera episode. Temporary
         # physical corrections use stock feedback in the planner, not virtual

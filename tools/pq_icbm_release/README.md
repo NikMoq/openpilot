@@ -1,4 +1,16 @@
-# PQ ICBM unsigned offline source
+# PQ ICBM firmware and offline tests
+
+The current release basis is the whole exact original stable Panda with only
+ICBM added. Build instructions and the hash-gated original-byte allowlist are
+in [../exact_stable_icbm/README.md](../exact_stable_icbm/README.md).
+The source-built1020 reference below is historical comparison material and
+must not be used as the next release base.
+
+The reproducible production ARM / host closed-loop matrix is documented in
+[SYNTHETIC_TESTS.md](SYNTHETIC_TESTS.md). It includes a sanitized metric
+button-observation contract and an explicitly modeled stock ACC response.
+
+## Historical1020 source-built reference
 
 Panda base 1020d355584265391eb3acb556e4353b581fa9c0.
 Safety is read from unchanged stable opendbc_repo, base

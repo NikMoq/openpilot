@@ -1,5 +1,42 @@
 # Active ICBM objective and evidence ledger
 
+## Registrar update, 2026-10-29
+
+Latest user constraint supersedes earlier firmware plans: WHOLE original
+stable Panda plus ONLY ICBM. See ICBM_EXACT_STABLE_BASE.md. All1020-based
+interop rebuilds are SUPERSEDED_NOT_RELEASE. The attempted host brake gate
+was never published and has been removed; stock CC.latActive steering is
+preserved. User requires MADS continue-steering-on-brake setting honored.
+Exact-base module/build/replay/signing gates are complete and packaged for
+the user's normal update; physical validation is pending. Current firmware
+is9c86febc...431a718. See ICBM_EXACT_STABLE_BASE.md for the final15/19/8
+scenario groups, complete trace comparison,508 host checks and17 packaged
+checks. Prior counts below apply to their historical inputs.
+
+Current vehicle/build findings supersede historical installed-state statements
+below: see ICBM_VEHICLE_20261029.md. User explicitly requested resolving the
+captured conflicts, rebuilding Panda, publishing to ICBM and then repeating
+physical tests. Device is now disconnected after laptop battery exhaustion.
+
+Bounded delegated work reviewed by registrar:
+
+- offline_drive_audit: all38 sealed segments hash/framing verified; four
+  brake-associated EPS faults and no ICBM native requests; other HCA rejects
+  distinguished without inventing missing ignition/safety-mode evidence.
+- unset_target_audit: reproduced unset/stale-plan requests and first RES
+  delayed-feedback issue; source corrections and focused regression tests.
+- panda_rebuild: clean stable300 rebuild identical to released body; actual
+  ARM protocol/production/control tests and captured zero-HCA acceptance.
+- Earlier audit_original: PQ physical-brake gate and production-update tests.
+
+Registrar focused Windows check:276 passed,1 skipped (native runtime import),
+3 configuration warnings. Expanded Linux Cereal/runtime check passed500
+tests with zero skips, including the actual packaged release files. Earlier
+separate release/wrapper checks passed17 tests (overlapping coverage).
+No device update or new firmware policy/signing operation was performed.
+Goal remains ACTIVE; PQ46, imperial steps and physical ICBM behavior remain
+unverified. Raw traces, build outputs and private material stay outside Git.
+
 Updated: 2026-10-28. Goal is active: functional equivalence to original ICBM on PQ35/PQ46; not achieved by software tests alone.
 
 User-confirmed primary vehicle: Volkswagen Caddy IV, model year 2019, PQ35, factory ACC with radar and distance control (clarified option 1), comma 3, Panda believed F4 (not yet independently identified). User says installed branch is ICBM; exact running commit and artifacts UNKNOWN. PQ46 validation vehicle UNKNOWN.

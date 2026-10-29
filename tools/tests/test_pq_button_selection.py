@@ -21,7 +21,7 @@ _SPEC.loader.exec_module(_MODULE)
 select_pq_button = _MODULE.select_pq_button
 
 
-def modeled_response(current, action):
+def modeled_response(current, action, down_model="lower_decade"):
   """Explicit supported ECU model; not a measured response to generated CAN."""
   if action == "RES":
     return current + 1
@@ -30,6 +30,8 @@ def modeled_response(current, action):
   if action == "UP":
     return 10 * math.floor(current / 10) + 10
   if action == "DOWN":
+    if down_model == "minus_ten":
+      return current - 10
     return 10 * math.ceil(current / 10) - 10
   raise AssertionError(f"unknown action {action!r}")
 
@@ -37,10 +39,10 @@ def modeled_response(current, action):
 @pytest.mark.parametrize(("current", "target", "expected"), [
   (80, 79, "SET"), (80, 70, "DOWN"), (56, 60, "UP"), (79, 80, "UP"),
   (80, 81, "RES"), (80, 89, "RES"), (80, 90, "UP"),
-  (81, 80, "DOWN"), (79, 78, "SET"), (56, 59, "RES"),
-  (56, 50, "DOWN"), (56, 51, "SET"), (80, 75, "SET"),
+  (81, 80, "SET"), (79, 78, "SET"), (56, 59, "RES"),
+  (56, 50, "SET"), (56, 51, "SET"), (80, 75, "SET"),
   (1, 2, "RES"), (2, 1, "SET"), (9, 10, "UP"), (10, 9, "SET"),
-  (11, 10, "DOWN"), (249, 250, "UP"), (250, 249, "SET"),
+  (11, 10, "SET"), (249, 250, "UP"), (250, 249, "SET"),
   (1, 1, None), (80, 80, None), (250, 250, None),
 ])
 def test_boundary_examples(current, target, expected):
@@ -109,3 +111,29 @@ def test_every_integer_pair_converges_in_supported_model():
         current = modeled_response(current, select_pq_button(target, current, "kph"))
       assert current == target, (start, target, current)
       assert select_pq_button(target, current, "kph") is None
+
+
+def test_offgrid_down_43_to_40_uses_fine_set_without_model_dependent_overshoot():
+  # Captured DOWN presses start on decades, so both of these ECU responses
+  # fit the observations. Sending DOWN from43 could overshoot40 to33.
+  assert modeled_response(43, "DOWN", "minus_ten") == 33
+  action = select_pq_button(40, 43, "kph")
+  assert action == "SET"
+  for model in ("lower_decade", "minus_ten"):
+    assert modeled_response(43, action, model) == 42
+
+
+@pytest.mark.parametrize("down_model", ["lower_decade", "minus_ten"])
+def test_all_30_to_145_pairs_converge_without_overshoot_under_both_down_models(down_model):
+  for start in range(30, 146):
+    for target in range(30, 146):
+      current = start
+      for _ in range(abs(target - start)):
+        if current == target:
+          break
+        action = select_pq_button(target, current, "kph")
+        next_speed = modeled_response(current, action, down_model)
+        assert min(current, target) <= next_speed <= max(current, target), (start, target, current, action, next_speed)
+        assert abs(target - next_speed) < abs(target - current)
+        current = next_speed
+      assert current == target

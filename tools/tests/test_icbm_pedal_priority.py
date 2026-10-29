@@ -35,7 +35,7 @@ def controller():
 
 
 def inputs(target_kph=130):
-  cs = NS(gasPressed=False, brakePressed=False, cruiseState=NS(enabled=True, speedCluster=79 / 3.6))
+  cs = NS(vCruise=target_kph, gasPressed=False, brakePressed=False, cruiseState=NS(enabled=True, speedCluster=79 / 3.6))
   cc = NS(enabled=True, cruiseControl=NS(override=False, cancel=False, resume=False))
   return cs, cc, NS(vTarget=target_kph / 3.6, speedCameraControl=NS(state='inactive', manualTakeover=False))
 

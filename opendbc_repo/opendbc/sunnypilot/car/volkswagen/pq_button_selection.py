@@ -1,9 +1,11 @@
 """Pure, inactive prerequisite for PQ stock-ACC button selection.
 
 Inputs are displayed integer speeds, not m/s. Only the verified kph model is
-supported: RES/SET change the setpoint by +1/-1; UP/DOWN move to the next
-strictly higher/lower decade. A coarse action is selected only if that modeled
-endpoint lies between the current speed and target. Valid inputs are 1..250;
+supported: RES/SET change the setpoint by +1/-1; UP moves to the next strictly
+higher decade. Captured DOWN responses establish -10 only on decade-aligned
+setpoints; off-decade DOWN is unverified, so selection uses fine SET there.
+A coarse action is selected only if its supported endpoint lies between the
+current speed and target. Valid inputs are 1..250;
 255 is the unset sentinel, and all other invalid inputs produce no selection.
 
 This module neither sends buttons nor enables an ICBM/Panda capability. The
@@ -42,4 +44,4 @@ def select_pq_button(target_speed: int | float, current_speed: int | float, spee
     next_decade = (current // 10 + 1) * 10
     return "UP" if next_decade <= target else "RES"
   next_decade = ((current - 1) // 10) * 10
-  return "DOWN" if next_decade >= target else "SET"
+  return "DOWN" if current % 10 == 0 and next_decade >= target else "SET"

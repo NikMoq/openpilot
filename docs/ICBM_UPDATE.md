@@ -1,5 +1,21 @@
 # ICBM packaged update
 
+Latest release constraint: [ICBM_EXACT_STABLE_BASE.md](ICBM_EXACT_STABLE_BASE.md).
+This update packages the whole original stable Panda with only ICBM added.
+Signed firmware SHA-256 is9c86febc3db666c79f32a4af0cc15ed18bc5dfbed9ebd1d277f1cd972431a718.
+The daemon and Params extension remain unchanged. Normal branch updating and
+restart use the existing signature-based wrapper; the expected identity is
+updated in pq_icbm_release.json. Physical retest is still pending.
+Firmware hashes below describe the historical1020-based image.
+
+Historical1020-based follow-up: vehicle diagnostics confirmed installation and pairing.
+Source fixes now address PQ braking, unset/stale ICBM targets and delayed
+first-RES feedback. A fresh Panda300 build reproduced the same application
+bytes, so the signed firmware, matched pandad and Params extension stay
+identical. See ICBM_VEHICLE_20261029.md and ICBM_RETEST_20261029.md for evidence
+and the pending physical validation plan. Normal updating installs the source
+corrections; a different firmware signature is not expected for this change.
+
 2026-10-28. Published at the user's explicit request for installation through
 the normal branch updater, followed by WinSCP diagnostics. This replaces the
 proposed manual bench deployment. No device update was executed by the agent.

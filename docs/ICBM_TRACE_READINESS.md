@@ -32,3 +32,7 @@ as mph when flag1 is set, or enabling a guessed 5mph coarse model, is unproven.
 Current selector rejects mph and mismatched/unknown units. Full unit parity
 requires a trace linking raw setpoint, actual displayed units and each manual
 button response in imperial mode. Metric Caddy evidence cannot establish it.
+
+Metric DOWN evidence starts only on decade-aligned setpoints; off-decade
+responses remain unverified. The selector therefore uses fine SET from
+off-decade values and reserves coarse DOWN for decade-aligned values.

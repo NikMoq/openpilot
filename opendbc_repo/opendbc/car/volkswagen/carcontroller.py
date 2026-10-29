@@ -22,6 +22,7 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
   ICBM_TRANSACTION_TIMEOUT_S = 1.0
   ICBM_SETTLE_S = 0.08
   ICBM_ECHO_MAX_AGE_S = 0.5
+  ICBM_MIN_KPH = 30
 
   def __init__(self, dbc_names, CP, CP_SP):
     CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
@@ -183,6 +184,12 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
       unit = "kph" if fb["ACA_kmh_mph"] == 0 else "mph" if fb["ACA_kmh_mph"] == 1 else "unknown"
       planner_unit = str(icbm.speedUnit)
       target = icbm.vTarget
+      # Match the shared ICBM decrease-to-minimum behavior. Keep the driver's
+      # virtual base unchanged, but give the native transaction an attainable
+      # endpoint so target zero does not freeze and subminimum targets do not
+      # keep issuing presses/timeouts after stock ACC reaches its minimum.
+      if planner_unit == unit == "kph" and 0 <= target < self.ICBM_MIN_KPH:
+        target = self.ICBM_MIN_KPH
       target_eligible = (icbm.sendButton in (structs.IntelligentCruiseButtonManagement.SendButtonState.increase,
                                              structs.IntelligentCruiseButtonManagement.SendButtonState.decrease)
                          and gra_send_ready

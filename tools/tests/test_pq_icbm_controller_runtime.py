@@ -83,6 +83,24 @@ def test_fresh_kph_emits_correlated_set_command(bound):
   assert bound.controller.icbm_command == (press.sequence, 3)
 
 
+@pytest.mark.parametrize('target', [0, 5, 15, 29])
+def test_below_minimum_plan_decreases_to_native_minimum(bound, target):
+  bound.sp.intelligentCruiseButtonManagement.vTarget = target
+  bound.step(speed=80)
+  press = bound.controller.icbm_coordinator.transaction.pending
+  assert press is not None
+  assert press.target == 30
+  assert press.button == 'DOWN'
+
+
+@pytest.mark.parametrize('target', [0, 5, 15, 29])
+def test_below_minimum_plan_does_not_keep_pressing_at_native_minimum(bound, target):
+  bound.sp.intelligentCruiseButtonManagement.vTarget = target
+  bound.step(speed=30)
+  assert bound.controller.icbm_command is None
+  assert bound.controller.icbm_coordinator.transaction.pending is None
+
+
 @pytest.mark.parametrize('guard', ['stale_target', 'invalid_target', 'unit', 'gas', 'brake', 'manual', 'pairing'])
 def test_production_guards_inhibit_new_request(bound, guard):
   if guard == 'stale_target':

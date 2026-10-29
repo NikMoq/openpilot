@@ -49,11 +49,20 @@ class IntelligentCruiseButtonManagement:
   def v_cruise_equal(self) -> bool:
     return self.v_target == self.v_cruise_cluster
 
+  @staticmethod
+  def target_is_valid(CS: car.CarState, LP_SP: custom.LongitudinalPlanSP) -> bool:
+    # The planner selects a minimum including the driver's virtual cruise
+    # speed; camera control only lowers it. An unset base (255) or a plan
+    # above the current base must not become an acceleration request.
+    # The small m/s allowance covers Float32 wire conversion only.
+    return 0 < CS.vCruise <= 145 and 0 <= LP_SP.vTarget <= CS.vCruise * CV.KPH_TO_MS + 1e-5
+
   def update_calculations(self, CS: car.CarState, LP_SP: custom.LongitudinalPlanSP) -> None:
     speed_conv = CV.MS_TO_KPH if self.is_metric else CV.MS_TO_MPH
     ms_conv = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
 
-    self.v_target_ms_last = apply_hysteresis(LP_SP.vTarget, self.v_target_ms_last, HYST_GAP * ms_conv)
+    target = LP_SP.vTarget if self.target_is_valid(CS, LP_SP) else 0.0
+    self.v_target_ms_last = apply_hysteresis(target, self.v_target_ms_last, HYST_GAP * ms_conv)
 
     self.v_target = round(self.v_target_ms_last * speed_conv)
     self.v_cruise_min = get_minimum_set_speed(self.is_metric)
@@ -120,7 +129,7 @@ class IntelligentCruiseButtonManagement:
     # the driver's correction, including one above the remembered base speed.
     camera_manual = camera.state == "manual" and camera.manualTakeover
 
-    self.is_ready = ready and not button_pressed and not camera_manual
+    self.is_ready = ready and not button_pressed and not camera_manual and self.target_is_valid(CS, LP_SP)
 
   def run(self, CS: car.CarState, CC: car.CarControl, LP_SP: custom.LongitudinalPlanSP, is_metric: bool) -> None:
     if self.CP_SP.pcmCruiseSpeed:
