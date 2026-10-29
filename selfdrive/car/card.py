@@ -317,6 +317,7 @@ class Car:
 
   def publish_icbm_command(self, command=None):
     command_msg = messaging.new_message('customReserved10')
+    command_msg.valid = command is not None
     if command is not None:
       command_msg.customReserved10.requestId = command[0]
       command_msg.customReserved10.button = command[1]
