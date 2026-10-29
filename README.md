@@ -1,8 +1,10 @@
+![sunnypilot — интерфейс на устройстве](https://user-images.githubusercontent.com/47793918/233812617-beab2e71-57b9-479e-8bff-c3931347ca40.png)
+
 NikMoq openpilot — русифицированная сборка для comma 3
 
 Переведено всё, что видит пользователь: меню, диалоги, предупреждения, экраны при запуске, обучающие страницы и справочные тексты.
 
-Последний релиз · История изменений · Сообщить о проблеме
+[Последний релиз](https://github.com/NikMoq/openpilot/releases/latest) · [История изменений](CHANGELOG.md) · [Сообщить о проблеме](https://github.com/NikMoq/openpilot/issues)
 
 Установка на чистое устройство
 Подключите comma 3 к питанию и к Wi-Fi, чтобы был интернет.
@@ -24,15 +26,15 @@ stable	Основная сборка с полной русификацией	Ni
 Регистр в названии ветки важен — Stable и stable это не одно и то же.
 
 На чём основано и что стоит учитывать
-Проект вырос из sunnypilot и openpilot от comma.ai. Документация sunnypilot описывает upstream, то есть оригинальный проект, а не этот форк — есть ли у меня конкретная функция, лучше смотреть по коду и настройкам выбранной ветки, а не по докам.
+Проект вырос из [sunnypilot](https://github.com/sunnypilot/sunnypilot) и [openpilot от comma.ai](https://github.com/commaai/openpilot). [Документация sunnypilot](https://docs.sunnypilot.ai/) описывает upstream, то есть оригинальный проект, а не этот форк — есть ли у меня конкретная функция, лучше смотреть по коду и настройкам выбранной ветки, а не по докам.
 
 Данные и обратная связь
 Настройки загрузки данных и подключения к comma connect/sunnylink зависят от ветки и конфигурации. Прежде чем пользоваться, загляните в настройки приватности на устройстве и в условия соответствующих сервисов — это ваша зона ответственности.
 
-Если хотите что-то поправить в основной ветке — присылайте pull request в stable. Если нашли ошибку — пишите в Issues.
+Если хотите что-то поправить в основной ветке — присылайте pull request в stable. Если нашли ошибку — пишите в [Issues](https://github.com/NikMoq/openpilot/issues).
 
 Licensing
-sunnypilot is released under the MIT License. This repository includes original work as well as significant portions of code derived from openpilot by comma.ai, which is also released under the MIT license with additional disclaimers.
+sunnypilot is released under the [MIT License](LICENSE). This repository includes original work as well as significant portions of code derived from openpilot by comma.ai, which is also released under the MIT license with additional disclaimers.
 
 The original openpilot license notice, including comma.ai’s indemnification and alpha software disclaimer, is reproduced below as required:
 
@@ -44,5 +46,5 @@ THIS IS ALPHA QUALITY SOFTWARE FOR RESEARCH PURPOSES ONLY. THIS IS NOT A PRODUCT
 YOU ARE RESPONSIBLE FOR COMPLYING WITH LOCAL LAWS AND REGULATIONS.
 NO WARRANTY EXPRESSED OR IMPLIED.
 
-For full license terms, please see the LICENSE file.
+For full license terms, please see the [LICENSE](LICENSE) file.
 
