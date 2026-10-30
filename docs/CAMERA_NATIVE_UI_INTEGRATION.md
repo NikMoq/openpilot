@@ -50,3 +50,15 @@ python3 tools/ui_build/build.py -j4
 Device graphics linkage uses only the explicitly allowed cached system DSOs from `pq35-ui-ru:/work/.native-build/vendor`. `CAMERA_NATIVE_VENDOR_SDK.json` records all eight AArch64 SONAMEs and SHA-256 values. The complete ELF link closure against the SDK resolves65 AArch64 files with no missing dependencies; final candidate requires Adreno EGL/GLES and `libOpenCL.so`, not generic Mesa. Maximum GLIBC requirement is2.29, compared with original UI's2.38. This is an offline link/dependency check, not device runtime execution.
 
 Actual Qt screenshots under `.native-build/camera-native-qa/` show the same native sign20/offset15 and opposite countdown at1000/300/50m, camera60+15, manual pending/accepted labels, data-loss hold, passage clearing, real below-ACC-minimum20+0, and real settings +/- values. A raw20+15 target35 has no below-minimum marker. The UI marker only describes the unchanged ICBM minimum30km/h/20mph; it does not alter control policy, offset, limits or braking.
+
+
+## Latest camera button policy
+
+The user's subsequent requirement supersedes the earlier manual-override UI
+contract described above. In-zone ACC button actions no longer latch a camera
+Driver override or replace the saved pre-camera speed. Native HUD no longer
+renders the legacy Driver override / Waiting for ACC response labels for camera
+input. The active limit sign/countdown and short empty/GPS labels remain.
+Pedals and held buttons still pause actual ICBM transmission via its existing
+readiness checks; there is no automatic ACC engagement after braking.
+See CAMERA_EVENT_LIFECYCLE_QA.json for the new regression and artifact evidence.

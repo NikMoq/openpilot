@@ -100,6 +100,8 @@ class CameraSpeedSource:
     self._last_position = None
     self._fix_time = None
     self._behind_fixes = 0
+    self._behind_anchor = None
+    self._confirmed_approach = False
     self._travel_heading = None
     self._pending = None
     self._previous_projection = None
@@ -109,6 +111,7 @@ class CameraSpeedSource:
     self.selection = CameraSelection(state=self.selection.state, camera_id=self.selection.camera_id,
                                      camera=self._camera, reason=reason)
     self._behind_fixes = 0
+    self._behind_anchor = None
     self._pending = None
     self._previous_projection = None
     return self.selection
@@ -138,6 +141,9 @@ class CameraSpeedSource:
       self._camera = None
       self._pending = self._previous_projection = None
       self._crossed = False
+      self._confirmed_approach = False
+      self._behind_fixes = 0
+      self._behind_anchor = None
     if self._camera is not None:
       camera = self._camera
       identity = camera_identity(camera)
@@ -164,22 +170,40 @@ class CameraSpeedSource:
           self._crossed |= abs(crossing_lateral) <= LATERAL_CORRIDOR_M
       self._previous_projection = measured
       if distance < -PASS_DISTANCE_M:
-        if self._crossed and movement >= .1:
-          self._behind_fixes += 1
+        # A GPS/map gap can hide the exact zero crossing. After recovery, the
+        # retained, previously confirmed approach plus an authoritative unique
+        # forward route from camera to vehicle is independent passage evidence.
+        # Missing/ambiguous geometry never establishes this evidence. Two fresh
+        # behind fixes must also demonstrate actual forward progress; timestamps
+        # alone while standing still cannot retire an event.
+        route_recovered = road_graph is not None and self._confirmed_approach
+        if self._crossed or route_recovered:
+          if self._behind_anchor is None:
+            self._behind_anchor = (point, distance)
+            self._behind_fixes = 1
+          else:
+            anchor_point, anchor_distance = self._behind_anchor
+            if (anchor_distance - distance >= .1 and
+                math.hypot(*xy(point, anchor_point)) >= .1):
+              self._behind_fixes += 1
+              self._behind_anchor = (point, distance)
           if self._behind_fixes >= 2:
             self._completed.add(identity)
             self.selection = CameraSelection('PASSED', identity, camera, distance, False, True, 'gps_passed')
             return self.selection
         else:
           self._behind_fixes = 0
+          self._behind_anchor = None
         self.selection = CameraSelection(self.selection.state, identity, camera, reason='awaiting_second_pass_fix')
         return self.selection
       self._behind_fixes = 0
+      self._behind_anchor = None
       if distance < 0:
         self.selection = CameraSelection(self.selection.state, identity, camera, reason='awaiting_pass_distance')
         return self.selection
-      state = 'DRIVER_OVERRIDE' if driver_override_id == identity or self.selection.state == 'DRIVER_OVERRIDE' else (
-        'ACTIVE' if distance <= reaction_distance_m or self.selection.state == 'ACTIVE' else 'APPROACHING')
+      # The deprecated driver_override_id argument is accepted for old replay
+      # callers only. Physical ACC input cannot latch an override on this event.
+      state = 'ACTIVE' if distance <= reaction_distance_m or self.selection.state == 'ACTIVE' else 'APPROACHING'
       self.selection = CameraSelection(state, identity, camera, distance, True, False, 'offline_approach')
       return self.selection
     iterable = cameras.query(latitude, longitude, LOOKAHEAD_M) if isinstance(cameras, CameraSpatialIndex) else cameras
@@ -213,6 +237,8 @@ class CameraSpeedSource:
         self._camera, self._travel_heading = camera, direction
         self._pending = None
         self._crossed = False
+        self._confirmed_approach = True
+        self._behind_anchor = None
         self._previous_projection = measured
         self.selection = CameraSelection('ACTIVE' if distance <= reaction_distance_m else 'APPROACHING',
                                          identity, camera, distance, True, False, 'offline_approach')

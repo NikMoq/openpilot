@@ -132,14 +132,14 @@ def test_second_explicit_bearing_and_bidirectional_metadata_work():
     assert update(source, [item], 10, 1).valid
 
 
-def test_manual_override_is_bound_to_same_event():
+def test_legacy_manual_override_input_cannot_latch_source_authority():
   source = CameraSpeedSource()
   item = camera()
   update(source, [item], 0, 0)
   chosen = update(source, [item], 10, 1)
   overridden = update(source, [item], 20, 2, override=chosen.camera_id)
-  assert overridden.valid and overridden.state == 'DRIVER_OVERRIDE'
-  assert update(source, [item], 30, 3).state == 'DRIVER_OVERRIDE'
+  assert overridden.valid and overridden.state == 'ACTIVE'
+  assert update(source, [item], 30, 3).state == 'ACTIVE'
 
 
 def test_camera_identity_ignores_speed_and_preserves_distinct_same_limit_points():
@@ -189,3 +189,83 @@ def test_slow_one_meter_fixes_can_prove_passage_without_being_stuck_in_hold():
       passed = selected
       break
   assert passed is not None and passed.state == 'PASSED'
+
+
+# Production-style route evidence: exact geometry, not a fake passed flag.
+def local_road(*, parallel=False):
+  from openpilot.sunnypilot.mapd.camera_osm_bridge import OfflineRoadSnapshot, RoadEdge
+  from openpilot.sunnypilot.mapd.camera_speed_source import xy
+  a, b = point(-100), point(1200)
+  edges = [RoadEdge('road:0', 'road', a, b, math.hypot(*xy(b, a)))]
+  if parallel:
+    c, d = point(-100, 5), point(1200, 5)
+    edges.append(RoadEdge('parallel:0', 'parallel', c, d, math.hypot(*xy(d, c))))
+  return OfflineRoadSnapshot(edges, [(54.9, 36.9, 55.1, 37.1)], point())
+
+
+def route_update(source, records, north, t, *, roads=None, heading=0., valid=True):
+  return source.update(records, *point(north), heading, gps_valid=valid,
+                       fix_time_s=NOW+t, now_s=NOW+t, reaction_distance_m=900,
+                       road_graph=roads)
+
+
+def test_recovered_route_proves_missed_crossing_after_two_progressing_behind_fixes():
+  source, roads = CameraSpeedSource(), local_road()
+  records = [camera(100), camera(500, source='next-same-limit')]
+  route_update(source, records, 0, 0, roads=roads)
+  first = route_update(source, records, 10, 1, roads=roads)
+  assert first.valid
+  gap = route_update(source, records, 80, 3, roads=roads, valid=False)
+  assert not gap.valid and gap.camera_id == first.camera_id
+  recovered = route_update(source, records, 130, 4, roads=roads)
+  assert not recovered.pass_proven and recovered.camera_id == first.camera_id
+  # Duplicate timestamps and stationary fresh samples cannot create progress.
+  assert not route_update(source, records, 140, 4, roads=roads).pass_proven
+  passed = route_update(source, records, 140, 5, roads=roads)
+  assert passed.pass_proven and passed.state == 'PASSED' and passed.camera_id == first.camera_id
+  confirming = route_update(source, records, 150, 6, roads=roads)
+  assert not confirming.valid
+  next_camera = route_update(source, records, 160, 7, roads=roads)
+  assert next_camera.valid and next_camera.camera_id != first.camera_id
+  assert next_camera.camera == records[1]
+
+
+@pytest.mark.parametrize('gap_kind', ['gps', 'ambiguous_geometry'])
+def test_recovered_route_does_not_need_an_observed_zero_after_short_gap(gap_kind):
+  source, roads = CameraSpeedSource(), local_road()
+  records = [camera(100)]
+  route_update(source, records, 0, 0, roads=roads)
+  chosen = route_update(source, records, 10, 1, roads=roads)
+  bad_roads = local_road(parallel=True) if gap_kind == 'ambiguous_geometry' else roads
+  gap = route_update(source, records, 80, 3, roads=bad_roads, valid=gap_kind != 'gps')
+  assert not gap.valid and gap.camera_id == chosen.camera_id
+  assert not route_update(source, records, 130, 4, roads=roads).pass_proven
+  assert route_update(source, records, 140, 5, roads=roads).pass_proven
+
+
+def test_recovery_stationary_samples_and_receding_motion_cannot_prove_passage():
+  source, roads = CameraSpeedSource(), local_road()
+  records = [camera(100)]
+  route_update(source, records, 0, 0, roads=roads)
+  chosen = route_update(source, records, 10, 1, roads=roads)
+  route_update(source, records, 80, 3, roads=roads, valid=False)
+  for t in range(4, 10):
+    state = route_update(source, records, 150, t, roads=roads)
+    assert not state.pass_proven and state.camera_id == chosen.camera_id
+  assert not route_update(source, records, 140, 10, roads=roads).pass_proven
+  assert not route_update(source, records, 145, 11, roads=roads).pass_proven
+  assert route_update(source, records, 155, 12, roads=roads).pass_proven
+
+
+@pytest.mark.parametrize('failure', ['gps', 'ambiguous', 'opposing'])
+def test_recovered_behind_positions_still_need_reliable_unique_forward_road(failure):
+  source, roads = CameraSpeedSource(), local_road()
+  records = [camera(100)]
+  route_update(source, records, 0, 0, roads=roads)
+  chosen = route_update(source, records, 10, 1, roads=roads)
+  route_update(source, records, 80, 3, roads=roads, valid=False)
+  for t, north in enumerate((130, 140, 150, 160), 4):
+    state = route_update(source, records, north, t,
+                         roads=local_road(parallel=True) if failure == 'ambiguous' else roads,
+                         valid=failure != 'gps', heading=180 if failure == 'opposing' else 0)
+    assert not state.pass_proven and not state.valid and state.camera_id == chosen.camera_id

@@ -133,8 +133,6 @@ class LongitudinalPlannerSP:
     camera_control.speedCap = self.resolver.speed_limit_final if self.camera.output.automatic else 0.0
     camera_control.state = {"IDLE": "inactive", "APPROACHING": "approaching", "ACTIVE": "active",
                             "DRIVER_OVERRIDE": "driverOverride", "PASSED": "passed"}[self.camera.output.state]
-    if self.camera.output.reason in ("awaiting_driver_feedback", "driver_speed_outside_virtual_range"):
-      camera_control.state = "manual"  # Existing ICBM readiness guard, until an attributed stock response.
     camera_control.reason = self.camera.output.reason
     if self.resolver.camera_target_below_minimum:
       camera_control.reason += ":below_stock_acc_minimum"

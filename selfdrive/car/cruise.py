@@ -58,6 +58,19 @@ class VCruiseHelper(VCruiseHelperSP):
     if CS.cruiseState.available:
       if self.remember_stock_cruise:
         self.update_stock_set_intent(CS, enabled)
+        if self.camera_episode_active and self._stock_virtual_cruise_initialized:
+          # The camera zone temporarily constrains the ACC target, not the
+          # remembered pre-camera driver setting. Physical +/-/SET responses
+          # (including delayed/held changes) must not rewrite that setting or
+          # create persistent manual ownership of the camera event.
+          self._camera_manual_feedback_pending = False
+          self._camera_manual_feedback_baseline = None
+          self._camera_manual_gesture = self._camera_manual_follow = False
+          self._camera_speed_buttons_held.clear()
+          self._camera_release_seen.clear()
+          self.update_enabled_state(CS, enabled)
+          self.update_button_timers(CS, enabled)
+          return
         if self._stock_set_pending:
           self.update_enabled_state(CS, enabled)
           stock_kph = CS.cruiseState.speed * CV.MS_TO_KPH

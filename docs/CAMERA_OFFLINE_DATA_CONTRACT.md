@@ -17,8 +17,10 @@ Geometry is not serialized into the control messages.
 
 The configured reaction distance remains 50–1000 m, step50, default300; the
 provider's field1706 detection range does not override that preference. The
-native offset applies once in Resolver. Driver priority and retained driver
-speed before/after a camera remain in the existing control architecture.
+native offset applies once in Resolver. The pre-camera driver speed is frozen during the camera event. ACC buttons
+do not create a persistent camera override; physical pedals/buttons retain
+the existing temporary ICBM transmission pause. Proven passage restores the
+pre-camera target; braking never automatically reengages stock ACC.
 
 ## Actual downloaded camera data
 
@@ -74,8 +76,11 @@ A new camera requires two distinct measurements with measured forward approach.
 The installed-map bridge is authoritative: its rejection is not replaced by a
 point-only match. Curved-road distance follows the local directed polyline.
 
-Passage requires an observed crossing followed by two distinct moving fixes
-more than20m behind the same camera on compatible connected geometry. Repeated,
+Passage requires two distinct moving fixes more than20m behind the same
+camera on compatible connected geometry. If GPS/map evidence missed the zero
+crossing, a retained confirmed approach plus a trustworthy unique forward
+route from that camera to the recovered positions can prove passage. The
+metadata-only source path still requires observed crossing. Repeated,
 backward, missing or jumping GPS cannot prove passage. Existing event identity
 is retained during uncertainty; lack of data does not restore driver speed.
 

@@ -280,14 +280,15 @@ def test_production_map_publish_and_decoded_resolver(pipeline, kind, trusted, al
   if allowed: assert output.state=='ACTIVE' and output.raw_limit==pytest.approx(LIMIT)
 
 
-def test_production_invalid_map_holds_then_driver_button_overrides(pipeline):
+def test_production_invalid_map_holds_without_button_override(pipeline):
   write_camera(pipeline[0],'18059',True)
   resolver=SpeedLimitResolver()
   initial=plan(resolver,publish_frame(pipeline))
   held=plan(resolver,publish_frame(pipeline,gps_ok=False))
   assert held.automatic and held.raw_limit==initial.raw_limit and not held.countdown_valid
   manual=plan(resolver,publish_frame(pipeline,buttons=(('accelCruise',True),)))
-  assert manual.manual and not manual.automatic and manual.state=='DRIVER_OVERRIDE'
+  assert not manual.manual and manual.automatic and manual.state=='ACTIVE'
+  assert manual.event_id == initial.event_id and manual.raw_limit == initial.raw_limit
 
 
 @pytest.mark.parametrize('eligible',[False,True])
@@ -326,7 +327,7 @@ def test_longitudinal_real_min_arbitration_and_publish(pipeline,longitudinal,pla
   assert camera.speedCap==pytest.approx(LIMIT) and camera.rawLimit==pytest.approx(LIMIT)
 
 
-def test_longitudinal_hold_manual_and_disabled(pipeline,longitudinal,plan_bus,native_params):
+def test_longitudinal_hold_keeps_camera_authority_across_buttons_and_disabled(pipeline,longitudinal,plan_bus,native_params):
   write_camera(pipeline[0],'18950',True)
   planner=longitudinal()
   target,_=run_longitudinal(planner,publish_frame(pipeline),plan_bus)
@@ -334,7 +335,9 @@ def test_longitudinal_hold_manual_and_disabled(pipeline,longitudinal,plan_bus,na
   assert held.speedCameraControl.active and held.speedCameraControl.speedCap==pytest.approx(target[0])
   assert not held.speedCameraControl.countdownValid
   _,manual=run_longitudinal(planner,publish_frame(pipeline,buttons=(('accelCruise',True),)),plan_bus)
-  assert manual.speedCameraControl.manualTakeover and not manual.speedCameraControl.active
+  assert not manual.speedCameraControl.manualTakeover and manual.speedCameraControl.active
+  assert manual.speedCameraControl.state == "active"
+  assert manual.speedCameraControl.speedCap == held.speedCameraControl.speedCap
   native_params.put_bool('SpeedCameraControlEnabled',False)
   planner.resolver.frame=0
   _,disabled=run_longitudinal(planner,publish_frame(pipeline),plan_bus)

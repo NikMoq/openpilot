@@ -46,10 +46,10 @@ public:
     camera.setState("driverOverride"); camera.setManualTakeover(true);
     camera.setReason("awaiting_driver_feedback");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText() == "Waiting for ACC response");
+    assert(hud.cameraStatusText().isEmpty());  // Legacy manual flags no longer create a camera override.
     camera.setReason("button_event");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText() == "Driver override");
+    assert(hud.cameraStatusText().isEmpty());
     assert(hud.cameraSignVisible && hud.speedCameraControlManualTakeover);
     assert(std::abs(hud.speedLimitOffset - 15) < .01);
     camera.setState("active"); camera.setManualTakeover(false); camera.setReason("camera_limit");

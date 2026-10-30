@@ -419,9 +419,6 @@ QString HudRendererSP::cameraStatusText() const {
   }
   if (!cameraSignVisible) return russian ? QStringLiteral("Камер нет") : tr("No cameras");
   QStringList messages;
-  if (speedCameraControlManualTakeover) {
-    messages << (speedCameraControlReason.startsWith("awaiting_driver_feedback") ? tr("Waiting for ACC response") : tr("Driver override"));
-  }
   // Display the unchanged ICBM capability (helpers.py:30 km/h or20 mph).
   // This does not alter the limit/offset or create a braking/control path.
   if (speedCameraControlReason.contains("below_stock_acc_minimum") ||

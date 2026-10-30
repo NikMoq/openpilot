@@ -10,12 +10,14 @@ not LongitudinalPlannerSP construction or its production publish path.
 """
 
 from contextlib import ExitStack
+from types import SimpleNamespace as NS
 import math
 
 import pytest
 
 from cereal import car, custom, log
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_camera_planner import SpeedCameraPlanner
+from openpilot.sunnypilot.selfdrive.controls.lib.camera_speed_adapter import CameraSpeedAdapter
 
 
 EPOCH = 1_800_000_000.0
@@ -170,37 +172,57 @@ def test_decoded_loss_of_location_holds_existing_ceiling(wire):
   assert not output.restore_allowed
 
 
-@pytest.mark.parametrize('action,reason', [('gas', 'gas'), ('button', 'manual_button')])
-def test_decoded_temporary_manual_action_retains_geometry_and_roundtrips(wire, action, reason):
-  planner = SpeedCameraPlanner()
-  initial = update(planner, frame(wire))
-  data = frame(wire, time_s=1, **{action: True})
-  planner.observe_car_state(data[0][0], EPOCH + 1)
-  output = update(planner, data)
-  assert output.state.value == 'manual'
-  assert output.manual_takeover and output.speed_cap_mps is None
-  assert output.reason == reason and not output.restore_allowed
-  assert planner.controller.episode_active and output.camera_id == initial.camera_id
+def camera_source_wire(wire, *, event='wire-camera', state='ACTIVE', passed=False):
+  message = custom.LiveMapDataSP.new_message(
+    locationValid=True, speedCameraControlVersion=1, speedCameraControlEventId=event,
+    speedCameraControlState=state, speedCameraControlValid=not passed,
+    speedCameraControlAutoControlAllowed=True, speedCameraControlDistance=100,
+    speedCameraControlSpeedLimit=LIMIT, speedCameraControlPassProven=passed)
+  return wire(custom.LiveMapDataSP, message)
+
+
+def adapter_update(adapter, lmd, *, engaged=True):
+  return adapter.update(lmd, enabled=True, reliable=True, engaged=engaged, reaction_distance=300)
+
+
+@pytest.mark.parametrize('action', ['gas', 'button'])
+def test_decoded_physical_action_does_not_create_persistent_camera_override(wire, action):
+  adapter = CameraSpeedAdapter()
+  source = camera_source_wire(wire)
+  initial = adapter_update(adapter, source)
+  cs = NS(buttonEvents=[NS(type='accelCruise', pressed=True)] if action == 'button' else [],
+          gasPressed=action == 'gas', brakePressed=False,
+          cruiseState=NS(enabled=True, speedCluster=USER_SPEED))
+  adapter.observe_car_state(cs)
+  output = adapter_update(adapter, source)
+  assert output.state == 'ACTIVE' and output.automatic and not output.manual
+  assert output.event_id == initial.event_id and output.raw_limit == pytest.approx(LIMIT)
   message = custom.LongitudinalPlanSP.new_message()
-  message.speedCameraControl.state = output.state.value
-  message.speedCameraControl.speedCap = output.speed_cap_mps or 0.0
+  message.speedCameraControl.state = output.state.lower()
+  message.speedCameraControl.speedCap = output.raw_limit
   message.speedCameraControl.reason = output.reason
-  message.speedCameraControl.manualTakeover = output.manual_takeover
+  message.speedCameraControl.manualTakeover = output.manual
   result = wire(custom.LongitudinalPlanSP, message).speedCameraControl
-  assert (result.state, result.reason, result.manualTakeover, result.speedCap) == (
-    'manual', reason, True, 0.0)
+  assert (result.state, result.manualTakeover) == ('active', False)
+  assert result.speedCap == pytest.approx(LIMIT)
+  cs.buttonEvents, cs.gasPressed = [], False
+  adapter.observe_car_state(cs)
+  assert adapter_update(adapter, source).automatic
 
 
-def test_decoded_explicit_cancel_remains_permanent(wire):
-  planner = SpeedCameraPlanner()
-  initial = update(planner, frame(wire))
-  output = update(planner, frame(wire, time_s=1, button=True, button_type='cancel'))
-  assert output.state.value == 'cancelled' and output.manual_takeover
-  assert output.camera_id == initial.camera_id and output.reason == 'manual_button'
-  assert not planner.controller.episode_active and not output.restore_allowed
-  later = update(planner, frame(wire, time_s=2))
-  assert later.manual_takeover and later.speed_cap_mps is None
-  assert not later.restore_allowed
+def test_decoded_explicit_cancel_cannot_latch_manual_state_across_passage(wire):
+  adapter = CameraSpeedAdapter()
+  source = camera_source_wire(wire)
+  initial = adapter_update(adapter, source)
+  adapter.observe_car_state(NS(buttonEvents=[NS(type='cancel', pressed=True)],
+                               cruiseState=NS(enabled=False, speedCluster=USER_SPEED)))
+  paused = adapter_update(adapter, source, engaged=False)
+  assert paused.event_id == initial.event_id and paused.state == 'ACTIVE' and not paused.manual
+  passed = adapter_update(adapter, camera_source_wire(wire, state='PASSED', passed=True), engaged=False)
+  assert passed.state == 'PASSED' and not passed.manual and not passed.automatic
+  following = adapter_update(adapter, camera_source_wire(wire, event='next-wire-camera'))
+  assert following.state == 'ACTIVE' and following.automatic and not following.manual
+  assert following.event_id != initial.event_id
 
 
 def test_decoded_pass_requires_two_fixes_then_new_map_generation(wire):

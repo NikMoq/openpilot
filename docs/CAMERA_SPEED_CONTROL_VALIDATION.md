@@ -196,3 +196,25 @@ The full IPC runtime rebuilt actual Params/msgq/transformations and passed91
 checks including raw20+15, driver priority, passage restore and next-camera cycle.
 The legacy graph keys remain registered for binary compatibility but no longer
 select an external XML input. No Panda/pandad/control policy binary was changed.
+
+
+## Current camera lifecycle and frozen pre-camera target
+
+A reproducible source defect could retain a camera forever if GPS/map uncertainty
+hid its zero crossing: all recovered fixes were already behind, so the required
+positive-to-negative transition could never happen. With installed-road evidence,
+retained confirmed approach plus two fresh moving behind-camera fixes can now
+prove passage. No missing-data timeout releases the speed ceiling.
+
+The user explicitly changed the earlier manual-button contract. In-zone ACC
+buttons no longer create persistent manual authority or overwrite the saved
+pre-camera driver target. Proven passage completes the camera immediately,
+including with a held button. Physical pedals/buttons and disengaged ACC still
+block actual ICBM commands. A brake never triggers automatic ACC engagement.
+
+ICBM additionally validates finite positive stock set-speed feedback before
+rounding or transmitting: zero/NaN/Inf are not acceleration requests. This is
+input validation, not a change of the original virtual maximum145 or stock
+minimum30km/h. Native150 feedback can still be reduced to a valid target85.
+Panda firmware and CAN encoding are unchanged. Current evidence:
+CAMERA_EVENT_LIFECYCLE_QA.json.

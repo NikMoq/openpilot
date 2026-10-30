@@ -172,202 +172,235 @@ def test_actual_pedal_priority_retains_driver_and_safe_resume(override_cycle,ped
   assert pressed.speedCameraControl.driverSetSpeed==pytest.approx(130/3.6)
 
 
-@pytest.mark.parametrize('button,corrected',[('accelCruise',85.),('decelCruise',65.)])
-def test_actual_manual_setting_is_event_local_and_survives_pass(override_cycle,button,corrected):
-  c=override_cycle
+@pytest.mark.parametrize('button,stock_after', [
+  ('accelCruise', 85.), ('decelCruise', 65.), ('setCruise', 70.)])
+def test_actual_zone_buttons_keep_precamera_base_and_camera_authority(override_cycle, button, stock_after):
+  c = override_cycle
   c.frame()
-  c.frame(buttons=((button,True),))
-  sm,manual=c.frame(buttons=((button,False),),stock_kph=corrected)
-  assert manual.speedCameraControl.manualTakeover
-  assert c.helper.v_cruise_kph==pytest.approx(corrected)
-  _,passed=c.pass_camera(stock_kph=corrected)
-  assert passed.speedCameraControl.state=='passed'
-  _,after=c.frame(north_m=35,stock_kph=corrected)
-  assert after.vTarget==pytest.approx(corrected/3.6)
-  assert c.helper.v_cruise_kph==pytest.approx(corrected)
+  _, held = c.frame(buttons=((button, True),))
+  assert held.speedCameraControl.active and not held.speedCameraControl.manualTakeover
+  assert c.sender.cruise_button == SendButton.none
+  _, released = c.frame(buttons=((button, False),), stock_kph=stock_after)
+  assert released.vTarget == pytest.approx(75 / 3.6)
+  assert released.speedCameraControl.active and not released.speedCameraControl.manualTakeover
+  assert c.helper.v_cruise_kph == c.helper.driver_set_speed_kph == pytest.approx(130)
+  for _ in range(45):
+    _, active = c.frame(dt=.01, stock_kph=stock_after)
+  expected = SendButton.decrease if stock_after > 75 else SendButton.increase
+  assert c.sender.cruise_button == expected
+  _, passed = c.pass_camera(stock_kph=stock_after)
+  assert passed.speedCameraControl.state == 'passed'
+  assert not passed.speedCameraControl.manualTakeover
+  assert passed.vTarget == pytest.approx(130 / 3.6)
+  _, after = c.frame(north_m=35, stock_kph=stock_after)
+  assert after.vTarget == pytest.approx(130 / 3.6)
+  assert c.helper.driver_set_speed_kph == pytest.approx(130)
 
 
-def test_actual_delayed_driver_feedback_is_not_replaced_by_old_native_value(override_cycle):
-  c=override_cycle
+def test_actual_delayed_native_button_feedback_does_not_create_manual_wait(override_cycle):
+  c = override_cycle
   c.frame()
-  c.frame(buttons=(('accelCruise',True),))
-  c.frame(buttons=(('accelCruise',False),))
-  for _ in range(30):
-    _,pending=c.frame(dt=.05)
-    assert c.helper.v_cruise_kph==pytest.approx(130)
-    assert c.sender.cruise_button==SendButton.none
-  _,accepted=c.frame(stock_kph=85)
-  assert c.helper.v_cruise_kph==pytest.approx(85)
-  assert accepted.speedCameraControl.manualTakeover
+  c.frame(buttons=(('accelCruise', True),))
+  c.frame(buttons=(('accelCruise', False),))
+  for _ in range(50):
+    _, active = c.frame(dt=.01)
+    assert active.vTarget == pytest.approx(75 / 3.6)
+    assert active.speedCameraControl.active and not active.speedCameraControl.manualTakeover
+    assert active.speedCameraControl.state not in ('manual', 'driverOverride')
+    assert c.helper.v_cruise_kph == pytest.approx(130)
+  _, delayed = c.frame(stock_kph=85)
+  assert delayed.vTarget == pytest.approx(75 / 3.6)
+  assert c.helper.driver_set_speed_kph == pytest.approx(130)
 
 
-def test_actual_gps_loss_holds_applied_native_offset_without_release(override_cycle,native_params):
-  c=override_cycle
-  _,initial=c.frame()
-  native_params.put('SpeedLimitValueOffset',30)
-  c.planner.resolver.frame=0
-  _,held=c.frame(gps_ok=False)
-  assert held.vTarget==pytest.approx(initial.vTarget)
+def test_actual_gps_loss_holds_applied_native_offset_without_release(override_cycle, native_params):
+  c = override_cycle
+  _, initial = c.frame()
+  native_params.put('SpeedLimitValueOffset', 30)
+  c.planner.resolver.frame = 0
+  _, held = c.frame(gps_ok=False)
+  assert held.vTarget == pytest.approx(initial.vTarget)
   assert held.speedCameraControl.active and not held.speedCameraControl.countdownValid
-  assert held.speedCameraControl.appliedOffset==pytest.approx(15/3.6)
-  assert held.speedCameraControl.state!='passed'
+  assert held.speedCameraControl.appliedOffset == pytest.approx(15 / 3.6)
+  assert held.speedCameraControl.state != 'passed'
+  assert not held.speedCameraControl.manualTakeover
+
+
+def install_next_camera(c):
+  from openpilot.sunnypilot.mapd.camera_database import CameraDatabase, save_database
+  from openpilot.sunnypilot.mapd.cityguide import parse_cityguide_snapshot
+  latitude = 55 + math.degrees(200 / 6371000)
+  rows = f'2|Radars|65001\n18059|second|{latitude}|37|1709|60|1705|180|1713|1|\n'
+  cameras = tuple(parse_cityguide_snapshot(rows))
+  save_database(str(c.pipeline[0]), CameraDatabase('second-runtime', c.clock.time(), cameras))
 
 
 def test_actual_pass_restores_base_and_next_camera_has_independent_cycle(override_cycle):
-  c=override_cycle
+  c = override_cycle
   c.frame()
-  _,passed=c.pass_camera()
-  assert passed.speedCameraControl.state=='passed'
-  assert passed.vTarget==pytest.approx(130/3.6)
-  # A separate same-limit camera uses its coordinates/source identity.
-  from openpilot.sunnypilot.mapd.camera_database import CameraDatabase,save_database
-  from openpilot.sunnypilot.mapd.cityguide import parse_cityguide_snapshot
-  latitude=55+math.degrees(200/6371000)
-  rows=f'2|Radars|65001\n18059|second|{latitude}|37|1709|60|1705|180|1713|1|\n'
-  cameras=tuple(parse_cityguide_snapshot(rows))
-  save_database(str(c.pipeline[0]),CameraDatabase('second-runtime',c.clock.time(),cameras))
-  # A new event requires its own two distinct approaching GPS fixes, even
-  # when its limit equals the camera that was just passed.
-  _,confirming=c.frame(north_m=35)
+  _, passed = c.pass_camera()
+  assert passed.speedCameraControl.state == 'passed'
+  assert passed.vTarget == pytest.approx(130 / 3.6)
+  install_next_camera(c)
+  _, confirming = c.frame(north_m=35)
   assert not confirming.speedCameraControl.active
-  _,next_camera=c.frame(north_m=40)
+  _, next_camera = c.frame(north_m=40)
   assert next_camera.speedCameraControl.active
-  assert next_camera.speedCameraControl.eventId!=passed.speedCameraControl.eventId
-  assert next_camera.vTarget==pytest.approx(75/3.6)
+  assert next_camera.speedCameraControl.eventId
+  assert next_camera.vTarget == pytest.approx(75 / 3.6)
 
 
-def test_actual_held_button_across_pass_waits_for_native_release_response(override_cycle):
-  c=override_cycle
+def test_actual_gps_gap_across_camera_recovers_pass_and_next_event(override_cycle):
+  c = override_cycle
+  _, initial = c.frame()
+  first_id = initial.speedCameraControl.eventId
+  c.frame(buttons=(('accelCruise', True),))
+  c.frame(buttons=(('accelCruise', False),), stock_kph=105)
+  _, missing = c.frame(north_m=-10, gps_ok=False, stock_kph=105)
+  assert missing.speedCameraControl.eventId == first_id
+  assert missing.speedCameraControl.active and not missing.speedCameraControl.manualTakeover
+  _, first_behind = c.frame(north_m=25, stock_kph=105)
+  assert first_behind.speedCameraControl.state != 'passed'
+  _, passed = c.frame(north_m=30, stock_kph=105)
+  assert passed.speedCameraControl.state == 'passed'
+  assert not passed.speedCameraControl.manualTakeover
+  assert passed.speedCameraControl.rawLimit == 0
+  assert passed.vTarget == pytest.approx(130 / 3.6)
+  install_next_camera(c)
+  c.frame(north_m=35, stock_kph=105)
+  _, second = c.frame(north_m=40, stock_kph=105)
+  assert second.speedCameraControl.active and second.speedCameraControl.eventId != first_id
+  assert not second.speedCameraControl.manualTakeover
+  assert c.helper.driver_set_speed_kph == pytest.approx(130)
+
+
+def test_actual_held_unacknowledged_button_does_not_keep_camera_after_pass(override_cycle):
+  c = override_cycle
   c.frame()
-  c.frame(buttons=(('accelCruise',True),))
-  _,pending=c.pass_camera()
-  assert pending.speedCameraControl.manualTakeover
-  assert c.helper.v_cruise_kph==pytest.approx(130)
-  assert c.sender.cruise_button==SendButton.none
-  _,released=c.frame(north_m=35,stock_kph=85,buttons=(('accelCruise',False),))
-  assert c.helper.v_cruise_kph==pytest.approx(85)
-  assert c.sender.cruise_button==SendButton.none
-  _,settled=c.frame(north_m=40,stock_kph=85)
-  assert settled.vTarget==pytest.approx(85/3.6)
+  c.frame(buttons=(('accelCruise', True),))
+  _, passed = c.pass_camera()
+  assert passed.speedCameraControl.state == 'passed'
+  assert passed.speedCameraControl.rawLimit == 0 and not passed.speedCameraControl.manualTakeover
+  assert c.helper.v_cruise_kph == pytest.approx(130)
+  assert c.sender.cruise_button == SendButton.none
+  for _ in range(5):
+    _, after = c.frame(north_m=35)
+    assert after.speedCameraControl.rawLimit == 0
+    assert not after.speedCameraControl.manualTakeover
+    assert c.helper.driver_set_speed_kph == pytest.approx(130)
+    assert c.sender.cruise_button == SendButton.none  # A physically held button still owns the actual buttons.
+  _, released = c.frame(north_m=40, stock_kph=85, buttons=(('accelCruise', False),))
+  assert c.helper.v_cruise_kph == pytest.approx(130)
+  for _ in range(45):
+    c.frame(dt=.01, north_m=45, stock_kph=85)
+  assert c.sender.cruise_button == SendButton.increase
+  assert released.vTarget == pytest.approx(130 / 3.6)
 
 
 def test_actual_stock_set_after_brake_outside_camera_replaces_driver_base(override_cycle):
-  c=override_cycle
+  c = override_cycle
   c.frame()
-  c.pass_camera(brake=True,cc_enabled=False,acc_enabled=False)
-  c.frame(north_m=35,stock_kph=75,cc_enabled=False,acc_enabled=False)
-  c.frame(north_m=40,stock_kph=75,buttons=(('setCruise',True),),cc_enabled=False,acc_enabled=False)
-  _,engaged=c.frame(north_m=45,stock_kph=95,buttons=(('setCruise',False),))
-  assert c.helper.v_cruise_kph==pytest.approx(95)
-  assert engaged.vTarget==pytest.approx(95/3.6)
+  c.pass_camera(brake=True, cc_enabled=False, acc_enabled=False)
+  c.frame(north_m=35, stock_kph=75, cc_enabled=False, acc_enabled=False)
+  c.frame(north_m=40, stock_kph=75, buttons=(('setCruise', True),), cc_enabled=False, acc_enabled=False)
+  _, engaged = c.frame(north_m=45, stock_kph=95, buttons=(('setCruise', False),))
+  assert c.helper.v_cruise_kph == pytest.approx(95)
+  assert engaged.vTarget == pytest.approx(95 / 3.6)
 
 
 def test_actual_native_raw_twenty_plus_fifteen_targets_thirty_five(override_cycle):
-  c=override_cycle
-  write_camera(c.pipeline[0],'18059',True,speed_kph=20)
-  sm,result=c.frame(stock_kph=75)
+  c = override_cycle
+  write_camera(c.pipeline[0], '18059', True, speed_kph=20)
+  sm, result = c.frame(stock_kph=75)
   assert sm['liveMapDataSP'].speedCameraControlValid
-  assert result.speedCameraControl.rawLimit==pytest.approx(20/3.6)
-  assert result.speedCameraControl.appliedOffset==pytest.approx(15/3.6)
-  assert result.vTarget==pytest.approx(35/3.6)
+  assert result.speedCameraControl.rawLimit == pytest.approx(20 / 3.6)
+  assert result.speedCameraControl.appliedOffset == pytest.approx(15 / 3.6)
+  assert result.vTarget == pytest.approx(35 / 3.6)
   for _ in range(45):
-    c.sender.run(sm['carState'],sm['carControl'],result,True)
-  assert c.sender.v_cruise_min==30
-  assert c.sender.v_target==35 and c.sender.cruise_button==SendButton.decrease
+    c.sender.run(sm['carState'], sm['carControl'], result, True)
+  assert c.sender.v_cruise_min == 30
+  assert c.sender.v_target == 35 and c.sender.cruise_button == SendButton.decrease
 
 
-@pytest.mark.parametrize('button,first,held,final',[
-  ('accelCruise',85.,95.,105.), ('decelCruise',65.,55.,45.)])
-@pytest.mark.parametrize('delayed_final',[False,True])
-def test_actual_held_increments_and_final_release_own_driver_target(override_cycle,button,first,held,final,delayed_final):
-  c=override_cycle
+@pytest.mark.parametrize('button,first,held,final', [
+  ('accelCruise', 85., 95., 105.), ('decelCruise', 65., 55., 45.)])
+@pytest.mark.parametrize('delayed_final', [False, True])
+def test_actual_held_increments_and_delayed_release_preserve_precamera_base(override_cycle, button, first, held, final, delayed_final):
+  c = override_cycle
   c.frame()
-  c.frame(buttons=((button,True),),stock_kph=75)
+  c.frame(buttons=((button, True),), stock_kph=75)
   c.frame(stock_kph=first)
-  for _ in range(50):
-    c.frame(dt=.01,stock_kph=held)
-    assert c.sender.cruise_button==SendButton.none
-  c.frame(buttons=((button,False),),stock_kph=held if delayed_final else final)
-  if delayed_final:
-    for _ in range(50):
-      c.frame(dt=.01,stock_kph=held)
-      assert c.sender.cruise_button==SendButton.none
-    c.frame(stock_kph=final)
-  assert c.helper.v_cruise_kph==pytest.approx(final)
-  _,passed=c.pass_camera(stock_kph=final)
-  assert passed.vTarget==pytest.approx(final/3.6)
-  assert c.helper.driver_set_speed_kph==pytest.approx(final)
-
-
-@pytest.mark.parametrize('button,first,final',[
-  ('accelCruise',85.,95.), ('decelCruise',65.,55.)])
-def test_actual_release_already_shows_final_native_setting(override_cycle,button,first,final):
-  c=override_cycle
-  c.frame()
-  c.frame(buttons=((button,True),),stock_kph=75)
-  c.frame(stock_kph=first)
-  c.frame(stock_kph=final)
-  _,released=c.frame(buttons=((button,False),),stock_kph=final)
-  assert c.helper.v_cruise_kph==pytest.approx(final)
-  assert released.speedCameraControl.reason!='awaiting_driver_feedback'
   for _ in range(10):
-    _,stable=c.frame(dt=.01,stock_kph=final)
-    assert stable.speedCameraControl.reason!='awaiting_driver_feedback'
-  _,passed=c.pass_camera(stock_kph=final)
-  assert passed.vTarget==pytest.approx(final/3.6)
+    _, holding = c.frame(dt=.01, stock_kph=held)
+    assert c.sender.cruise_button == SendButton.none
+    assert not holding.speedCameraControl.manualTakeover
+  c.frame(buttons=((button, False),), stock_kph=held if delayed_final else final)
+  if delayed_final:
+    for _ in range(10):
+      c.frame(dt=.01, stock_kph=held)
+    c.frame(stock_kph=final)
+  assert c.helper.v_cruise_kph == c.helper.driver_set_speed_kph == pytest.approx(130)
+  _, passed = c.pass_camera(stock_kph=final)
+  assert passed.vTarget == pytest.approx(130 / 3.6)
+  assert not passed.speedCameraControl.manualTakeover
 
 
-@pytest.mark.parametrize('button,first,final',[
-  ('accelCruise',85.,95.), ('decelCruise',65.,55.)])
-def test_actual_scc_feedback_after_completed_gesture_never_rewrites_driver(override_cycle,native_params,button,first,final):
-  c=override_cycle
+@pytest.mark.parametrize('button,first,final', [
+  ('accelCruise', 85., 95.), ('decelCruise', 65., 55.)])
+def test_actual_release_feedback_does_not_replace_precamera_setting(override_cycle, button, first, final):
+  c = override_cycle
   c.frame()
-  c.frame(buttons=((button,True),),stock_kph=75)
+  c.frame(buttons=((button, True),), stock_kph=75)
   c.frame(stock_kph=first)
   c.frame(stock_kph=final)
-  c.frame(buttons=((button,False),),stock_kph=final)
-  native_params.put_bool('SmartCruiseControlVision',True)
-  c.planner.scc.vision.frame=0  # Poll the actual edited Params on this next update.
-  rate=2*30/(12**2)
-  c.frame(stock_kph=final,model_yaw_rate=rate)
-  _,curve=c.frame(stock_kph=final,model_yaw_rate=rate)
-  assert curve.longitudinalPlanSource=='sccVision'
-  assert curve.vTarget < final/3.6
-  # DOWN feedback continues in the same direction as the completed gesture.
-  c.frame(stock_kph=45 if button=='decelCruise' else 75,model_yaw_rate=rate)
-  assert c.helper.v_cruise_kph==pytest.approx(final)
-  if button=='accelCruise':
-    # Removing the real SCC constraint makes own ACC recovery increase again;
-    # those UP-direction native values must not become a fresh driver action.
-    native_params.put_bool('SmartCruiseControlVision',False)
-    c.planner.scc.vision.frame=0
-    c.frame(stock_kph=75)
-    c.frame(stock_kph=85)
-    c.frame(stock_kph=90)
-    assert c.helper.v_cruise_kph==pytest.approx(final)
+  _, released = c.frame(buttons=((button, False),), stock_kph=final)
+  assert released.vTarget == pytest.approx(75 / 3.6)
+  assert c.helper.v_cruise_kph == pytest.approx(130)
+  for _ in range(10):
+    _, stable = c.frame(dt=.01, stock_kph=final)
+    assert not stable.speedCameraControl.manualTakeover
+  _, passed = c.pass_camera(stock_kph=final)
+  assert passed.vTarget == pytest.approx(130 / 3.6)
 
 
-@pytest.mark.parametrize('baseline,response,recovery',[(140.,150.,140.),(0.,75.,65.)])
-def test_actual_ipc_virtual_max_and_unknown_press_baseline_require_new_action(override_cycle,baseline,response,recovery):
-  c=override_cycle
+@pytest.mark.parametrize('button,native', [('accelCruise', 95.), ('decelCruise', 55.)])
+def test_actual_scc_feedback_and_inzone_buttons_never_rewrite_precamera_base(override_cycle, native_params, button, native):
+  c = override_cycle
   c.frame()
-  c.helper.v_cruise_kph=c.helper.v_cruise_cluster_kph=100.
-  c.frame(stock_kph=baseline,buttons=(('accelCruise',True),))
-  _,unaccepted=c.frame(stock_kph=response,buttons=(('accelCruise',False),))
-  assert c.helper.v_cruise_kph==pytest.approx(100)
-  assert unaccepted.speedCameraControl.manualTakeover
-  assert c.sender.cruise_button==SendButton.none
-  _,pending_pass=c.pass_camera(stock_kph=response)
-  assert pending_pass.speedCameraControl.manualTakeover
-  assert pending_pass.speedCameraControl.rawLimit==0
-  assert c.helper.driver_set_speed_kph==pytest.approx(100)
-  for _ in range(50):
-    _,pending=c.frame(dt=.01,north_m=35,stock_kph=response)
-    assert c.sender.cruise_button==SendButton.none
-    assert pending.speedCameraControl.manualTakeover
-    assert c.helper.v_cruise_kph==pytest.approx(100)
-  # Only an explicit new attributable action can replace this uncertain base.
-  c.frame(north_m=40,stock_kph=response,buttons=(('decelCruise',True),))
-  _,recovered=c.frame(north_m=45,stock_kph=recovery,buttons=(('decelCruise',False),))
-  assert c.helper.v_cruise_kph==pytest.approx(recovery)
-  assert recovered.vTarget==pytest.approx(recovery/3.6)
+  c.frame(buttons=((button, True),), stock_kph=75)
+  c.frame(buttons=((button, False),), stock_kph=native)
+  native_params.put_bool('SmartCruiseControlVision', True)
+  c.planner.scc.vision.frame = 0
+  rate = 2 * 30 / (12 ** 2)
+  c.frame(stock_kph=native, model_yaw_rate=rate)
+  _, curve = c.frame(stock_kph=native, model_yaw_rate=rate)
+  assert curve.longitudinalPlanSource == 'sccVision' and curve.vTarget < 75 / 3.6
+  c.frame(stock_kph=45 if button == 'decelCruise' else 75, model_yaw_rate=rate)
+  assert c.helper.v_cruise_kph == pytest.approx(130)
+  native_params.put_bool('SmartCruiseControlVision', False)
+  c.planner.scc.vision.frame = 0
+  _, recovered = c.frame(stock_kph=native)
+  assert recovered.vTarget == pytest.approx(75 / 3.6)
+  assert c.helper.driver_set_speed_kph == pytest.approx(130)
+
+
+@pytest.mark.parametrize('baseline,response', [(140., 150.), (0., 75.)])
+def test_actual_inzone_high_or_unknown_native_feedback_does_not_stick_override(override_cycle, baseline, response):
+  c = override_cycle
+  c.frame()
+  c.helper.v_cruise_kph = c.helper.v_cruise_cluster_kph = 100.
+  c.frame(stock_kph=baseline, buttons=(('accelCruise', True),))
+  _, responded = c.frame(stock_kph=response, buttons=(('accelCruise', False),))
+  assert c.helper.v_cruise_kph == pytest.approx(100)
+  assert not responded.speedCameraControl.manualTakeover
+  assert responded.speedCameraControl.active and responded.vTarget == pytest.approx(75 / 3.6)
+  for _ in range(45):
+    _, active = c.frame(dt=.01, stock_kph=response)
+    assert not active.speedCameraControl.manualTakeover
+    assert c.helper.v_cruise_kph == pytest.approx(100)
+  assert c.sender.cruise_button == (SendButton.decrease if response > 75 else SendButton.none)
+  _, passed = c.pass_camera(stock_kph=response)
+  assert passed.speedCameraControl.state == 'passed'
+  assert not passed.speedCameraControl.manualTakeover and passed.speedCameraControl.rawLimit == 0
+  assert passed.vTarget == pytest.approx(100 / 3.6)
+  assert c.helper.driver_set_speed_kph == pytest.approx(100)
