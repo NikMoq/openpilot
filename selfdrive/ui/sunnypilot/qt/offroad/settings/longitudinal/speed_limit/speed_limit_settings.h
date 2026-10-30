@@ -37,8 +37,6 @@ private:
   SpeedLimitPolicy *speedLimitPolicyScreen;
   ButtonParamControlSP *speed_limit_offset_settings;
   OptionControlSP *speed_limit_offset;
-  ParamControlSP *speed_camera_enabled;
-  ParamControlSP *speed_camera_control_enabled;
   MultiButtonControlSP *speed_camera_interval;
   LabelControlSP *speed_camera_status;
   LabelControlSP *speed_camera_count;

@@ -58,8 +58,6 @@ QString cameraTimestamp(const std::string &value) {
 }
 
 SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent) {
-  if (params.get("SpeedCameraEnabled").empty()) params.putBool("SpeedCameraEnabled", true);
-  if (params.get("SpeedCameraControlEnabled").empty()) params.putBool("SpeedCameraControlEnabled", false);
   if (params.get("SpeedCameraAlertDistanceMeters").empty()) params.put("SpeedCameraAlertDistanceMeters", "1000");
   bool reaction_ok = false;
   const int reaction = QString::fromStdString(params.get("SpeedCameraReactionDistance")).toInt(&reaction_ok);
@@ -154,18 +152,6 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
 
   list->addItem(horizontal_line());
   list->addItem(vertical_space());
-
-  speed_camera_enabled = new ParamControlSP(
-    "SpeedCameraEnabled",
-    tr("Speed Cameras"),
-    tr("Show camera warnings from the downloaded database. Offline road maps are not required."), "");
-  list->addItem(speed_camera_enabled);
-
-  speed_camera_control_enabled = new ParamControlSP(
-    "SpeedCameraControlEnabled",
-    tr("Camera Speed Control"),
-    tr("Use local cameras instead of road speed limits with ICBM. The ordinary Speed Limit mode and camera warning preference remain unchanged. The standard offset above applies once. Steering-wheel buttons override the current camera."), "");
-  list->addItem(speed_camera_control_enabled);
 
   speed_camera_source = new ButtonControlSP(tr("Database Source"), tr("EDIT"),
     tr("CityGuide 7.7: all camera types and all Russian regions. Updates use SpeedCamOnline, with a verified backup copy from this repository when the site is unreachable.\nDefault: %1. Custom HTTPS sources do not use the backup. Source and direction data are retained; automatic control depends on camera type support.")
@@ -336,9 +322,6 @@ void SpeedLimitSettings::refresh() {
   speed_camera_update->setEnabled(status != "downloading" && !status.startsWith("retrying"));
 
   speedLimitSource->setVisible(!params.getBool("SpeedCameraControlEnabled"));
-  speed_camera_enabled->refresh();
-  speed_camera_control_enabled->setEnabled(speed_camera_control_available);
-  speed_camera_control_enabled->refresh();
   const int period = std::atoi(params.get("SpeedCameraDatabaseUpdatePeriodHours").c_str());
   const int interval_index = period == 6 ? 1 : (period == 24 ? 2 : (period == 168 ? 3 : 0));
   speed_camera_interval->setCheckedButton(interval_index);

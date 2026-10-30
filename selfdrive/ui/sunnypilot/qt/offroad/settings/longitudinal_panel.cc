@@ -11,6 +11,8 @@
 
 LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
   russian_help = params.get("LanguageSetting") == "main_ru";
+  if (params.get("SpeedCameraEnabled").empty()) params.putBool("SpeedCameraEnabled", true);
+  if (params.get("SpeedCameraControlEnabled").empty()) params.putBool("SpeedCameraControlEnabled", false);
   setStyleSheet(R"(
     #back_btn {
       font-size: 50px;
@@ -48,6 +50,21 @@ LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
   });
   list->addItem(intelligentCruiseButtonManagement);
 
+
+  speedCameraEnabled = new ParamControlSP(
+    "SpeedCameraEnabled",
+    russian_help ? QStringLiteral("Предупреждения о камерах") : tr("Speed Camera Warnings"),
+    russian_help ? QStringLiteral("Показывает предупреждения о камерах из локальной базы. Сам по себе этот переключатель не меняет скорость. Работает независимо от управления по камерам при включённом ICBM. Настройки базы находятся в разделе «Ограничение скорости».")
+                 : tr("Show warnings from the local camera database without changing cruise speed. Independent of Camera Speed Control while ICBM is enabled. Database settings are under Speed Limit."), "", this);
+  list->addItem(speedCameraEnabled);
+
+  speedCameraControlEnabled = new ParamControlSP(
+    "SpeedCameraControlEnabled",
+    russian_help ? QStringLiteral("Управление скоростью по камерам") : tr("Camera Speed Control"),
+    russian_help ? QStringLiteral("Через штатный ICBM снижает уставку ACC перед камерой с учётом штатной прибавки. Нужны локальная база камер, достоверный GPS и граф дорог. Дорожные ограничения OSM не используются в камерном режиме. Кнопки руля имеют приоритет; восстановление после камеры требует подтверждённого проезда. Дистанция реакции и прибавка настраиваются в разделе «Ограничение скорости».")
+                 : tr("Use ICBM to reduce the ACC target before a camera, applying the standard offset once. Requires a local camera database, reliable GPS and road geometry. Road speed limits are excluded in camera mode. Steering-wheel buttons take priority; restoration requires proven passage. Reaction distance and offset are under Speed Limit."), "", this);
+  list->addItem(speedCameraControlEnabled);
+
   dynamicExperimentalControl = new ParamControlSP(
     "DynamicExperimentalControl",
     tr("Dynamic Experimental Control (DEC)"),
@@ -59,15 +76,17 @@ LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
 
   SmartCruiseControlVision = new ParamControl(
     "SmartCruiseControlVision",
-    tr("Smart Cruise Control - Vision"),
-    tr("Use vision path predictions to estimate the appropriate speed to drive through turns ahead."),
+    russian_help ? QStringLiteral("Скорость в поворотах — камера") : tr("Smart Cruise Control - Vision"),
+    russian_help ? QStringLiteral("SCC-V оценивает скорость прохождения предстоящих поворотов по траектории, предсказанной видеомоделью. Это не камеры контроля скорости и не дорожные знаки ограничения.")
+                 : tr("Use vision path predictions to estimate the appropriate speed to drive through turns ahead."),
     "");
   list->addItem(SmartCruiseControlVision);
 
   SmartCruiseControlMap = new ParamControl(
     "SmartCruiseControlMap",
-    tr("Smart Cruise Control - Map"),
-    tr("Use map data to estimate the appropriate speed to drive through turns ahead."),
+    russian_help ? QStringLiteral("Скорость в поворотах — карта") : tr("Smart Cruise Control - Map"),
+    russian_help ? QStringLiteral("SCC-M оценивает скорость прохождения поворотов по геометрии дороги на карте. Это отдельная функция: она не берёт дорожные ограничения скорости OSM и не управляет камерами контроля скорости.")
+                 : tr("Use map data to estimate the appropriate speed to drive through turns ahead."),
     "");
   list->addItem(SmartCruiseControlMap);
 
@@ -117,6 +136,7 @@ void LongitudinalPanel::hideEvent(QHideEvent *event) {
 }
 
 void LongitudinalPanel::refresh(bool _offroad) {
+  offroad = _offroad;
   const QString icbm_description = tr("When enabled, sunnypilot will attempt to manage the built-in cruise control buttons by emulating button presses for limited longitudinal control.");
 
   auto cp_bytes = params.get("CarParamsPersistent");
@@ -183,6 +203,18 @@ void LongitudinalPanel::refresh(bool _offroad) {
     has_icbm = false;
     intelligentCruiseButtonManagement->setDescription("<b>" + tr("Start the vehicle to check vehicle compatibility.") + "</br><b><b>" + icbm_description);
   }
+
+  // Camera warnings and control are separate preferences under the ICBM master.
+  // Only a confirmed compatible vehicle may clear them when the master is off.
+  const bool camera_available = has_icbm;
+  if (!cp_bytes.empty() && !cp_sp_bytes.empty() && !camera_available) {
+    params.putBool("SpeedCameraEnabled", false);
+    params.putBool("SpeedCameraControlEnabled", false);
+  }
+  speedCameraEnabled->setEnabled(camera_available);
+  speedCameraControlEnabled->setEnabled(camera_available);
+  speedCameraEnabled->refresh();
+  speedCameraControlEnabled->refresh();
 
   QString accEnabledDescription = tr("Enable custom Short & Long press increments for cruise speed increase/decrease.");
   QString accNoLongDescription = tr("This feature can only be used with sunnypilot longitudinal control enabled.");

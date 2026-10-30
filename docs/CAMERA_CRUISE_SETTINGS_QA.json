@@ -1,0 +1,26 @@
+{
+  "status": "NATIVE_QT_VALIDATED_NOT_DEVICE_VERIFIED",
+  "source_parent": "fb9f95bd30e3493df817a125aad1385062f401e9",
+  "ui_sha256": "b4d2f627bae506dd0b0eeff3a6fcaa7faa282611827f1f4ab4ef46d4150a4235",
+  "ui_bytes": 6754952,
+  "native_qt_assertions": [
+    "both camera toggles on main Cruise screen",
+    "no nested duplicate toggles",
+    "independent warnings/control preferences",
+    "both title help taps in English and Russian",
+    "ICBM off clears and blocks both flags",
+    "ICBM on does not restore cleared flags",
+    "all previous countdown/sign/offset/reaction assertions"
+  ],
+  "compiled_ui_sources": {
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.cc": "89dc5ba281d326e1cb56c0ac555005b4e644f2cdf71b5519112ed3413bfa291e",
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal_panel.cc": "3f69b217363d666c88e0b9bd074319a7bb30e82221b5bd8c701fba7cea9b3ef2"
+  },
+  "packaged_panda_params_preflight": "passed; firmware and daemon unchanged",
+  "screenshots": [
+    "cruise-camera-switches.png",
+    "cruise-camera-switches-ru.png"
+  ],
+  "qa_artifact_directory": ".native-build/cruise-main-qa",
+  "note": "Isolated actual Qt widgets, not installed device captures. SCC-M/V retained as curve-speed functions, separate from OSM posted speed limits."
+}

@@ -18,6 +18,7 @@
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/sunnypilot/qt/onroad/hud.h"
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h"
+#include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal_panel.h"
 
 class CameraUiFixture {
 public:
@@ -215,22 +216,88 @@ int main(int argc, char **argv) {
   panel.resize(1800, 1000);
   panel.show();
   settle();
-  ParamControlSP *camera_toggle = nullptr;
-  for (auto *control : panel.findChildren<ParamControlSP *>()) {
-    for (auto *button : control->findChildren<QPushButton *>()) {
-      if (button->text() == "Camera Speed Control") camera_toggle = control;
+  // The two camera switches belong to the main Cruise screen, never the subpage.
+  assert(panel.findChildren<ParamControlSP *>().isEmpty());
+  LongitudinalPanel cruise;
+  cruise.setStyleSheet(panel.styleSheet());
+  cruise.resize(1800, 1000);
+  cruise.show();
+  cruise.refresh(true);
+  settle();
+  auto findToggle = [&](const QString &title) -> ParamControlSP * {
+    for (auto *control : cruise.findChildren<ParamControlSP *>()) {
+      for (auto *button : control->findChildren<QPushButton *>()) {
+        if (button->text() == title) return control;
+      }
     }
-  }
-  assert(camera_toggle && camera_toggle->isEnabled());
+    return nullptr;
+  };
+  auto *camera_toggle = findToggle("Camera Speed Control");
+  auto *warning_toggle = findToggle("Speed Camera Warnings");
+  assert(camera_toggle && warning_toggle && camera_toggle->findChild<ToggleSP *>()->getEnabled() && warning_toggle->findChild<ToggleSP *>()->getEnabled());
   auto *toggle = camera_toggle->findChild<ToggleSP *>();
   assert(toggle);
-  for (auto *scroll : panel.findChildren<QScrollArea *>()) scroll->ensureWidgetVisible(camera_toggle, 0, 30);
+  for (auto *scroll : cruise.findChildren<QScrollArea *>()) scroll->ensureWidgetVisible(camera_toggle, 0, 30);
   settle();
   QTest::mouseClick(toggle, Qt::LeftButton);
   assert(!params.getBool("SpeedCameraControlEnabled"));
   QTest::mouseClick(toggle, Qt::LeftButton);
   assert(params.getBool("SpeedCameraControlEnabled"));
   assert(params.get("SpeedLimitMode") == "0" && !params.getBool("SpeedCameraEnabled"));
+  // Both title taps expand native help without changing their preference.
+  for (auto *control : {camera_toggle, warning_toggle}) {
+    QPushButton *title = nullptr;
+    QLabel *help = nullptr;
+    for (auto *button : control->findChildren<QPushButton *>()) {
+      if (!button->text().isEmpty()) title = button;
+    }
+    for (auto *label : control->findChildren<QLabel *>()) {
+      if (!label->text().isEmpty()) help = label;
+    }
+    assert(title && help && !help->isVisible());
+    title->click(); settle(); assert(help->isVisible());
+    title->click(); settle(); assert(!help->isVisible());
+  }
+  params.putBool("SpeedCameraEnabled", true);
+  params.putBool("IntelligentCruiseButtonManagement", false);
+  cruise.refresh(true);
+  assert(!camera_toggle->findChild<ToggleSP *>()->getEnabled() && !warning_toggle->findChild<ToggleSP *>()->getEnabled());
+  assert(!params.getBool("SpeedCameraControlEnabled") && !params.getBool("SpeedCameraEnabled"));
+  params.putBool("IntelligentCruiseButtonManagement", true);
+  cruise.refresh(true);
+  assert(camera_toggle->findChild<ToggleSP *>()->getEnabled() && warning_toggle->findChild<ToggleSP *>()->getEnabled());
+  assert(!params.getBool("SpeedCameraControlEnabled") && !params.getBool("SpeedCameraEnabled"));
+  assert(cruise.grab().save(output + "/cruise-camera-switches.png"));
+  cruise.hide();
+  params.put("LanguageSetting", "main_ru");
+  {
+    LongitudinalPanel russian_cruise;
+    russian_cruise.setStyleSheet(panel.styleSheet());
+    russian_cruise.resize(1800, 1000);
+    russian_cruise.show(); russian_cruise.refresh(true); settle();
+    int help_checks = 0;
+    for (auto *control : russian_cruise.findChildren<ParamControlSP *>()) {
+      QPushButton *title = nullptr;
+      for (auto *button : control->findChildren<QPushButton *>()) {
+        if (button->text() == QStringLiteral("Предупреждения о камерах") ||
+            button->text() == QStringLiteral("Управление скоростью по камерам")) title = button;
+      }
+      if (!title) continue;
+      QLabel *help = nullptr;
+      for (auto *label : control->findChildren<QLabel *>()) {
+        if (!label->text().isEmpty()) help = label;
+      }
+      assert(help && !help->isVisible());
+      title->click(); settle(); assert(help->isVisible());
+      assert(!params.getBool("SpeedCameraEnabled") && !params.getBool("SpeedCameraControlEnabled"));
+      title->click(); settle(); assert(!help->isVisible());
+      ++help_checks;
+    }
+    assert(help_checks == 2);
+    assert(russian_cruise.grab().save(output + "/cruise-camera-switches-ru.png"));
+    russian_cruise.hide();
+  }
+  params.remove("LanguageSetting");
   for (auto *scroll : panel.findChildren<QScrollArea *>()) scroll->verticalScrollBar()->setValue(0);
   settle();
   assert(panel.grab().save(output + "/settings-native-offset.png"));
