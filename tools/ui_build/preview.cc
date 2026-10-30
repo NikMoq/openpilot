@@ -93,6 +93,15 @@ public:
     assert(hud.speedLimitSignVisible() && !hud.cameraSignVisible && !hud.cameraRemaining);
     assert(!hud.speedLimitLastValid && hud.speedLimitLast == 0);
     assert(hud.speedLimitOffsetText() == "15");
+    prefs.put("LanguageSetting", "main_ru");
+    assert(hud.cameraStatusText() == QStringLiteral("Камер нет"));
+    camera.setReason("gps_unreliable");
+    hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+    assert(hud.cameraStatusText() == QStringLiteral("Слабый GPS"));
+    camera.setReason("road_graph_downloading");
+    hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+    assert(hud.cameraStatusText() == QStringLiteral("Камер нет"));
+    prefs.remove("LanguageSetting");
     prefs.put("SpeedLimitOffsetType", "2");
     assert(hud.speedLimitOffsetText() == "15%");
     hud.updateCameraPresentation(camera.asReader(), true, false, 3.6f);
@@ -183,7 +192,10 @@ int main(int argc, char **argv) {
   Params placeholder_params;
   placeholder_params.put("SpeedLimitOffsetType", "1");
   placeholder_params.put("SpeedLimitValueOffset", "15");
+  placeholder_params.put("LanguageSetting", "main_ru");
   CameraUiFixture::capture(output + "/placeholder-main-hud.png", 0, 300, "inactive", false, true, 0);
+  CameraUiFixture::capture(output + "/weak-gps-main-hud.png", 0, 300, "inactive", false, true, 0, "gps_unreliable");
+  placeholder_params.remove("LanguageSetting");
   CameraUiFixture::capture(output + "/active-main-hud.png", 300, 300, "active", true, true, 60 / 3.6f);
   placeholder_params.put("SpeedLimitOffsetType", "2");
   CameraUiFixture::capture(output + "/placeholder-percent-main-hud.png", 0, 300, "inactive", false, false, 0);

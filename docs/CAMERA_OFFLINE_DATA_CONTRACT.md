@@ -7,7 +7,46 @@ read by this producer. Original mapd supplies road names and limits through shar
 Params, not road geometry; its installed Go binary/tile format is not claimed to
 be an interoperable graph source.
 
-## Usable graph input
+## Automatic preparation (current cam)
+
+Camera control now prepares its own local road-geometry cache automatically.
+When enabled and a fresh accurate GPS position is available, one background
+worker downloads an ordinary unfiltered OSM map region around that position.
+Preparation also works while parked; authorization of a camera still requires
+the existing moving-GPS and unique-road checks. Regional preparation does not
+read OSM posted speed limits or change Resolver/SLA/ICBM behavior.
+
+The first preparation of an uncached area requires network access. Thereafter
+verified cached geometry works without network, including after process restart.
+Driving into an uncached area without network cannot create missing geometry;
+new camera acquisition remains unavailable there. A 5-km square is prepared,
+with refresh/prefetch before the current position nears its boundary. This is a
+local working cache, not a full-country offline map download.
+
+Cache: `Paths.mapd_root()/camera_road_cache`, normally
+`/data/media/0/osm/camera_road_cache`. Each unfiltered response keeps its own
+original bytes, source URL, SHA-256 and acquisition timestamp. Responses over
+the API node/byte limit are split into complete rectangles. The in-memory union
+requires full rectangular coverage and rejects conflicting duplicate edges.
+Freshness remains 30 days. Download failures retain verified usable geometry.
+
+The live loop does not perform downloads, XML parsing, or cache scans. One
+background worker uses Linux thread nice=10, 15-second request timeout, a
+90-second acquisition budget checked between requests, retry backoff, at most
+16 export parts, 16 MiB per response, a bounded regional budget and a 256 MiB /
+64-region cache. Small cache indexes are checked before parsing a matching
+region. Unchanged status Params are not rewritten every tick.
+
+An explicitly configured `SpeedCameraRoadGraphPath` retains the strict manual
+regional-export mode below. A missing/stale/out-of-area default legacy export
+falls back to automatic preparation. No per-user coordinates or downloaded
+regional maps are committed to Git.
+
+The HUD uses only the short empty labels «Камер нет» and «Слабый GPS».
+Detailed acquisition/association reasons remain in diagnostics, not a stack of
+onroad status messages.
+
+## Optional manual graph input
 
 Acquire a complete ordinary OSM XML regional export plus its provenance sidecar at
 `Paths.mapd_root()/camera_roads.osm`, normally

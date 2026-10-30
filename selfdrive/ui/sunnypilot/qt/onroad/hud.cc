@@ -126,6 +126,7 @@ void HudRendererSP::updateState(const UIState &s) {
   // The sole retained bit permits an explicit position-lost notice after a
   // visible warning; it never retains a limit/distance or opens a new warning.
   const bool fresh_map = sm.alive("liveMapDataSP") && nanos_since_boot() - sm.rcv_time("liveMapDataSP") < 2500000000ULL;
+  cameraGpsWeak = fresh_map && (lmd.getSpeedCameraControlReason() == "gps_unreliable");
   const bool position_lost = fresh_map && !lmd.getLocationValid();
   const bool fresh_warning = fresh_map && sm.valid("liveMapDataSP") && lmd.getLocationValid() &&
                              speedCameraAheadValid && std::isfinite(speedCameraAheadDistance) &&
@@ -412,16 +413,14 @@ void HudRendererSP::updateCameraPresentation(cereal::LongitudinalPlanSP::SpeedCa
 
 QString HudRendererSP::cameraStatusText() const {
   if (!cameraMode) return {};
-  if (!cameraSignVisible) {
-    const bool russian = Params().get("LanguageSetting") == "main_ru";
-    return cameraPlanFresh ? (russian ? QStringLiteral("Камера не выбрана") : tr("No camera selected"))
-                           : (russian ? QStringLiteral("Нет свежих данных камеры") : tr("Camera data unavailable"));
+  const bool russian = Params().get("LanguageSetting") == "main_ru";
+  if (cameraGpsWeak || (cameraPlanFresh && speedCameraControlReason == "gps_unreliable")) {
+    return russian ? QStringLiteral("Слабый GPS") : tr("Weak GPS");
   }
+  if (!cameraSignVisible) return russian ? QStringLiteral("Камер нет") : tr("No cameras");
   QStringList messages;
   if (speedCameraControlManualTakeover) {
     messages << (speedCameraControlReason.startsWith("awaiting_driver_feedback") ? tr("Waiting for ACC response") : tr("Driver override"));
-  } else if (speedCameraControlReason.startsWith("unreliable_hold")) {
-    messages << tr("Camera data unavailable");
   }
   // Display the unchanged ICBM capability (helpers.py:30 km/h or20 mph).
   // This does not alter the limit/offset or create a braking/control path.

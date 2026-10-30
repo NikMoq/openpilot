@@ -49,6 +49,33 @@ def project(point, edge):
 
 
 class RoadGraph:
+  @classmethod
+  def combine_complete(cls, graphs, bounds):
+    """Combine verified exports only when they cover every part of a rectangle.
+
+    Each input retains its own downloaded bytes/provenance on disk. This is an
+    in-memory union, never a fabricated complete-export acquisition manifest.
+    """
+    graphs = tuple(graphs)
+    if (not graphs or len(bounds) != 4 or not all(math.isfinite(v) for v in bounds) or
+        not (-90 <= bounds[0] < bounds[2] <= 90 and -180 <= bounds[1] < bounds[3] <= 180)):
+      raise ValueError('road_graph_incomplete_region')
+    a, b, c, d = bounds
+    xs = sorted({b, d, *(max(b, min(d, v)) for g in graphs for v in (g.bounds[1], g.bounds[3]))})
+    ys = sorted({a, c, *(max(a, min(c, v)) for g in graphs for v in (g.bounds[0], g.bounds[2]))})
+    for y0, y1 in zip(ys, ys[1:]):
+      for x0, x1 in zip(xs, xs[1:]):
+        y, x = (y0 + y1) / 2, (x0 + x1) / 2
+        if not any(g.bounds[0] <= y <= g.bounds[2] and g.bounds[1] <= x <= g.bounds[3] for g in graphs):
+          raise ValueError('road_graph_incomplete_region')
+    edges = {}
+    for graph in graphs:
+      for edge in graph.edges:
+        if edge.key in edges and edges[edge.key] != edge:
+          raise ValueError('road_graph_conflicting_exports')
+        edges[edge.key] = edge
+    return cls(edges.values(), bounds, min(g.acquired_at for g in graphs))
+
   def __init__(self, edges, bounds, acquired_at):
     self.edges = tuple(edges)
     self.bounds = bounds
@@ -68,7 +95,7 @@ class RoadGraph:
             self.cells.setdefault((lat, lon), []).append(edge)
 
   @classmethod
-  def load(cls, path, max_age_s=30 * 86400, now=None):
+  def load(cls, path, max_age_s=30 * 86400, now=None, allow_empty=False):
     now = time.time() if now is None else now
     with open(path, 'rb') as stream:
       raw = stream.read(128 * 1024 * 1024 + 1)
@@ -128,7 +155,7 @@ class RoadGraph:
           edge = Edge(f"{way.attrib['id']}:{i}:{start}>{end}", start, end, nodes[start], nodes[end], tags.get('layer', '0'))
           if edge.length > 0.1:
             edges.append(edge)
-    if not edges:
+    if not edges and not allow_empty:
       raise ValueError('road_graph_empty')
     return cls(edges, bounds, acquired)
 
@@ -202,11 +229,11 @@ class RoadGraph:
     return None
 
 
-def acquire_map_export(url, path):
+def acquire_map_export(url, path, *, timeout=60, max_bytes=128 * 1024 * 1024, allow_empty=False):
   """Download an unfiltered bounded OSM map response and record exact provenance.
 
-  Run explicitly offroad. This utility never runs from mapd's live loop. The
-  manifest is local transport evidence, not a signed completeness attestation.
+  Network I/O must run outside mapd's live loop. The manifest is local transport
+  evidence, not a signed completeness attestation.
   """
   from urllib.request import Request, urlopen
   import tempfile
@@ -215,11 +242,11 @@ def acquire_map_export(url, path):
   if (source.scheme != 'https' or source.netloc != 'api.openstreetmap.org' or source.path != '/api/0.6/map' or
       set(query) != {'bbox'} or len(query['bbox']) != 1):
     raise ValueError('only an unfiltered OSM map bbox export is supported')
-  with urlopen(Request(url, headers={'User-Agent': 'CameraOfflineRoadGraph/1'}), timeout=60) as response:
+  with urlopen(Request(url, headers={'User-Agent': 'CameraOfflineRoadGraph/1'}), timeout=timeout) as response:
     if response.status != 200 or response.geturl().split('?')[0] != 'https://api.openstreetmap.org/api/0.6/map':
       raise ValueError('unexpected map export response')
-    raw = response.read(128 * 1024 * 1024 + 1)
-  if len(raw) > 128 * 1024 * 1024:
+    raw = response.read(max_bytes + 1)
+  if len(raw) > max_bytes:
     raise ValueError('map export exceeds size limit')
   acquired = time.time()
   manifest = {'schema_version': 1, 'source_url': url, 'retrieved_at': acquired,
@@ -232,7 +259,7 @@ def acquire_map_export(url, path):
       stream.write(raw)
     with open(temporary + '.manifest.json', 'w', encoding='utf-8') as stream:
       json.dump(manifest, stream)
-    RoadGraph.load(temporary)
+    RoadGraph.load(temporary, allow_empty=allow_empty)
     # A concurrent read between replacements fails hash validation, never uses
     # a graph with another export's provenance. The next tick retries.
     os.replace(temporary, path)

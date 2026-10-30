@@ -1,0 +1,79 @@
+{
+  "status": "SIMULATION_AND_NATIVE_UI_VALIDATED_NOT_DEVICE_VERIFIED",
+  "source_parent": "4a3cdc26c9653976a1c2fcac54eac840cfce723a",
+  "ui_sha256": "77bd2ab9465a0e4c0acb1efb2eb96333f1d183eb8f20a26be3612b5d9daacebf",
+  "ui_bytes": 6755328,
+  "root_cause": "Camera source required a local road graph but the published branch had no automatic acquisition path.",
+  "automatic_delivery": {
+    "position": "fresh accurate GPS; preparation also stationary",
+    "network": "background requests of complete unfiltered OSM map bboxes",
+    "offline": "verified cached regions survive restart; uncached regions need network",
+    "cache_max_bytes": 268435456,
+    "cache_max_regions": 64,
+    "response_max_bytes": 16777216,
+    "worker": "single native thread, SCHED_OTHER then nice10, separate from realtime mapd thread",
+    "retains": "source bytes, URL, SHA256 and acquisition time per export",
+    "freshness_days": 30,
+    "coverage": "rectangular complete coverage required; no partial-region authorization"
+  },
+  "positive_integration_tests": [
+    "empty cache to actual graph parser/source selection at900m",
+    "actual map publisher selects60km/h camera at700m after async acquisition",
+    "new updater/process offline uses saved verified graph and same event",
+    "stationary accurate GPS prepares graph without authorizing camera",
+    "stale or missing database retains no valid old camera",
+    "partial export or coverage gap rejected",
+    "oversize/HTTP400 export split into complete rectangles",
+    "failed worker demotion does not start disk or network work"
+  ],
+  "native_ui": [
+    "Камер нет",
+    "Слабый GPS",
+    "real limit in center, applied offset upper right, countdown upper left",
+    "ordinary SLA OFF does not hide camera sign"
+  ],
+  "performance_host_only": {
+    "python": "3.12.14",
+    "machine": "x86_64",
+    "camera_records": 74023,
+    "directed_edges": 10000,
+    "local_eligible_cameras": 24,
+    "iterations": 100,
+    "median_ms": {
+      "index_query": 0.032,
+      "fresh_acquisition": 8.6178,
+      "retained_event": 0.359
+    },
+    "p95_ms": {
+      "index_query": 0.049,
+      "fresh_acquisition": 10.5631,
+      "retained_event": 0.576
+    },
+    "construction_peak_python_bytes_under_tracemalloc": 54162976,
+    "limitation": "Synthetic host workload; not CPU/memory measurements from comma. XML/network worker costs not included in steady-state timings."
+  },
+  "service_smoke": {
+    "region": "public Berlin bbox, not user GPS",
+    "bytes": 3263496,
+    "directed_edges": 83,
+    "sha256": "438f2a12a5e22397d9c20514cd0382d2b873347a865c5f0017b8dde7408ab679",
+    "provenance_validation": "passed",
+    "data_location": "ignored .native-build/graph-service-smoke"
+  },
+  "control_architecture": "unchanged Resolver/SLA, native offset once, existing ICBM, driver priority/restoration",
+  "packaged_panda_params_preflight": "passed; firmware and Params unchanged",
+  "final_regression": {
+    "passed": 918,
+    "skipped": 8,
+    "seconds": 83.08,
+    "command": "tools/tests/run_camera_checks.ps1 (cached dependency image; same suite command)",
+    "skips": "external BKM/iGo fixtures and opt-in native runtime modules; unchanged baseline skips"
+  },
+  "current_source_sha256": {
+    "sunnypilot/mapd/camera_road_graph.py": "225ee915a9ab2cca6d240016e60cccee1d43f499b2e122500ff6de936bd20d4b",
+    "sunnypilot/mapd/camera_road_graph_updater.py": "7d551f6887065e21cb07a95abcbbf46004f9047eb46ae7b3d0ac7f3284714f6b",
+    "sunnypilot/mapd/live_map_data/osm_map_data.py": "8bc89ff3e72db5a407a2c2dc0849012fc13014955391299fda1fd58c086fd979",
+    "selfdrive/ui/sunnypilot/qt/onroad/hud.cc": "6ec93aae27a312f0b0794e903726a9e19501c2623417f0ecaf79b92a412d9885",
+    "selfdrive/ui/sunnypilot/qt/onroad/hud.h": "0791ec95d65c700335624525e5e73c25a00f473f6e95fd9c1856891ddab55cba"
+  }
+}

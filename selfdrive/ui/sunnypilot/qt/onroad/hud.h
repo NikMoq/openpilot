@@ -33,6 +33,7 @@ private:
   bool cameraAwaitRoadPlan = false;
   bool cameraSignVisible = false;
   bool cameraPlanFresh = false;
+  bool cameraGpsWeak = false;
   std::string cameraEventId;
   camera_ui::Countdown cameraCountdown;
   std::optional<int> cameraRemaining;

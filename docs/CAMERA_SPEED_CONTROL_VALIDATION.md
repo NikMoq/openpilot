@@ -155,3 +155,25 @@ recorded-проезда больше не блокирует принятую п
 Новые исходники UI, успешная сборка и simulation не доказывают установку
 кандидата, аппаратное принятие команд, стендовую или дорожную готовность.
 Panda/Volkswagen/CAN/safety не изменяются этой работой.
+
+
+## Published automatic graph delivery correction
+
+The earlier offline/manual graph prerequisite is now handled automatically by
+`RoadGraphUpdater` in the `OsmMapData` path. The first load of a new area requires
+network and a fresh accurate GPS position; cached verified regions work offline
+and after restart. See `CAMERA_OFFLINE_DATA_CONTRACT.md` for exact limits and
+`CAMERA_GRAPH_DELIVERY_QA.json` for new integration/native/performance evidence.
+
+Only the background graph worker is demoted from inherited realtime scheduling
+to SCHED_OTHER and nice10 before any acquisition or parsing. The mapd/control
+thread scheduling is not changed. Refusal to demote a still-realtime worker
+prevents heavy work and schedules a later retry. Downloads and cache are bounded;
+XML is not parsed in the regular source tick. These architectural limits and
+host timings are not measurements of actual comma load.
+
+HUD empty labels are now only «Камер нет» and «Слабый GPS». Accurate stationary
+GPS can prepare geometry without being mislabeled as weak solely for speed0.
+A selected camera still supplies its raw limit at the center, the applied native
+offset above-right, and the reaction-distance countdown above-left. This update
+does not alter Resolver/SLA/ICBM or driver-speed retention and passage restoration.
