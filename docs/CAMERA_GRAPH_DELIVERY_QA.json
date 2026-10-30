@@ -1,5 +1,5 @@
 {
-  "status": "SIMULATION_AND_NATIVE_UI_VALIDATED_NOT_DEVICE_VERIFIED",
+  "status": "SUPERSEDED_ONLINE_REGION_APPROACH_REMOVED",
   "source_parent": "4a3cdc26c9653976a1c2fcac54eac840cfce723a",
   "ui_sha256": "77bd2ab9465a0e4c0acb1efb2eb96333f1d183eb8f20a26be3612b5d9daacebf",
   "ui_bytes": 6755328,
@@ -75,5 +75,6 @@
     "sunnypilot/mapd/live_map_data/osm_map_data.py": "8bc89ff3e72db5a407a2c2dc0849012fc13014955391299fda1fd58c086fd979",
     "selfdrive/ui/sunnypilot/qt/onroad/hud.cc": "6ec93aae27a312f0b0794e903726a9e19501c2623417f0ecaf79b92a412d9885",
     "selfdrive/ui/sunnypilot/qt/onroad/hud.h": "0791ec95d65c700335624525e5e73c25a00f473f6e95fd9c1856891ddab55cba"
-  }
+  },
+  "superseded_by": "CAMERA_OFFLINE_OSM_BRIDGE_QA.json"
 }

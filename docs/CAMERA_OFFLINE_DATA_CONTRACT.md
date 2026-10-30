@@ -1,168 +1,96 @@
-# Camera data and independent offline road association
+# Local camera database and installed offline OSM bridge
 
-Implementation uses the existing CityGuide parser and versioned local camera
-cache. `CameraSpeedSource` adds per-ID selection over independent road geometry;
-it emits data only and does not send ACC/CAN commands. Road speed tags are never
-read by this producer. Original mapd supplies road names and limits through shared
-Params, not road geometry; its installed Go binary/tile format is not claimed to
-be an interoperable graph source.
+Current requirement: runtime camera detection, selection, countdown and passage
+use only the downloaded camera database, fresh GPS and installed mapd offline
+maps. No Overpass/OSM map API request, new map format, separate XML export or
+mandatory internet connection is part of this path. Existing user-configured
+camera database and map update mechanisms remain separate maintenance actions.
 
-## Automatic preparation (current cam)
+## Data flow
 
-Camera control now prepares its own local road-geometry cache automatically.
-When enabled and a fresh accurate GPS position is available, one background
-worker downloads an ordinary unfiltered OSM map region around that position.
-Preparation also works while parked; authorization of a camera still requires
-the existing moving-GPS and unique-road checks. Regional preparation does not
-read OSM posted speed limits or change Resolver/SLA/ICBM behavior.
+CityGuide records supply the camera position, normalized travel direction, type,
+raw speed and stable composed event ID. Installed OSM tiles supply geometry for
+matching the vehicle and camera to connected directed road segments. Road speed
+limits are never read by the bridge. Only the selected event, limit, distance,
+validity and passage evidence are published to existing Resolver/SLA and ICBM.
+Geometry is not serialized into the control messages.
 
-The first preparation of an uncached area requires network access. Thereafter
-verified cached geometry works without network, including after process restart.
-Driving into an uncached area without network cannot create missing geometry;
-new camera acquisition remains unavailable there. A 5-km square is prepared,
-with refresh/prefetch before the current position nears its boundary. This is a
-local working cache, not a full-country offline map download.
+The configured reaction distance remains 50–1000 m, step50, default300; the
+provider's field1706 detection range does not override that preference. The
+native offset applies once in Resolver. Driver priority and retained driver
+speed before/after a camera remain in the existing control architecture.
 
-Cache: `Paths.mapd_root()/camera_road_cache`, normally
-`/data/media/0/osm/camera_road_cache`. Each unfiltered response keeps its own
-original bytes, source URL, SHA-256 and acquisition timestamp. Responses over
-the API node/byte limit are split into complete rectangles. The in-memory union
-requires full rectangular coverage and rejects conflicting duplicate edges.
-Freshness remains 30 days. Download failures retain verified usable geometry.
+## Actual downloaded camera data
 
-The live loop does not perform downloads, XML parsing, or cache scans. One
-background worker uses Linux thread nice=10, 15-second request timeout, a
-90-second acquisition budget checked between requests, retry backoff, at most
-16 export parts, 16 MiB per response, a bounded regional budget and a 256 MiB /
-64-region cache. Small cache indexes are checked before parsing a matching
-region. Unchanged status Params are not rewritten every tick.
-
-An explicitly configured `SpeedCameraRoadGraphPath` retains the strict manual
-regional-export mode below. A missing/stale/out-of-area default legacy export
-falls back to automatic preparation. No per-user coordinates or downloaded
-regional maps are committed to Git.
-
-The HUD uses only the short empty labels «Камер нет» and «Слабый GPS».
-Detailed acquisition/association reasons remain in diagnostics, not a stack of
-onroad status messages.
-
-## Optional manual graph input
-
-Acquire a complete ordinary OSM XML regional export plus its provenance sidecar at
-`Paths.mapd_root()/camera_roads.osm`, normally
-`/data/media/0/osm/camera_roads.osm`, or set `SpeedCameraRoadGraphPath` to its local
-path. This file is data, not a list of trusted camera IDs. No graph/camera database
-is committed. An OSM XML export must contain `<osm>`, one `<bounds>` with
-minlat/minlon/maxlat/maxlon, all referenced `<node id lat lon>`, and `<way>` records
-with `<nd ref>` and highway/oneway/junction/layer/access/motor_vehicle tags.
-The `camera_roads.osm.manifest.json` sidecar records schema_version=1,
-source_url, retrieved_at (Unix seconds), sha256 and complete_region_export=true.
-It must describe an unfiltered OSM map bounding-box response. Use the included
-offroad acquisition utility, which reads the complete response, checks its XML
-and bounds, and writes the hash/time sidecar:
-
-```sh
-python -m openpilot.sunnypilot.mapd.camera_road_graph 'https://api.openstreetmap.org/api/0.6/map?bbox=MINLON,MINLAT,MAXLON,MAXLAT' /data/media/0/osm/camera_roads.osm
-```
-
-Replace the coordinate placeholders with a small valid requested region. This
-explicit command makes a read-only map request; live mapd does not download it.
-Preserve original bounds and all roads in the region, including competing roads;
-filtering the export to a preferred road would remove evidence of ambiguity.
-
-For a small region, the OpenStreetMap Export interface can download the ordinary
-OSM XML map export. Its read API shape is
-`https://api.openstreetmap.org/api/0.6/map?bbox=minlon,minlat,maxlon,maxlat`.
-Choose bounds around the intended offline replay, with at least 25 m margin.
-Respect service area/node limits. Larger extract formats require a separately
-verified complete-region acquisition adapter; the current producer accepts only
-the bounded map API contract. [OSM API description](https://wiki.openstreetmap.org/wiki/API_v0.6)
-documents the bounding-box export and recommends bulk extracts for downloading.
-Do not hand-author way IDs as camera permission. Acquire/update the file while
-offroad, preserve its recorded acquisition metadata, and replace graph/sidecar
-after download completion. Rewriting mtime cannot rejuvenate the sidecar age.
-
-The loader rejects missing/incomplete XML, unsupported oneway values, invalid
-coordinates/bounds, absent usable roads, missing/mismatched provenance, acquisition
-older than 30 days, and future acquisition timestamps. It ignores modification
-time for freshness. Provenance records the unfiltered download but is not a signed
-attestation that the OSM service contains every real road or an authenticated
-anti-tamper mechanism. Runtime exposes `SpeedCameraRoadGraphStatus`; missing graph and stale
-graph are explicit causes for no new camera acquisition. XML data is read locally
-at runtime; the producer makes no network request.
-
-## Association policy and limitations
-
-Directed segments are formed from actual OSM node connectivity and one-way tags.
-Vehicle and camera positions must project within 12 m of compatible directed
-segments, with heading within 35 degrees. Different nearby ways within 8 m of
-the best projection cause rejection, including roads at different layers.
-The forward corridor follows only a unique continuation and stops at a branch;
-no route choice is invented at an interchange. Crossing roads with separate
-nodes do not become connected. Curved roads use segment lengths, not radial
-distance. Bounds have a 25 m exclusion margin.
-
-This intentionally rejects some legitimate cameras, for example near junctions,
-where independent topology does not uniquely identify the route. Sparse or
-incorrect map geometry remains a limitation. These geometric thresholds are
-conservative research policies, not validated navigation guarantees.
-
-## Message and lifecycle contract
-
-Existing `liveMapDataSP` warning fields remain independent. Version 1 control
-fields carry raw camera speed in m/s, route distance in m, position/type and an
-explicit eligibility flag. Appended fields are `speedCameraControlEventId`,
-`speedCameraControlState`, `speedCameraControlReason`,
-`speedCameraControlPassProven`; warning identity is `speedCameraEventId`.
-`SpeedCameraEnabled` controls warnings only. `SpeedCameraControlEnabled` keeps
-the independent source running even when warnings are off. Warning-only mode
-works with control off; neither toggle silently enables the other.
-
-Identity hashes provider type, source label, coordinates and directions; speed
-and user offset are excluded. Distinct equal-limit cameras remain independent.
-Collocated records identical in all these metadata are indistinguishable.
-Source states are IDLE, APPROACHING, ACTIVE, DRIVER_OVERRIDE and PASSED. Reaction
-distance accepts 50–1000 m in 50 m increments, default 300. Overrides can be
-reported to the pure source by event ID; controls owns manual priority and the
-actual speed ceiling. Raw speed offsets are applied once by the existing resolver.
-
-For cameras only, the map publisher also subscribes to the raw GPS service selected
-by `get_gps_location_service`. Its position/course/time tuple is used consistently;
-LLK continues to supply all existing map/navigation data. New camera data requires
-GPS fix, live/valid messages, LLK valid/gpsOK, horizontal accuracy 0–12 m (exclusive
-zero), bearing accuracy 0–15 degrees, moving speed at least 1 m/s, finite bounded
-coordinates and an ordered Unix fix no older than two seconds or in the future.
-Undocumented units of LLK geodetic standard deviation are not guessed.
-
-An invalid GPS/graph/association frame retains selected identity, sets valid
-false, and never proves passage. A step over 100 m between source updates is
-rejected for that update. Passage requires reliable independent road association
-and an unbranched forward path from the retained camera to the vehicle, 20–1000 m
-beyond it, observed on at least two distinct increasing fix timestamps. Repeated
-fixes do not advance passage. ACTIVE remains latched across reaction-distance
-jitter, and both supported bidirectional/second-bearing camera directions use a
-retained traversal orientation. PASSED carries that camera ID and passProven=true for one publisher
-generation; the consumer must latch by ID. Next update may select the next camera.
-Completed IDs are suppressed for the source process session. Consumers hold any
-existing ceiling during uncertainty; absence alone is never permission to restore.
-
-## Current delivery evidence, 2026-10-29
-
-The configured direct SpeedCamOnline CG77 endpoint returned HTTP 200 with the
-complete 37-character body `Contact with me: info@speedcam.online`, not BKM.
-The existing fixed fallback release was independently retrieved in memory:
-[manifest](https://github.com/NikMoq/openpilot/releases/download/speedcamonline-rus/manifest.json).
-Its asset was 5,306,230 bytes, 74,023 records, header `2|Radars|1251`, SHA-256
+The audited fixed mirror has74023 records,5306230bytes, SHA-256
 `116d1748b9175ecc3a617264d2855ae4f5479121829cfb649e0e0962101c4579`.
-Actual byte count/hash matched the manifest; source acquisition timestamp was
-2026-10-28 05:50:24 UTC. The original strict parser accepted all 74,023 rows;
-59,674 satisfied its point-camera eligibility policy before road association.
-This proves available delivery/integrity, not independently
-verified provider provenance or each camera's correctness. No database was saved.
+Observed parameter keys are1709(speed),1713(beam shape),1705(azimuth),1706(range).
+No road IDs, section linkage or endpoints were present. Source labels are not
+unique. Existing point-camera eligibility admits59674 records; unknown types or
+limits do not authorize control. Existing direction normalization is retained,
+including its documented HIGH CONFIDENCE basis in matched CG/iGo exports.
 
-Focused offline graph/source tests cover parallel and stacked roads, branching
-interchange, curved connected roads, stale/missing graph, uncertain GPS, reaction
-threshold/jitter, same-limit independent IDs, route-proven two-fix pass,
-duplicate/backward/stale/future fixes and jumps, raw GPS accuracy, reverse supported
-bearings, acquisition provenance/hash/age, unknown limits and opposing direction.
-No hardware/bench/road readiness is claimed.
+## Installed map format
+
+Read-only path: `Paths.mapd_root()/offline/{groupLat}/{groupLon}/
+{minLat}_{minLon}_{maxLat}_{maxLon}`, normally under `/data/media/0/osm/offline`.
+The stock files are packed Cap'n Proto with .25-degree tile bounds inside
+2-degree directories. `camera_osm_bridge.capnp` locally declares the compatible
+wire layout; it is not a transplanted control implementation. The schema prefix
+is compatible with NikMoq/mapd v1.12.0 commit
+`46cd71ade6f630f1564c83bf1763f9d949a9ff30`. Exact-source schema SHA-256:
+`5033df0bb036d58b4999732586b61f063c301e1e15a90cf122a161182d0bedcd`.
+
+Compatibility was independently checked against ARM getters in the shipped mapd
+ELF (SHA-256 `fdb3b49ee19956e6ce09fdc3373cbba557f1263b2180e9f344c1d4053852284b`):
+Way.Nodes uses pointer2, Way.OneWay bit328, Offline.Ways pointer0, Offline.Overlap
+byte offset32. This verifies the relevant wire layout; it does not establish the
+exact source commit of the shipped Go executable.
+
+These tiles contain polylines, coordinate nodes and oneWay, but omit original
+OSM way/node IDs and layer. Stable internal keys derive from geometry; connectivity
+uses shared coordinates as in stock mapd. Ambiguous projections, divergent
+continuations, missing tile coverage and incompatible directions do not authorize
+a new camera. The missing layer data still limits assertions at geometrically
+indistinguishable stacked roads; no universal road identity guarantee is made.
+
+## Local work and load
+
+One background thread reads the relevant neighboring installed tiles; it does
+not scan the country. Before parsing, its own native TID is switched from any
+inherited realtime policy to SCHED_OTHER and nice10. No main/control scheduler is
+changed. Bounds and mtimes detect changes; unchanged tiles are not reparsed on
+periodic checks. Motion beyond the local snapshot triggers a refresh.
+
+Work is bounded: max16 nearby files,16 MiB per tile,32 MiB raw LRU cache,40000
+local directed edges,250000 index references,256 projection cache entries and bounded directory enumeration. Only nearby geometry is
+indexed. The regular source tick uses spatial indexes. Missing maps remain a
+local-data diagnostic, never a reason to download another map during driving.
+
+## Selection and passage
+
+The source requires ordered fresh GPS fixes with the original quality checks.
+A new camera requires two distinct measurements with measured forward approach.
+The installed-map bridge is authoritative: its rejection is not replaced by a
+point-only match. Curved-road distance follows the local directed polyline.
+
+Passage requires an observed crossing followed by two distinct moving fixes
+more than20m behind the same camera on compatible connected geometry. Repeated,
+backward, missing or jumping GPS cannot prove passage. Existing event identity
+is retained during uncertainty; lack of data does not restore driver speed.
+
+The pure metadata projection path remains a unit-testable source component;
+production mapd requires installed OSM geometry. Its25m camera approach corridor
+is not evidence of road identity by itself. Roadside camera projection may use
+25m while vehicle projection remains12m, with ambiguity rejection still applied.
+
+HUD empty labels are «Камер нет» and «Слабый GPS». A selected camera's raw limit
+is centered in the native sign, its native offset is above-right, and the valid
+reaction-zone countdown is above-left. Detailed diagnostics remain in logs.
+
+## Evidence
+
+`CAMERA_OFFLINE_OSM_BRIDGE_QA.json` records current tests, real-tile compatibility,
+native artifact hash and performance scope. `CAMERA_GRAPH_DELIVERY_QA.json`
+describes the superseded online-region implementation and is historical only.
+Downloaded maps/provider bytes, device GPS and generated objects are not committed.

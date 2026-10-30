@@ -5,10 +5,8 @@ cruise helper, controller, planner and sender execute their actual implementatio
 As in the shared fixtures, DEC receives a supplied MPC crash counter, not a solver.
 """
 from contextlib import ExitStack
-import json
 import math
 import os
-from pathlib import Path
 import sys
 import time
 
@@ -228,6 +226,10 @@ def test_actual_pass_restores_base_and_next_camera_has_independent_cycle(overrid
   rows=f'2|Radars|65001\n18059|second|{latitude}|37|1709|60|1705|180|1713|1|\n'
   cameras=tuple(parse_cityguide_snapshot(rows))
   save_database(str(c.pipeline[0]),CameraDatabase('second-runtime',c.clock.time(),cameras))
+  # A new event requires its own two distinct approaching GPS fixes, even
+  # when its limit equals the camera that was just passed.
+  _,confirming=c.frame(north_m=35)
+  assert not confirming.speedCameraControl.active
   _,next_camera=c.frame(north_m=40)
   assert next_camera.speedCameraControl.active
   assert next_camera.speedCameraControl.eventId!=passed.speedCameraControl.eventId

@@ -177,3 +177,22 @@ GPS can prepare geometry without being mislabeled as weak solely for speed0.
 A selected camera still supplies its raw limit at the center, the applied native
 offset above-right, and the reaction-distance countdown above-left. This update
 does not alter Resolver/SLA/ICBM or driver-speed retention and passage restoration.
+
+
+## Current: installed offline OSM maps, no runtime map downloads
+
+The preceding automatic XML-region implementation is superseded and its runtime
+modules are removed. The camera producer now reads the existing packed mapd
+files through `camera_osm_bridge.py` and a locally declared wire schema. Its
+format was verified against getters in the shipped ARM binary and a real public
+stock tile. No new regional graph, map API call or mandatory runtime network is
+used. Camera limits still come only from the local camera database; OSM supplies
+road association and path distance, never a posted camera target.
+
+See `CAMERA_OFFLINE_DATA_CONTRACT.md` and
+`CAMERA_OFFLINE_OSM_BRIDGE_QA.json` for current requirements, provenance and QA.
+Pure metadata tests do not substitute for the production installed-map path.
+The full IPC runtime rebuilt actual Params/msgq/transformations and passed91
+checks including raw20+15, driver priority, passage restore and next-camera cycle.
+The legacy graph keys remain registered for binary compatibility but no longer
+select an external XML input. No Panda/pandad/control policy binary was changed.

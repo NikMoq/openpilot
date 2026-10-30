@@ -61,8 +61,8 @@ LongitudinalPanel::LongitudinalPanel(QWidget *parent) : QWidget(parent) {
   speedCameraControlEnabled = new ParamControlSP(
     "SpeedCameraControlEnabled",
     russian_help ? QStringLiteral("Управление скоростью по камерам") : tr("Camera Speed Control"),
-    russian_help ? QStringLiteral("Через штатный ICBM снижает уставку ACC перед камерой с учётом штатной прибавки. Нужны локальная база камер, достоверный GPS и граф дорог. Дорожные ограничения OSM не используются в камерном режиме. Кнопки руля имеют приоритет; восстановление после камеры требует подтверждённого проезда. Дистанция реакции и прибавка настраиваются в разделе «Ограничение скорости».")
-                 : tr("Use ICBM to reduce the ACC target before a camera, applying the standard offset once. Requires a local camera database, reliable GPS and road geometry. Road speed limits are excluded in camera mode. Steering-wheel buttons take priority; restoration requires proven passage. Reaction distance and offset are under Speed Limit."), "", this);
+    russian_help ? QStringLiteral("Через штатный ICBM снижает уставку ACC перед камерой с учётом штатной прибавки. Использует скачанную базу камер, достоверный GPS и установленные офлайн-карты OSM. Интернет для работы не нужен. Дорожные ограничения OSM не используются в камерном режиме. Кнопки руля имеют приоритет; восстановление после камеры требует подтверждённого проезда. Дистанция реакции и прибавка настраиваются в разделе «Ограничение скорости».")
+                 : tr("Use ICBM to reduce the ACC target before a camera, applying the standard offset once. Uses the downloaded camera database, reliable GPS and installed offline OSM maps. Runtime does not require a network connection. Road speed limits are excluded in camera mode. Steering-wheel buttons take priority; restoration requires proven passage. Reaction distance and offset are under Speed Limit."), "", this);
   list->addItem(speedCameraControlEnabled);
 
   dynamicExperimentalControl = new ParamControlSP(

@@ -9,15 +9,13 @@ import math
 import os
 import platform
 import time
-import xml.etree.ElementTree as ET
 from dataclasses import replace
 
 from cereal import log
 from openpilot.common.params import Params
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import load_database
-from openpilot.sunnypilot.mapd.camera_road_graph import RoadGraph
-from openpilot.sunnypilot.mapd.camera_road_graph_updater import RoadGraphUpdater
+from openpilot.sunnypilot.mapd.camera_osm_bridge import OfflineOsmBridge
 from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_gps_reliable
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
@@ -39,11 +37,8 @@ class OsmMapData(BaseMapData):
     self.camera_control_match = None
     self.camera_speed_source = CameraSpeedSource()
     self.camera_selection = self.camera_speed_source.selection
-    self.camera_road_graph = None
-    self.camera_road_graph_stamp = None
-    self.camera_legacy_graph = None
-    self.camera_road_updater = None
     self.camera_graph_status = None
+    self.camera_osm_bridge = OfflineOsmBridge(Paths.mapd_root())
     self.camera_enabled = True
     self.camera_warning_enabled = True
     self.camera_alert_distance_m = 1_000.0
@@ -102,8 +97,7 @@ class OsmMapData(BaseMapData):
                            5_000.0 if self.camera_params.get("SpeedCameraControlEnabled") == "1" else 0.0),
       ) if self.camera_warning_enabled else None
     if self.camera_params.get("SpeedCameraControlEnabled") == "1":
-      # Preparation must not wait for a valid camera database or LLK position:
-      # a trustworthy raw fix can fill the independent local road cache first.
+      # Selection consumes only the local database and measured GPS trajectory.
       self._update_camera_source(database_reason='camera_database_stale' if expired else 'camera_database_missing')
     else:
       self.camera_speed_source = CameraSpeedSource()
@@ -118,36 +112,6 @@ class OsmMapData(BaseMapData):
       self.camera_params.put('SpeedCameraRoadGraphStatus', status)
       self.camera_graph_status = status
 
-  def _camera_graph(self, gps, raw_gps_valid, reaction):
-    configured = self.camera_params.get("SpeedCameraRoadGraphPath")
-    legacy = os.path.join(Paths.mapd_root(), "camera_roads.osm")
-    # An explicit offline regional export remains supported. A missing explicit
-    # path is an operator error and must not silently select another graph.
-    if configured or os.path.exists(legacy):
-      path = configured or legacy
-      try:
-        stamp = (path, os.path.getmtime(path), os.path.getsize(path), os.path.getmtime(path + '.manifest.json'))
-        if stamp != self.camera_road_graph_stamp:
-          self.camera_legacy_graph = RoadGraph.load(path)
-          self.camera_road_graph_stamp = stamp
-        graph = self.camera_legacy_graph
-        if not 0 <= time.time() - graph.acquired_at <= 30 * 86400:
-          raise ValueError('road_graph_stale')
-        if configured or not raw_gps_valid or graph.inside((gps.latitude, gps.longitude), margin=1100):
-          return graph, 'ready'
-      except (OSError, ValueError, KeyError, ET.ParseError) as error:
-        self.camera_legacy_graph = None
-        self.camera_road_graph_stamp = None
-        if configured:
-          return None, 'missing' if isinstance(error, FileNotFoundError) else str(error)
-    if getattr(self, 'camera_road_updater', None) is None:
-      self.camera_road_updater = RoadGraphUpdater(os.path.join(Paths.mapd_root(), 'camera_road_cache'))
-    updater = self.camera_road_updater
-    if raw_gps_valid:
-      heading = gps.bearingDeg if math.isfinite(gps.bearingDeg) and 0 <= gps.bearingDeg <= 360 else 0.0
-      updater.tick(gps.latitude, gps.longitude, heading, reaction_distance_m=reaction)
-    return updater.graph, updater.status if raw_gps_valid else 'gps_unreliable'
-
   def _update_camera_source(self, database_reason='camera_database_missing'):
     try:
       reaction = int(self.camera_params.get('SpeedCameraReactionDistance') or 300)
@@ -157,35 +121,39 @@ class OsmMapData(BaseMapData):
     now = time.time()
     raw_stream_valid = bool(self.sm.valid[self.camera_gps_service] and self.sm.alive[self.camera_gps_service])
     raw_gps_valid = raw_stream_valid and camera_gps_reliable(gps, now)
-    # Downloading geometry is not control authority: prepare while parked too,
-    # without pretending stationary course/speed can select a camera.
+    # A strong stationary position is not a weak-GPS signal, but motion is
+    # needed to confirm a camera approach and passage from measured trajectory.
     position_values = (gps.latitude, gps.longitude, gps.horizontalAccuracy, gps.unixTimestampMillis)
     position_valid = bool(raw_stream_valid and gps.hasFix and all(math.isfinite(value) for value in position_values) and
                           -90 <= gps.latitude <= 90 and -180 <= gps.longitude <= 180 and
                           0 < gps.horizontalAccuracy <= 12 and 0 <= now - gps.unixTimestampMillis * .001 <= 2)
     gps_valid = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK and raw_gps_valid)
-    graph, graph_status = self._camera_graph(gps, position_valid, reaction)
-    self.camera_road_graph = graph
+    if getattr(self, 'camera_osm_bridge', None) is None:
+      self.camera_osm_bridge = OfflineOsmBridge(Paths.mapd_root())
+    if position_valid:
+      self.camera_osm_bridge.tick(gps.latitude, gps.longitude)
+    roads = self.camera_osm_bridge.snapshot
     self.camera_selection = self.camera_speed_source.update(
-      self.camera_index or (), graph, gps.latitude, gps.longitude, gps.bearingDeg,
-      gps_valid=gps_valid and self.camera_database is not None, fix_time_s=gps.unixTimestampMillis * .001, now_s=now,
-      reaction_distance_m=reaction)
+      self.camera_index or (), gps.latitude, gps.longitude, gps.bearingDeg,
+      gps_valid=gps_valid and self.camera_database is not None and roads is not None,
+      fix_time_s=gps.unixTimestampMillis * .001, now_s=now,
+      reaction_distance_m=reaction, road_graph=roads)
     if not self.camera_selection.valid:
       if not gps_valid:
-        # Stationary course is undefined; a strong stopped fix is sufficient to
-        # prepare maps but is not a weak-GPS failure or camera authority.
+        # Stationary course is undefined, not a weak-GPS signal.
         stationary = bool(position_valid and self.localizer_valid and self.sm['liveLocationKalman'].gpsOK and
                           math.isfinite(gps.speed) and 0 <= gps.speed < 1)
         reason = 'waiting_for_motion' if stationary else 'gps_unreliable'
       elif self.camera_database is None:
         reason = database_reason
-      elif graph is None:
-        reason = ('road_graph_downloading' if graph_status in ('loading', 'downloading') else
-                  'road_graph_offline' if graph_status.startswith(('error', 'offline', 'download_error')) else 'road_graph_unavailable')
+      elif roads is None:
+        reason = 'offline_maps_unavailable'
       else:
         reason = self.camera_selection.reason
       self.camera_selection = replace(self.camera_selection, reason=reason)
-    self._set_camera_graph_status(graph_status if graph_status != 'ready' else self.camera_selection.reason)
+    # Read existing downloaded mapd tiles only. The bridge does not download
+    # data or use posted road limits; the camera database supplies the limit.
+    self._set_camera_graph_status('offline_osm:' + self.camera_osm_bridge.status + ':' + self.camera_selection.reason)
     if self.camera_selection.valid:
       from openpilot.sunnypilot.mapd.speed_cameras import CameraMatch
       self.camera_control_match = CameraMatch(self.camera_selection.camera, self.camera_selection.distance_m, 0.)

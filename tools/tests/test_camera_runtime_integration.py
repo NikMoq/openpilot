@@ -11,9 +11,6 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 import importlib.machinery
 import math
-import hashlib
-import json
-from pathlib import Path
 import os
 import sys
 import time
@@ -27,6 +24,7 @@ from cereal import car, custom, messaging
 import msgq.ipc_pyx
 from openpilot.common import params_pyx
 from openpilot.common.params import Params
+from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import CameraDatabase, save_database
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.cityguide import parse_cityguide_snapshot
@@ -88,19 +86,31 @@ def test_camera_params_matches_native_pc_and_prefixed_roots(monkeypatch, tmp_pat
 
 
 @pytest.fixture
-def pipeline(native_params, tmp_path):
+def pipeline(native_params, tmp_path, monkeypatch):
   cache = tmp_path / 'cameras.json'
   native_params.put('SpeedCameraDatabasePath', str(cache))
-  graph_path = tmp_path / 'roads.osm'
-  graph_path.write_text(f'<osm version="0.6"><bounds minlat="54.9" minlon="36.9" maxlat="55.1" maxlon="37.1"/>'
-    f'<node id="1" lat="54.95" lon="37"/><node id="2" lat="55.05" lon="37"/>'
-    '<way id="100"><nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/><tag k="oneway" v="yes"/></way></osm>')
-  Path(str(graph_path) + '.manifest.json').write_text(json.dumps(dict(schema_version=1,
-    source_url='https://api.openstreetmap.org/api/0.6/map?bbox=36.9,54.9,37.1,55.1',
-    complete_region_export=True, retrieved_at=time.time(), sha256=hashlib.sha256(graph_path.read_bytes()).hexdigest())))
-  native_params.put('SpeedCameraRoadGraphPath', str(graph_path))
+  monkeypatch.setattr(Paths, 'mapd_root', lambda: str(tmp_path))
+  import capnp
+  from pathlib import Path
+  source_root = Path(__file__).resolve().parents[2]
+  schema = capnp.load(str(source_root / 'sunnypilot/mapd/camera_osm_bridge.capnp'))
+  tile = schema.Offline.new_message(minLat=54.9, minLon=36.9, maxLat=55.1, maxLon=37.1, overlap=.001)
+  way = tile.init('ways', 1)[0]
+  way.oneWay = True
+  way.minLat, way.minLon, way.maxLat, way.maxLon = 54.95, LON, 55.05, LON
+  nodes = way.init('nodes', 2)
+  nodes[0].latitude, nodes[0].longitude = 54.95, LON
+  nodes[1].latitude, nodes[1].longitude = 55.05, LON
+  folder = tmp_path / 'offline' / '54' / '36'
+  folder.mkdir(parents=True)
+  (folder / '54.900000_36.900000_55.100000_37.100000').write_bytes(tile.to_bytes_packed())
+  # A nonexistent legacy graph path must not affect database-only operation.
+  native_params.put('SpeedCameraRoadGraphPath', str(tmp_path / 'missing-legacy-graph.osm'))
   publisher = messaging.PubMaster(['liveLocationKalman', *INPUT_SERVICES])
   map_data = OsmMapData()
+  map_data.camera_osm_bridge.tick(LAT, LON)
+  map_data.camera_osm_bridge._worker.join(5)
+  assert map_data.camera_osm_bridge.snapshot is not None
   receiver = messaging.SubMaster(['liveMapDataSP', *INPUT_SERVICES], poll='modelV2')
   assert type(map_data.params) is Params
   assert OsmMapData.publish is BaseMapData.publish
@@ -121,26 +131,35 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
                   north_m=-100, gps_time_s=None, cruise_helper=None, previous_plan=None):
   _, publisher, receiver, map_data = pipeline
   ego_lat = LAT + math.degrees(north_m / 6_371_000.0)
-  location = messaging.new_message('liveLocationKalman', valid=True)
-  llk = location.liveLocationKalman
-  llk.status = 'valid'
-  llk.gpsOK = gps_ok
-  llk.positionGeodetic.valid = True
-  llk.positionGeodetic.value = [ego_lat, LON, 0.0]
-  llk.calibratedOrientationNED.valid = True
-  llk.calibratedOrientationNED.value = [0.0, 0.0, 0.0]
-  gps_msg = messaging.new_message('gpsLocation', valid=True)
-  gps = gps_msg.gpsLocation
-  gps.hasFix = gps_ok
-  gps.speed = USER_SPEED
-  gps.horizontalAccuracy = 3.0
-  gps.bearingAccuracyDeg = 2.0
-  gps.unixTimestampMillis = int((time.time() if gps_time_s is None else gps_time_s) * 1000)  # noqa: TID251 - GPS Unix timestamp
-  gps.latitude, gps.longitude, gps.bearingDeg = ego_lat, LON, 0.0
-  publisher.send('gpsLocation', gps_msg)
-  publisher.send('liveLocationKalman', location)
-  receive(map_data.sm, ['liveLocationKalman', 'gpsLocation'])
-  map_data.tick()
+  fix_ms = int((time.time() if gps_time_s is None else gps_time_s) * 1000)  # noqa: TID251 - GPS Unix timestamp
+  samples = [(ego_lat, fix_ms)]
+  if gps_ok and not map_data.camera_selection.camera_id:
+    # Deliver both measured approach fixes through real msgq. The first fix is
+    # five metres behind; no source-valid flag or selection is substituted.
+    samples.insert(0, (ego_lat - math.degrees(5 / 6_371_000.0), fix_ms - 1000))
+  for sample_lat, sample_ms in samples:
+    # Each transmitted Cap'n Proto message owns a fresh builder. Reusing one
+    # across the two real input samples triggers pycapnp's repeated-write guard.
+    location = messaging.new_message('liveLocationKalman', valid=True)
+    llk = location.liveLocationKalman
+    llk.status = 'valid'
+    llk.gpsOK = gps_ok
+    llk.positionGeodetic.valid = True
+    llk.positionGeodetic.value = [sample_lat, LON, 0.0]
+    llk.calibratedOrientationNED.valid = True
+    llk.calibratedOrientationNED.value = [0.0, 0.0, 0.0]
+    gps_msg = messaging.new_message('gpsLocation', valid=True)
+    gps = gps_msg.gpsLocation
+    gps.hasFix = gps_ok
+    gps.speed = USER_SPEED
+    gps.horizontalAccuracy = 3.0
+    gps.bearingAccuracyDeg = 2.0
+    gps.unixTimestampMillis = sample_ms
+    gps.latitude, gps.longitude, gps.bearingDeg = sample_lat, LON, 0.0
+    publisher.send('gpsLocation', gps_msg)
+    publisher.send('liveLocationKalman', location)
+    receive(map_data.sm, ['liveLocationKalman', 'gpsLocation'])
+    map_data.tick()
 
   cs_msg = messaging.new_message('carState', valid=True)
   cs = cs_msg.carState

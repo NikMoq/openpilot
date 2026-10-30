@@ -64,3 +64,13 @@ runtime-компоненты и native UI; отсутствие положите
 Аппаратные операции, прошивка и поездки не входят в текущее разрешение.
 Стабильная ветка не объединяется с кандидатом, пока обязательные критерии не
 выполнены. Неустранённые технические зависимости фиксируются явно.
+
+
+## Current user correction: fully offline operation
+
+Camera matching must use the locally downloaded camera database plus the
+already installed offline OSM maps through a read-only coordinate/geometry
+bridge. No separately downloaded XML graph or onroad region fetch is allowed.
+OSM contributes road association, not posted speed limits for camera mode.
+The existing user-controlled map/database update schedules remain independent.
+The only empty HUD labels are «Камер нет» and «Слабый GPS».

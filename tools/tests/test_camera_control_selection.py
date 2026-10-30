@@ -1,8 +1,6 @@
 """Real parser/cache/map publisher/planner with only native I/O replaced offline."""
 
 import importlib.util
-import hashlib
-import json
 import math
 import sys
 import time
@@ -82,19 +80,23 @@ def map_pipeline(monkeypatch, tmp_path):
   instance.camera_match = instance.camera_control_match = None
   instance.camera_speed_source = CameraSpeedSource()
   instance.camera_selection = instance.camera_speed_source.selection
-  instance.camera_road_graph = instance.camera_road_graph_stamp = None
   instance.camera_gps_service = 'gpsLocationExternal'
-  graph_path = tmp_path / 'camera_roads.osm'
-  road_xml = (f'<osm version="0.6"><bounds minlat="54.9" minlon="36.9" maxlat="55.1" maxlon="37.1"/>'
-              f'<node id="1" lat="{latitude(-500)}" lon="37"/>'
-              f'<node id="2" lat="{latitude(6500)}" lon="37"/>'
-              '<way id="101"><nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/>'
-              '<tag k="oneway" v="yes"/></way></osm>')
-  graph_path.write_text(road_xml)
-  Path(str(graph_path) + '.manifest.json').write_text(json.dumps({
-    'schema_version': 1, 'source_url': 'https://api.openstreetmap.org/api/0.6/map?bbox=36.9,54.9,37.1,55.1',
-    'complete_region_export': True, 'retrieved_at': time.time(),
-    'sha256': hashlib.sha256(graph_path.read_bytes()).hexdigest()}))
+  # Actual installed-mapd packed wire format, not a separate camera graph.
+  offline_schema = capnp.load(str(ROOT / 'sunnypilot/mapd/camera_osm_bridge.capnp'))
+  tile = offline_schema.Offline.new_message(minLat=54.9, minLon=36.9, maxLat=55.1, maxLon=37.1, overlap=.001)
+  ways = tile.init('ways', 1)
+  ways[0].oneWay = True
+  ways[0].minLat, ways[0].minLon, ways[0].maxLat, ways[0].maxLon = latitude(-500), 37, latitude(6500), 37
+  nodes = ways[0].init('nodes', 2)
+  nodes[0].latitude, nodes[0].longitude = latitude(-500), 37
+  nodes[1].latitude, nodes[1].longitude = latitude(6500), 37
+  folder = tmp_path / 'offline' / '54' / '36'
+  folder.mkdir(parents=True)
+  (folder / '54.900000_36.900000_55.100000_37.100000').write_bytes(tile.to_bytes_packed())
+  instance.camera_osm_bridge = module.OfflineOsmBridge(str(tmp_path))
+  instance.camera_osm_bridge.tick(55, 37)
+  instance.camera_osm_bridge._worker.join(5)
+  assert instance.camera_osm_bridge.snapshot is not None
   instance.localizer_valid = True
   instance.last_position = NS(latitude=55, longitude=37)
   instance.last_bearing = 0
@@ -113,6 +115,16 @@ def map_pipeline(monkeypatch, tmp_path):
   def publish(rows):
     cameras = tuple(parse_camera_snapshot(('2|Radars|65001\n' + rows).encode()))
     save_database(str(cache), CameraDatabase('offline-selection', time.time(), cameras))  # noqa: TID251 - cache uses Unix time
+    # A real candidate needs two distinct measured approaching fixes. Prime
+    # the previous point five metres behind, then publish the requested point.
+    # This is trajectory input, not a mocked selection or forced valid flag.
+    if not instance.camera_selection.camera_id:
+      gps = instance.sm[instance.camera_gps_service]
+      lat, timestamp = gps.latitude, gps.unixTimestampMillis
+      gps.latitude = lat - math.degrees(5 / 6_371_000)
+      gps.unixTimestampMillis = timestamp - 1000
+      instance.publish()
+      gps.latitude, gps.unixTimestampMillis = lat, timestamp
     instance.publish()
     assert sent[-1][0] == 'liveMapDataSP' and sent[-1][1].valid
     return sent[-1][1].liveMapDataSP, cameras
@@ -316,8 +328,8 @@ def test_real_publisher_wire_pass_requires_two_distinct_raw_fixes(map_pipeline, 
   assert passed.speedCameraControlSpeedLimit == pytest.approx(60 / 3.6)
 
 
-def test_real_publisher_uncertain_gps_retains_id_and_missing_graph_warns_only(map_pipeline):
-  instance, config, publish = map_pipeline
+def test_real_publisher_uncertain_gps_retains_id_without_pass(map_pipeline):
+  instance, _, publish = map_pipeline
   selected, _ = publish(bkm_row(18059, 100))
   identity = selected.speedCameraControlEventId
   gps = instance.sm[instance.camera_gps_service]
@@ -326,157 +338,144 @@ def test_real_publisher_uncertain_gps_retains_id_and_missing_graph_warns_only(ma
   assert lost.speedCameraControlEventId == identity
   assert not lost.speedCameraControlValid and not lost.speedCameraControlPassProven
   assert lost.speedCameraAheadValid
-  gps.hasFix = True
+  assert lost.speedCameraControlReason == 'gps_unreliable'
+
+
+def test_local_database_and_installed_maps_ignore_legacy_graph_and_never_use_network(map_pipeline, monkeypatch):
+  import socket
+  import urllib.request
+  instance, config, publish = map_pipeline
+  module = sys.modules[instance.__class__.__module__]
   config['SpeedCameraRoadGraphPath'] = str(Path(instance.camera_database_path).with_name('missing.osm'))
-  missing, _ = publish(bkm_row(18059, 100))
-  assert missing.speedCameraAheadValid and not missing.speedCameraControlValid
-  assert config['SpeedCameraRoadGraphStatus'] == 'missing'
-
-
-def test_automatic_graph_prepares_then_selects_from_offline_cache(map_pipeline, monkeypatch):
-  """A clean installation must acquire topology without a hand-prepared file."""
-  instance, config, publish = map_pipeline
-  module = sys.modules[instance.__class__.__module__]
-  path = Path(instance.camera_database_path).with_name('camera_roads.osm')
-  graph = module.RoadGraph.load(path)
-  path.unlink()
-  Path(str(path) + '.manifest.json').unlink()
-  calls = []
-  updater = NS(graph=None, status='downloading', tick=lambda *args, **kw: calls.append((args, kw)))
-  monkeypatch.setattr(module, 'RoadGraphUpdater', lambda root: updater)
-  initial, _ = publish(bkm_row(18059, 700))
-  assert initial.speedCameraAheadValid and not initial.speedCameraControlValid
-  assert initial.speedCameraControlReason == 'road_graph_downloading'
-  assert config['SpeedCameraRoadGraphStatus'] == 'downloading'
-  assert calls and calls[-1][1]['reaction_distance_m'] == 300
-  updater.graph, updater.status = graph, 'ready'
-  gps = instance.sm[instance.camera_gps_service]
-  clock = [time.time() + 1]
-  monkeypatch.setattr(module.time, 'time', lambda: clock[0])
-  gps.unixTimestampMillis = int(clock[0] * 1000)
-  selected, _ = publish(bkm_row(18059, 700))
+  config['SpeedCameraReactionDistance'] = '900'
+  def forbidden(*args, **kwargs):
+    raise AssertionError('Camera selection must not make a network request')
+  monkeypatch.setattr(socket.socket, 'connect', forbidden)
+  monkeypatch.setattr(urllib.request, 'urlopen', forbidden)
+  selected, _ = publish(bkm_row(18059, 900))
   assert selected.speedCameraControlValid
-  assert selected.speedCameraControlDistance == pytest.approx(700, abs=.1)
   assert selected.speedCameraControlSpeedLimit == pytest.approx(60 / 3.6)
+  assert selected.speedCameraControlDistance == pytest.approx(900, abs=.1)
+  assert selected.speedCameraControlState == 'ACTIVE'
+  assert config['SpeedCameraRoadGraphStatus'].startswith('offline_osm:')
+  assert not hasattr(module, 'RoadGraphUpdater') and not hasattr(module, 'RoadGraph')
+  assert not Path(config['SpeedCameraRoadGraphPath']).exists()
+  assert not Path(instance.camera_database_path).with_name('camera_road_cache').exists()
   identity = selected.speedCameraControlEventId
-  # A later loss of network does not delete a valid disk-backed graph/event.
-  updater.status = 'offline_cache'
-  clock[0] += 1
-  gps.unixTimestampMillis = int(clock[0] * 1000)
-  cached, _ = publish(bkm_row(18059, 700))
-  assert cached.speedCameraControlValid and cached.speedCameraControlEventId == identity
-  assert config['SpeedCameraRoadGraphStatus'] == 'offline_cache'
+  # Recreate the pure source as a process restart: only local DB and GPS remain.
+  instance.camera_speed_source = CameraSpeedSource()
+  instance.camera_selection = instance.camera_speed_source.selection
+  recovered, _ = publish(bkm_row(18059, 900))
+  assert recovered.speedCameraControlValid and recovered.speedCameraControlEventId == identity
 
 
-def test_automatic_graph_offline_reason_and_status_write_dedup(map_pipeline, monkeypatch):
+def test_offline_status_writes_only_when_changed(map_pipeline):
   instance, config, publish = map_pipeline
-  module = sys.modules[instance.__class__.__module__]
-  path = Path(instance.camera_database_path).with_name('camera_roads.osm')
-  path.unlink()
-  updater = NS(graph=None, status='error:offline', tick=lambda *args, **kw: None)
-  monkeypatch.setattr(module, 'RoadGraphUpdater', lambda root: updater)
   writes = []
   def put(key, value):
     config[key] = value
     writes.append((key, value))
   instance.camera_params.put = put
-  initial, _ = publish(bkm_row(18059, 700))
-  again, _ = publish(bkm_row(18059, 700))
-  assert not initial.speedCameraControlValid and not again.speedCameraControlValid
-  assert again.speedCameraControlReason == 'road_graph_offline'
-  assert writes == [('SpeedCameraRoadGraphStatus', 'error:offline')]
-  instance.sm[instance.camera_gps_service].hasFix = False
-  bad_gps, _ = publish(bkm_row(18059, 700))
-  assert bad_gps.speedCameraControlReason == 'gps_unreliable'
-  assert config['SpeedCameraRoadGraphStatus'] == 'gps_unreliable'
-
-
-def test_graph_preparation_does_not_wait_for_camera_database(map_pipeline, monkeypatch):
-  instance, config, _ = map_pipeline
-  module = sys.modules[instance.__class__.__module__]
-  Path(instance.camera_database_path).with_name('camera_roads.osm').unlink()
-  calls = []
-  updater = NS(graph=None, status='downloading', tick=lambda *args, **kw: calls.append(args))
-  monkeypatch.setattr(module, 'RoadGraphUpdater', lambda root: updater)
+  publish(bkm_row(18059, 700))
+  writes.clear()
   instance.get_speed_camera()
-  assert calls
-  assert instance.camera_selection.reason == 'camera_database_missing'
-  assert not instance.camera_selection.valid
-  assert config['SpeedCameraRoadGraphStatus'] == 'downloading'
+  instance.get_speed_camera()
+  assert not writes
+  instance.sm[instance.camera_gps_service].hasFix = False
+  message, _ = publish(bkm_row(18059, 700))
+  assert not message.speedCameraControlValid and message.speedCameraControlReason == 'gps_unreliable'
+  assert len(writes) == 1 and writes[0][0] == 'SpeedCameraRoadGraphStatus'
+  assert writes[0][1].startswith('offline_osm:') and writes[0][1].endswith(':gps_unreliable')
 
 
-def test_stationary_fix_prepares_graph_but_does_not_authorize_camera(map_pipeline, monkeypatch):
+def test_stationary_strong_fix_is_not_mislabeled_as_weak_gps(map_pipeline):
   instance, _, publish = map_pipeline
-  module = sys.modules[instance.__class__.__module__]
-  Path(instance.camera_database_path).with_name('camera_roads.osm').unlink()
-  calls = []
-  updater = NS(graph=None, status='downloading', tick=lambda *args, **kw: calls.append(args))
-  monkeypatch.setattr(module, 'RoadGraphUpdater', lambda root: updater)
   gps = instance.sm[instance.camera_gps_service]
   gps.speed = 0
   gps.bearingAccuracyDeg = 180
   gps.bearingDeg = float('nan')
   message, _ = publish(bkm_row(18059, 700))
-  assert calls and calls[0][2] == 0
   assert not message.speedCameraControlValid
   assert message.speedCameraControlReason == 'waiting_for_motion'
-  # The same strong position with unreliable course while moving is a GPS
-  # quality failure rather than stationary preparation.
   gps.speed = 10
   moving, _ = publish(bkm_row(18059, 700))
   assert not moving.speedCameraControlValid
   assert moving.speedCameraControlReason == 'gps_unreliable'
 
 
-def test_real_async_graph_delivery_to_camera_message_and_offline_restart(map_pipeline, monkeypatch, tmp_path):
-  """Real cache/downloader/parser/source/publisher; replace network response only."""
-  import threading
-  from urllib.parse import parse_qs, urlparse
-  from openpilot.sunnypilot.mapd.camera_road_graph_updater import RoadGraphUpdater
+@pytest.mark.parametrize('condition', ['missing', 'expired'])
+def test_database_loss_never_keeps_retained_event_valid(map_pipeline, monkeypatch, condition):
+  instance, _, publish = map_pipeline
+  selected, _ = publish(bkm_row(18059, 100))
+  assert selected.speedCameraControlValid
+  identity = selected.speedCameraControlEventId
+  module = sys.modules[instance.__class__.__module__]
+  if condition == 'missing':
+    Path(instance.camera_database_path).unlink()
+  else:
+    expired_at = instance.camera_database.fetched_at + 7 * 86400 + 1
+    monkeypatch.setattr(module.time, 'time', lambda: expired_at)
+  instance.get_speed_camera()
+  assert not instance.camera_selection.valid and not instance.camera_selection.pass_proven
+  assert instance.camera_selection.camera_id == identity
+
+
+def test_missing_installed_offline_maps_does_not_authorize_from_metadata_alone(map_pipeline, monkeypatch):
+  import shutil
+  import socket
+  import urllib.request
   instance, _, publish = map_pipeline
   module = sys.modules[instance.__class__.__module__]
-  Path(instance.camera_database_path).with_name('camera_roads.osm').unlink()
-  entered, release = threading.Event(), threading.Event()
-  downloads = []
-  def acquire(url, path):
-    downloads.append(url)
-    entered.set()
-    assert release.wait(5)
-    a, b, c, d = map(float, parse_qs(urlparse(url).query)['bbox'][0].split(','))
-    raw = (f'<osm version="0.6"><bounds minlat="{b}" minlon="{a}" maxlat="{d}" maxlon="{c}"/>'
-           f'<node id="1" lat="{latitude(-500)}" lon="37"/>'
-           f'<node id="2" lat="{latitude(6500)}" lon="37"/>'
-           '<way id="101"><nd ref="1"/><nd ref="2"/><tag k="highway" v="primary"/>'
-           '<tag k="oneway" v="yes"/></way></osm>').encode()
-    Path(path).write_bytes(raw)
-    Path(str(path) + '.manifest.json').write_text(json.dumps({
-      'schema_version': 1, 'source_url': url, 'complete_region_export': True,
-      'retrieved_at': time.time(), 'sha256': hashlib.sha256(raw).hexdigest()}))
-  cache = tmp_path / 'automatic-road-cache'
-  updater = RoadGraphUpdater(cache, acquire=acquire)
-  monkeypatch.setattr(module, 'RoadGraphUpdater', lambda root: updater)
-  first, _ = publish(bkm_row(18059, 700))
-  assert entered.wait(2)
-  assert not first.speedCameraControlValid
-  release.set()
-  updater._worker.join(5)
-  assert not updater._worker.is_alive() and updater.graph is not None
-  gps = instance.sm[instance.camera_gps_service]
-  gps.unixTimestampMillis = int(time.time() * 1000)
-  selected, _ = publish(bkm_row(18059, 700))
-  assert selected.speedCameraControlValid
-  assert selected.speedCameraControlSpeedLimit == pytest.approx(60 / 3.6)
-  assert selected.speedCameraControlDistance == pytest.approx(700, abs=.1)
-  assert len(downloads) == 1
-  def offline(*args):
-    raise AssertionError('Valid cached region must reopen without network')
-  restarted = RoadGraphUpdater(cache, acquire=offline)
-  instance.camera_road_updater = restarted
-  instance.camera_speed_source = CameraSpeedSource()
-  instance.get_speed_camera()
-  restarted._worker.join(5)
-  assert restarted.graph is not None
-  gps.unixTimestampMillis = int(time.time() * 1000)
-  recovered, _ = publish(bkm_row(18059, 700))
-  assert recovered.speedCameraControlValid
-  assert recovered.speedCameraControlEventId == selected.speedCameraControlEventId
+  root = Path(instance.camera_database_path).parent
+  shutil.rmtree(root / 'offline')
+  instance.camera_osm_bridge = module.OfflineOsmBridge(str(root))
+  def forbidden(*args, **kwargs):
+    raise AssertionError('Missing offline maps must not trigger a download')
+  monkeypatch.setattr(socket.socket, 'connect', forbidden)
+  monkeypatch.setattr(urllib.request, 'urlopen', forbidden)
+  message, _ = publish(bkm_row(18059, 700))
+  worker = instance.camera_osm_bridge._worker
+  if worker is not None:
+    worker.join(5)
+  assert not message.speedCameraControlValid
+  assert instance.camera_selection.reason == 'offline_maps_unavailable'
+
+
+@pytest.mark.parametrize('scenario', ['parallel', 'branch'])
+def test_local_maps_veto_directionally_compatible_wrong_road_camera(map_pipeline, scenario):
+  import capnp
+  instance, _, publish = map_pipeline
+  root = Path(instance.camera_database_path).parent
+  schema = capnp.load(str(ROOT / 'sunnypilot/mapd/camera_osm_bridge.capnp'))
+  tile = schema.Offline.new_message(minLat=54.9, minLon=36.9, maxLat=55.1, maxLon=37.1, overlap=.001)
+  lateral_lon = 37 + math.degrees(15 / (6_371_000 * math.cos(math.radians(55))))
+  if scenario == 'parallel':
+    roads = [[(latitude(-500), 37), (latitude(2000), 37)],
+             [(latitude(-500), lateral_lon), (latitude(2000), lateral_lon)]]
+    row = bkm_row(18059, 700).replace('|37|', f'|{lateral_lon}|')
+  else:
+    junction = (latitude(100), 37)
+    roads = [[(latitude(-500), 37), junction],
+             [junction, (latitude(2000), 37)],
+             [junction, (latitude(100), 37.01)]]
+    row = bkm_row(18059, 700)
+  ways = tile.init('ways', len(roads))
+  for way, points in zip(ways, roads):
+    way.oneWay = True
+    way.minLat = min(point[0] for point in points)
+    way.minLon = min(point[1] for point in points)
+    way.maxLat = max(point[0] for point in points)
+    way.maxLon = max(point[1] for point in points)
+    nodes = way.init('nodes', len(points))
+    for node, point in zip(nodes, points):
+      node.latitude, node.longitude = point
+  path = root / 'offline' / '54' / '36' / '54.900000_36.900000_55.100000_37.100000'
+  path.write_bytes(tile.to_bytes_packed())
+  module = sys.modules[instance.__class__.__module__]
+  instance.camera_osm_bridge = module.OfflineOsmBridge(str(root))
+  instance.camera_osm_bridge.tick(55, 37)
+  instance.camera_osm_bridge._worker.join(5)
+  assert instance.camera_osm_bridge.snapshot is not None
+  message, _ = publish(row)
+  assert message.speedCameraAheadValid  # provider coordinate/direction alone finds it
+  assert not message.speedCameraControlValid  # local road topology authoritatively vetoes it

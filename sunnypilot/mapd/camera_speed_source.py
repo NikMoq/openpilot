@@ -1,12 +1,39 @@
-"""Per-ID camera events backed by local OSM geometry, without control outputs."""
+"""Offline per-camera events from provider metadata and measured GPS approach.
+
+No map or network is required. Direction and a narrow approach corridor reject
+opposing and laterally separated cameras; point records cannot prove which of
+closely parallel same-direction roads a vehicle occupies. Distances are signed
+local projections, not invented road-route lengths.
+"""
 from __future__ import annotations
 
 import hashlib
 import math
 from dataclasses import dataclass
 
-from openpilot.sunnypilot.mapd.camera_road_graph import xy
-from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera
+from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, EARTH_RADIUS_M
+
+LATERAL_CORRIDOR_M = 25.0
+HEADING_TOLERANCE_DEG = 45.0
+LOOKAHEAD_M = 5000.0
+APPROACH_MOVEMENT_M = 2.0
+APPROACH_PROGRESS_M = 1.0
+PASS_DISTANCE_M = 20.0
+
+
+def xy(point, origin):
+  return (math.radians(point[1] - origin[1]) * EARTH_RADIUS_M * math.cos(math.radians(origin[0])),
+          math.radians(point[0] - origin[0]) * EARTH_RADIUS_M)
+
+
+def angle_difference(a, b):
+  return abs((a - b + 180) % 360 - 180)
+
+
+def projection(vector, heading):
+  radians = math.radians(heading)
+  x, y = vector
+  return x * math.sin(radians) + y * math.cos(radians), x * math.cos(radians) - y * math.sin(radians)
 
 
 @dataclass(frozen=True)
@@ -21,8 +48,6 @@ class CameraSelection:
 
 
 def camera_identity(camera):
-  # Provider labels are not globally unique. Preserve identity across speed
-  # edits while distinguishing collocated records with different directions.
   value = f'{camera.camera_type}|{camera.source_id or ""}|{camera.latitude:.7f}|{camera.longitude:.7f}|{camera.direction_deg}|{camera.second_direction_deg}'
   return hashlib.sha256(value.encode('utf-8')).hexdigest()[:32]
 
@@ -38,6 +63,35 @@ def camera_gps_reliable(gps, now_s):
               0 <= now_s - gps.unixTimestampMillis * .001 <= 2)
 
 
+def travel_directions(camera, heading, *, filter_heading=True):
+  if camera.direction_type == 0:
+    return (heading,)  # Explicit all-directions metadata, not a missing bearing.
+  if camera.direction_type not in (1, 2):
+    return ()
+  directions = [d for d in (camera.direction_deg, camera.second_direction_deg)
+                if isinstance(d, (int, float)) and math.isfinite(d) and 0 <= d <= 360]
+  if camera.direction_type == 2:
+    directions += [(d + 180) % 360 for d in tuple(directions)]
+  return tuple(d for d in directions if not filter_heading or angle_difference(d, heading) <= HEADING_TOLERANCE_DEG)
+
+
+def camera_projection(camera, point, heading, travel_heading):
+  if angle_difference(travel_heading, heading) > HEADING_TOLERANCE_DEG:
+    return None
+  delta = xy((camera.latitude, camera.longitude), point)
+  ahead, lateral = projection(delta, travel_heading)
+  vehicle_ahead, _ = projection(delta, heading)
+  # Course is an angular measurement: a fixed lateral gate projected from it
+  # would amplify even 2 degrees of GPS noise into a false 31-m offset at900m.
+  # Provider direction supplies the fixed corridor; measured movement below
+  # independently confirms that we are approaching along it.
+  if abs(lateral) > LATERAL_CORRIDOR_M:
+    return None
+  if ahead * vehicle_ahead < 0:
+    return None
+  return ahead, lateral
+
+
 class CameraSpeedSource:
   def __init__(self):
     self.selection = CameraSelection()
@@ -47,88 +101,123 @@ class CameraSpeedSource:
     self._fix_time = None
     self._behind_fixes = 0
     self._travel_heading = None
+    self._pending = None
+    self._previous_projection = None
+    self._crossed = False
 
-  def update(self, cameras, graph, latitude, longitude, heading, *, gps_valid,
-             fix_time_s=None, now_s=None, reaction_distance_m=300, driver_override_id=''):
+  def _uncertain(self, reason):
+    self.selection = CameraSelection(state=self.selection.state, camera_id=self.selection.camera_id,
+                                     camera=self._camera, reason=reason)
+    self._behind_fixes = 0
+    self._pending = None
+    self._previous_projection = None
+    return self.selection
+
+  def update(self, cameras, latitude, longitude, heading, *, gps_valid,
+             fix_time_s=None, now_s=None, reaction_distance_m=300, driver_override_id='', road_graph=None):
     if reaction_distance_m not in range(50, 1001, 50):
       reaction_distance_m = 300
     point = (latitude, longitude)
     reliable = (gps_valid and all(isinstance(v, (float, int)) and math.isfinite(v) for v in (*point, heading, fix_time_s, now_s))
-                and -90 <= latitude <= 90 and -180 <= longitude <= 180 and 0 <= now_s - fix_time_s <= 2)
-    duplicate = reliable and self._fix_time == fix_time_s
+                and -90 <= latitude <= 90 and -180 <= longitude <= 180 and 0 <= heading <= 360 and
+                0 <= now_s - fix_time_s <= 2)
     if reliable and self._fix_time is not None and fix_time_s < self._fix_time:
       reliable = False
-    if not reliable or graph is None:
-      # Existing camera identity is retained; invalid never means proven pass.
-      self.selection = CameraSelection(state=self.selection.state, camera_id=self.selection.camera_id,
-                                       camera=self._camera, reason='gps_unreliable' if not reliable else 'road_graph_unavailable')
+    if not reliable:
       self._last_position = None
-      self._behind_fixes = 0
+      return self._uncertain('gps_unreliable')
+    if self._fix_time == fix_time_s:
       return self.selection
-    if duplicate:
-      return self.selection
-    previous_time = self._fix_time
+    previous_time, previous_point = self._fix_time, self._last_position
     self._fix_time = fix_time_s
-    if self._last_position is not None and math.hypot(*xy(point, self._last_position)) > min(100., 60 * (fix_time_s - previous_time) + 5):
-      self._last_position = point
-      self.selection = CameraSelection(state=self.selection.state, camera_id=self.selection.camera_id,
-                                       camera=self._camera, reason='position_jump')
-      self._behind_fixes = 0
-      return self.selection
     self._last_position = point
+    movement = math.hypot(*xy(point, previous_point)) if previous_point is not None else 0.
+    if previous_point is not None and movement > min(100., 60 * (fix_time_s - previous_time) + 5):
+      return self._uncertain('position_jump')
     if self.selection.state == 'PASSED':
       self._camera = None
+      self._pending = self._previous_projection = None
+      self._crossed = False
     if self._camera is not None:
       camera = self._camera
       identity = camera_identity(camera)
-      distance = graph.camera_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading)
-      if distance is None or distance < -20:
-        # Prove forward connectivity from the camera to the current fix, with
-        # current travel bearing. Parallel/stacked/branching paths fail closed.
-        behind = graph.camera_distance((camera.latitude, camera.longitude), self._travel_heading, point, heading)
-        if behind is not None and 20 < behind <= 1000:
+      if road_graph is None:
+        measured = camera_projection(camera, point, heading, self._travel_heading)
+      else:
+        distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading)
+        if distance is None:
+          if hasattr(road_graph, 'passed_distance'):
+            behind = road_graph.passed_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading)
+          else:
+            behind = road_graph.camera_distance((camera.latitude, camera.longitude), self._travel_heading, point, heading)
+          distance = -behind if behind is not None and behind > 0 else None
+        measured = None if distance is None else (distance, 0.)
+      if measured is None:
+        return self._uncertain('approach_corridor_lost')
+      distance, lateral = measured
+      if self._previous_projection is not None:
+        old_distance, old_lateral = self._previous_projection
+        if old_distance >= 0 and distance < 0 and movement >= .1:
+          # The measured forward segment actually crosses the camera's line.
+          fraction = old_distance / (old_distance - distance)
+          crossing_lateral = old_lateral + fraction * (lateral - old_lateral)
+          self._crossed |= abs(crossing_lateral) <= LATERAL_CORRIDOR_M
+      self._previous_projection = measured
+      if distance < -PASS_DISTANCE_M:
+        if self._crossed and movement >= .1:
           self._behind_fixes += 1
           if self._behind_fixes >= 2:
             self._completed.add(identity)
-            self.selection = CameraSelection('PASSED', identity, camera, -behind, False, True, 'route_passed')
+            self.selection = CameraSelection('PASSED', identity, camera, distance, False, True, 'gps_passed')
             return self.selection
-          self.selection = CameraSelection(self.selection.state, identity, camera, reason='awaiting_second_pass_fix')
-          return self.selection
+        else:
+          self._behind_fixes = 0
+        self.selection = CameraSelection(self.selection.state, identity, camera, reason='awaiting_second_pass_fix')
+        return self.selection
       self._behind_fixes = 0
-      if distance is None:
-        self.selection = CameraSelection(self.selection.state, identity, camera, reason='road_association_ambiguous')
+      if distance < 0:
+        self.selection = CameraSelection(self.selection.state, identity, camera, reason='awaiting_pass_distance')
         return self.selection
       state = 'DRIVER_OVERRIDE' if driver_override_id == identity or self.selection.state == 'DRIVER_OVERRIDE' else (
         'ACTIVE' if distance <= reaction_distance_m or self.selection.state == 'ACTIVE' else 'APPROACHING')
-      self.selection = CameraSelection(state, identity, camera, distance, True, False, 'route_associated')
+      self.selection = CameraSelection(state, identity, camera, distance, True, False, 'offline_approach')
       return self.selection
-    iterable = cameras.query(latitude, longitude, 5000) if isinstance(cameras, CameraSpatialIndex) else cameras
+    iterable = cameras.query(latitude, longitude, LOOKAHEAD_M) if isinstance(cameras, CameraSpatialIndex) else cameras
     candidates = []
     for camera in iterable:
-      # Native offset is applied downstream exactly once. A raw20 camera may
-      # legitimately become35; stock ACC minimum remains enforced by ICBM.
-      if not camera.allowed_auto_control or camera_identity(camera) in self._completed:
+      if not camera.allowed_auto_control:
         continue
-      if find_nearest_camera((camera,), latitude, longitude, heading) is None:
+      identity = camera_identity(camera)
+      if identity in self._completed:
         continue
-      directions = [camera.direction_deg] if camera.direction_deg is not None else []
-      if camera.second_direction_deg is not None:
-        directions.append(camera.second_direction_deg)
-      if camera.direction_type == 2:
-        directions += [(direction + 180) % 360 for direction in tuple(directions)]
-      if camera.direction_type == 0:
-        directions = [heading]
-      compatible = [d for d in directions if abs((d - heading + 180) % 360 - 180) <= 60]
-      if not compatible:
-        continue
-      travel_heading = min(compatible, key=lambda d: abs((d - heading + 180) % 360 - 180))
-      distance = graph.camera_distance(point, heading, (camera.latitude, camera.longitude), travel_heading)
-      if distance is not None and 0 <= distance <= 5000:
-        candidates.append((distance, camera, travel_heading))
+      for direction in travel_directions(camera, heading, filter_heading=road_graph is None):
+        if road_graph is None:
+          measured = camera_projection(camera, point, heading, direction)
+        else:
+          distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), direction)
+          measured = None if distance is None else (distance, 0.)
+        if measured is not None and 0 <= measured[0] <= LOOKAHEAD_M:
+          candidates.append((measured[0], identity, camera, direction, measured))
     if not candidates:
-      self.selection = CameraSelection(reason='no_unambiguous_camera')
+      self._pending = None
+      self.selection = CameraSelection(reason='no_camera')
       return self.selection
-    distance, self._camera, self._travel_heading = min(candidates, key=lambda item: item[0])
-    self.selection = CameraSelection('ACTIVE' if distance <= reaction_distance_m else 'APPROACHING',
-                                     camera_identity(self._camera), self._camera, distance, True, False, 'route_associated')
+    distance, identity, camera, direction, measured = min(candidates, key=lambda item: (item[0], item[1]))
+    pending = self._pending
+    if pending is not None and pending[0] == identity and angle_difference(pending[1], direction) <= HEADING_TOLERANCE_DEG:
+      _, _, first_point, first_distance = pending
+      displacement = xy(point, first_point)
+      forward_motion, lateral_motion = projection(displacement, heading)
+      if (math.hypot(*displacement) >= APPROACH_MOVEMENT_M and first_distance - distance >= APPROACH_PROGRESS_M and
+          forward_motion >= APPROACH_MOVEMENT_M and abs(lateral_motion) <= LATERAL_CORRIDOR_M):
+        self._camera, self._travel_heading = camera, direction
+        self._pending = None
+        self._crossed = False
+        self._previous_projection = measured
+        self.selection = CameraSelection('ACTIVE' if distance <= reaction_distance_m else 'APPROACHING',
+                                         identity, camera, distance, True, False, 'offline_approach')
+        return self.selection
+    if pending is None or pending[0] != identity or angle_difference(pending[1], direction) > HEADING_TOLERANCE_DEG or distance > pending[3] + 3:
+      self._pending = (identity, direction, point, distance)
+    self.selection = CameraSelection(reason='confirming_approach')
     return self.selection

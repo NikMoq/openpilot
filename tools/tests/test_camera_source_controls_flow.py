@@ -107,7 +107,18 @@ def test_source_wire_controls_pass_and_new_equal_limit(map_pipeline, control, mo
   lmd, _ = publish(bkm_row(18059, 250) + bkm_row(18059, 500))
   c.sm['liveMapDataSP'] = lmd
   c.sm.recv_time['liveMapDataSP'] = time.monotonic()
-  assert lmd.speedCameraControlEventId != first_id
+  assert not lmd.speedCameraControlValid
+  assert update(c) == pytest.approx(100/3.6)
+  # Each camera, including an equal-limit successor, needs its own measured
+  # two-fix approach. Do not treat a single new fix as confirmed selection.
+  clock[0] += 1
+  gps.latitude = latitude(320)
+  gps.unixTimestampMillis = int(clock[0]*1000)
+  instance.last_position.latitude = gps.latitude
+  lmd, _ = publish(bkm_row(18059, 250) + bkm_row(18059, 500))
+  c.sm['liveMapDataSP'] = lmd
+  c.sm.recv_time['liveMapDataSP'] = time.monotonic()
+  assert lmd.speedCameraControlValid and lmd.speedCameraControlEventId != first_id
   assert update(c) == pytest.approx(75/3.6)
   plan = runtime.publish()
   assert plan.speedCameraControl.eventId == lmd.speedCameraControlEventId

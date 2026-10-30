@@ -32,15 +32,6 @@ QString cameraStatus(const QString &status) {
   return status;  // Preserve unknown technical diagnostics.
 }
 
-QString cameraRoadStatus(const QString &status) {
-  if (status.isEmpty() || status == "missing" || status.contains("missing")) return QObject::tr("Offline road geometry required");
-  if (status.contains("stale")) return QObject::tr("Update offline road geometry");
-  if (status.contains("gps") || status == "position_jump") return QObject::tr("Waiting for reliable GPS");
-  if (status.contains("ambiguous")) return QObject::tr("Road association uncertain");
-  if (status == "route_associated" || status == "ready" || status == "no_camera" || status == "route_passed") return QObject::tr("Ready");
-  return QObject::tr("Offline road geometry unavailable");
-}
-
 void cameraButtonSymbols(OptionControlSP *control) {
   // Inter contains these glyphs; the full-width variants need a system fallback font.
   for (auto *button : control->findChildren<QPushButton *>()) {
@@ -201,13 +192,11 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
   speed_camera_updated = new LabelControlSP(tr("Last Update"));
   speed_camera_version = new LabelControlSP(tr("Database Version / Hash"));
   speed_camera_error = new LabelControlSP(tr("Last Error"));
-  speed_camera_graph_status = new LabelControlSP(tr("Road Matching Status"));
   list->addItem(speed_camera_status);
   list->addItem(speed_camera_count);
   list->addItem(speed_camera_updated);
   list->addItem(speed_camera_version);
   list->addItem(speed_camera_error);
-  list->addItem(speed_camera_graph_status);
 
   speed_camera_update = new PushButtonSP(tr("Update Database"), 720);
   connect(speed_camera_update, &QPushButton::clicked, this, [this]() {
@@ -308,8 +297,6 @@ void SpeedLimitSettings::refresh() {
 
   const QString status = QString::fromStdString(params.get("SpeedCameraDatabaseStatus"));
   speed_camera_reaction_distance->setLabel(tr("%1 m").arg(QString::fromStdString(params.get("SpeedCameraReactionDistance"))));
-  const QString graph_status = QString::fromStdString(params.get("SpeedCameraRoadGraphStatus"));
-  speed_camera_graph_status->setText(cameraRoadStatus(graph_status));
   speed_camera_status->setText(cameraStatus(status));
   const QString count = QString::fromStdString(params.get("SpeedCameraDatabaseCount"));
   speed_camera_count->setText(count.isEmpty() ? "0" : count);
