@@ -116,7 +116,8 @@ void HudRendererSP::updateState(const UIState &s) {
   const bool fresh_plan = sm.alive("longitudinalPlanSP") && sm.valid("longitudinalPlanSP") &&
                           nanos_since_boot() - sm.rcv_time("longitudinalPlanSP") < 2500000000ULL;
   const bool requested_camera = params.getBool("SpeedCameraControlEnabled");
-  const bool effective_camera = requested_camera && (lp_sp.getSpeedCameraControl().getEnabled() || (!fresh_plan && cameraMode));
+  // Keep the native sign shell visible while the requested source starts or has no camera.
+  const bool effective_camera = requested_camera;
   updateCameraPresentation(lp_sp.getSpeedCameraControl(), effective_camera,
                            fresh_plan, speedConv);
 
@@ -273,17 +274,17 @@ void HudRendererSP::draw(QPainter &p, const QRect &surface_rect) {
     const int sign_height = 204;
     QRect sign_rect(sign_x, sign_y, sign_width, sign_height);
 
-    if (!cameraMode && speedLimitMode != SpeedLimitMode::OFF &&
+    if (!cameraMode && !cameraAwaitRoadPlan && speedLimitMode != SpeedLimitMode::OFF &&
         speedLimitAssistState == cereal::LongitudinalPlanSP::SpeedLimit::AssistState::PRE_ACTIVE) {
       speedLimitAssistFrame++;
       showSpeedLimit = speed_limit_assist_pre_active_pulse;
       drawSpeedLimitPreActiveArrow(p, sign_rect);
     } else {
       speedLimitAssistFrame = 0;
-      showSpeedLimit = cameraMode || speedLimitMode != SpeedLimitMode::OFF;
+      showSpeedLimit = speedLimitSignVisible();
     }
 
-    if (showSpeedLimit && !cameraAwaitRoadPlan && (!cameraMode || cameraSignVisible)) {
+    if (showSpeedLimit) {
       if (cameraLayoutActive) {
         const QRect card = cameraOverlayRect(surface_rect);
         const bool has_limit = speedLimitValid || speedLimitLastValid;
@@ -390,6 +391,7 @@ void HudRendererSP::updateCameraPresentation(cereal::LongitudinalPlanSP::SpeedCa
     return;
   }
   cameraMode = true;
+  cameraPlanFresh = fresh;
   cameraAwaitRoadPlan = false;
   cameraEventId = camera.getEventId();
   speedCameraControlState = QString::fromStdString(camera.getState());
@@ -409,7 +411,12 @@ void HudRendererSP::updateCameraPresentation(cereal::LongitudinalPlanSP::SpeedCa
 }
 
 QString HudRendererSP::cameraStatusText() const {
-  if (!cameraMode || !cameraSignVisible) return {};
+  if (!cameraMode) return {};
+  if (!cameraSignVisible) {
+    const bool russian = Params().get("LanguageSetting") == "main_ru";
+    return cameraPlanFresh ? (russian ? QStringLiteral("Камера не выбрана") : tr("No camera selected"))
+                           : (russian ? QStringLiteral("Нет свежих данных камеры") : tr("Camera data unavailable"));
+  }
   QStringList messages;
   if (speedCameraControlManualTakeover) {
     messages << (speedCameraControlReason.startsWith("awaiting_driver_feedback") ? tr("Waiting for ACC response") : tr("Driver override"));
@@ -609,17 +616,35 @@ void HudRendererSP::drawBottomDevUI(QPainter &p, int x, int y) {
   rw += drawBottomDevUIElement(p, rw, y, altitudeElement.value, altitudeElement.label, altitudeElement.units, altitudeElement.color);
 }
 
+bool HudRendererSP::speedLimitSignVisible() const {
+  return cameraMode || cameraAwaitRoadPlan || speedLimitMode != SpeedLimitMode::OFF;
+}
+
+QString HudRendererSP::speedLimitOffsetText() {
+  if (speedLimitValid || speedLimitLastValid) {
+    return std::isfinite(speedLimitOffset) && speedLimitOffset != 0
+             ? QString::number(std::nearbyint(speedLimitOffset)) : QString();
+  }
+  // Fixed values are already stored in the selected km/h or mph units.
+  // Without a raw limit, display a percentage as configured rather than
+  // pretending that it is an applied km/h/mph allowance.
+  bool type_ok = false, value_ok = false;
+  const int type = QString::fromStdString(params.get("SpeedLimitOffsetType")).toInt(&type_ok);
+  const int value = QString::fromStdString(params.get("SpeedLimitValueOffset")).toInt(&value_ok);
+  if (!type_ok || !value_ok || value == 0) return {};
+  if (type == static_cast<int>(SpeedLimitOffsetType::FIXED)) return QString::number(value);
+  if (type == static_cast<int>(SpeedLimitOffsetType::PERCENT)) return QString::number(value) + "%";
+  return {};
+}
+
 void HudRendererSP::drawSpeedLimitSigns(QPainter &p, QRect &sign_rect) {
   bool speedLimitWarningEnabled = speedLimitMode >= SpeedLimitMode::WARNING;  // TODO-SP: update to include SpeedLimitMode::ASSIST
   bool hasSpeedLimit = speedLimitValid || speedLimitLastValid;
   bool overspeed = hasSpeedLimit && std::nearbyint(speedLimitFinalLast) < std::nearbyint(speed);
   QString speedLimitStr = hasSpeedLimit ? QString::number(std::nearbyint(speedLimitLast)) : "---";
 
-  // Offset display text
-  QString speedLimitSubText = "";
-  if (speedLimitOffset != 0) {
-    speedLimitSubText = QString::number(std::nearbyint(speedLimitOffset));
-  }
+  // The configured allowance remains visible when no numeric limit is known.
+  const QString speedLimitSubText = speedLimitOffsetText();
 
   float speedLimitSubTextFactor = is_metric ? 0.5 : 0.6;
   if (speedLimitSubText.size() >= 3) {
@@ -674,7 +699,7 @@ void HudRendererSP::drawSpeedLimitSigns(QPainter &p, QRect &sign_rect) {
     drawCameraCountdown(p, circle_rect, badge_anchor);
 
     // Offset value in small circular box
-    if (!speedLimitSubText.isEmpty() && hasSpeedLimit) {
+    if (!speedLimitSubText.isEmpty()) {
       int offset_circle_size = circle_size * 0.4;
       int overlap = offset_circle_size * 0.25;
       QRect offset_circle_rect(
@@ -725,7 +750,7 @@ void HudRendererSP::drawSpeedLimitSigns(QPainter &p, QRect &sign_rect) {
     drawCameraCountdown(p, sign_rect, badge_anchor);
 
     // Offset value in small box
-    if (!speedLimitSubText.isEmpty() && hasSpeedLimit) {
+    if (!speedLimitSubText.isEmpty()) {
       int offset_box_size = sign_rect.width() * 0.4;
       int overlap = offset_box_size * 0.25;
       QRect offset_box_rect(

@@ -32,6 +32,7 @@ private:
   bool cameraMode = false;
   bool cameraAwaitRoadPlan = false;
   bool cameraSignVisible = false;
+  bool cameraPlanFresh = false;
   std::string cameraEventId;
   camera_ui::Countdown cameraCountdown;
   std::optional<int> cameraRemaining;
@@ -44,6 +45,8 @@ private:
   void drawStandstillTimer(QPainter &p, int x, int y);
   bool pulseElement(int frame);
   void drawSmartCruiseControlOnroadIcon(QPainter &p, const QRect &surface_rect, int x_offset, int y_offset, std::string name);
+  bool speedLimitSignVisible() const;
+  QString speedLimitOffsetText();
   void drawSpeedLimitSigns(QPainter &p, QRect &sign_rect);
   void drawUpcomingSpeedLimit(QPainter &p, const QRect &surface_rect);
   void drawSpeedCameraWarning(QPainter &p, const QRect &surface_rect);

@@ -76,6 +76,35 @@ public:
     hud.updateCameraPresentation(camera.asReader(), false, true, 3.6f);
     assert(!hud.cameraAwaitRoadPlan && hud.speedLimitLast == 20);
   }
+  static void verifyPlaceholder() {
+    Params prefs;
+    prefs.put("SpeedLimitOffsetType", "1");
+    prefs.put("SpeedLimitValueOffset", "15");
+    HudRendererSP hud;
+    hud.is_metric = true;
+    hud.speedLimitMode = SpeedLimitMode::OFF;
+    hud.speedLimitLast = 20;
+    hud.speedLimitLastValid = true;
+    capnp::MallocMessageBuilder message;
+    auto camera = message.initRoot<cereal::LongitudinalPlanSP::SpeedCameraControl>();
+    camera.setEnabled(true);
+    camera.setState("inactive");
+    hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+    assert(hud.speedLimitSignVisible() && !hud.cameraSignVisible && !hud.cameraRemaining);
+    assert(!hud.speedLimitLastValid && hud.speedLimitLast == 0);
+    assert(hud.speedLimitOffsetText() == "15");
+    prefs.put("SpeedLimitOffsetType", "2");
+    assert(hud.speedLimitOffsetText() == "15%");
+    hud.updateCameraPresentation(camera.asReader(), true, false, 3.6f);
+    assert(hud.speedLimitSignVisible() && !hud.cameraSignVisible && !hud.cameraRemaining);
+    assert(hud.speedLimitOffsetText() == "15%");
+    hud.updateCameraPresentation(camera.asReader(), false, false, 3.6f);
+    assert(hud.cameraAwaitRoadPlan && hud.speedLimitSignVisible());
+    assert(!hud.speedLimitLastValid && hud.speedLimitLast == 0);
+    prefs.put("SpeedLimitOffsetType", "0");
+    assert(hud.speedLimitOffsetText().isEmpty());
+    prefs.put("SpeedLimitOffsetType", "1");
+  }
   static void capture(const QString &path, double distance, int threshold, const char *state,
                       bool countdown, bool fresh, float raw = 20 / 3.6f, const char *reason = "", float offset = 15 / 3.6f) {
     HudRendererSP hud;
@@ -86,7 +115,14 @@ public:
     hud.speedLimitAssistActive = false;
     hud.longOverride = hud.carControlEnabled = false;
     hud.pcmCruiseSpeed = true;
-    hud.speedLimitMode = SpeedLimitMode::ASSIST;
+    hud.speedLimitMode = SpeedLimitMode::OFF;  // Camera display must not depend on ordinary SLA mode.
+    hud.reversing = hud.hideVEgoUI = hud.roadName = false;
+    hud.smartCruiseControlVisionEnabled = hud.smartCruiseControlMapEnabled = false;
+    hud.greenLightAlert = hud.leadDepartAlert = hud.standstillTimer = hud.isStandstill = false;
+    hud.showTurnSignals = false;
+    hud.devUiInfo = 0;
+    hud.speedLimitAheadValid = false;
+    hud.speedLimitAssistState = cereal::LongitudinalPlanSP::SpeedLimit::AssistState::INACTIVE;
     capnp::MallocMessageBuilder message;
     auto camera = message.initRoot<cereal::LongitudinalPlanSP::SpeedCameraControl>();
     camera.setEnabled(true);
@@ -110,13 +146,15 @@ public:
     painter.setPen(QPen(QColor(190, 190, 190), 6));
     painter.drawLine(340, 1080, 870, 430);
     painter.drawLine(1580, 1080, 1050, 430);
-    hud.drawSetSpeedSP(painter, image.rect());
-    hud.drawCurrentSpeedSP(painter, image.rect());
-    QRect sign(280, 45, 200, 204);
-    if (hud.cameraSignVisible) hud.drawSpeedLimitSigns(painter, sign);
-    hud.drawCameraStatus(painter, sign);
+    // Exercise the real outer HUD gate. Calling only drawSpeedLimitSigns missed
+    // the regression where the sign painter existed but draw() never called it.
+    hud.draw(painter, image.rect());
     painter.end();
     assert(image.save(path));
+    const QColor ring = image.pixelColor(380, 240);
+    if (!(ring.red() > 220 && ring.green() < 40 && ring.blue() < 40))
+      qWarning() << path << ring;
+    assert(ring.red() > 220 && ring.green() < 40 && ring.blue() < 40);
   }
 };
 
@@ -141,6 +179,15 @@ int main(int argc, char **argv) {
     QFontDatabase::addApplicationFont(fonts.absoluteFilePath(font));
   }
   CameraUiFixture::verifyTransitions();
+  CameraUiFixture::verifyPlaceholder();
+  Params placeholder_params;
+  placeholder_params.put("SpeedLimitOffsetType", "1");
+  placeholder_params.put("SpeedLimitValueOffset", "15");
+  CameraUiFixture::capture(output + "/placeholder-main-hud.png", 0, 300, "inactive", false, true, 0);
+  CameraUiFixture::capture(output + "/active-main-hud.png", 300, 300, "active", true, true, 60 / 3.6f);
+  placeholder_params.put("SpeedLimitOffsetType", "2");
+  CameraUiFixture::capture(output + "/placeholder-percent-main-hud.png", 0, 300, "inactive", false, false, 0);
+  placeholder_params.put("SpeedLimitOffsetType", "1");
   CameraUiFixture::capture(output + "/threshold-1000.png", 1000, 1000, "active", true, true);
   CameraUiFixture::capture(output + "/threshold-300.png", 300, 300, "active", true, true);
   CameraUiFixture::capture(output + "/countdown-149.png", 149, 300, "active", true, true);
