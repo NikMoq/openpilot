@@ -10,8 +10,6 @@
 #include <QJsonDocument>
 #include <QLabel>
 
-#include "selfdrive/ui/sunnypilot/qt/widgets/drive_stats_data.h"
-
 class DriveStats : public QFrame {
   Q_OBJECT
 
@@ -21,15 +19,14 @@ public:
 private:
   void showEvent(QShowEvent *event) override;
   void updateStats();
-  void refreshLocal();
   inline QString getDistanceUnit() const { return metric_ ? tr("KM") : tr("Miles"); }
 
   bool metric_;
-  DriveStatsData::Snapshot local_stats_;
-  bool have_local_ = false;
-  QLabel *source_label_;
+  QJsonDocument stats_;
   struct StatsLabels {
     QLabel *routes, *distance, *distance_unit, *hours;
   } all_, week_;
 
+private slots:
+  void parseResponse(const QString &response, bool success);
 };

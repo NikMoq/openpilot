@@ -1,0 +1,18 @@
+{
+  "status": "OFFLINE_UI_VALIDATED",
+  "cause": "Unrelated local trip statistics imported with authorized dev Qt sources",
+  "introduced_upstream_commit": "e26df20584826f3ebaeae4a5d780a51c0a0a61a5",
+  "stock_source_commit": "db2c35a9a8e1c5c039a787fd6cb8d78e9cbc3914",
+  "stock_sources_byte_identical": true,
+  "arm_ui_sha256": "a3fa2f12d914cc49d81742a54e599c9f1414d8b0ce080fa79a66b6de5a1ef465",
+  "verified_build_inputs": 285,
+  "qt_validation": "Actual DriveStats parseResponse and TripsPanel: all-time 12/160/4, week 3/32/1; label widths and screenshots checked; prior HUD/settings preview assertions passed",
+  "removed": [
+    "drive_stats_data.h local JSON reader",
+    "local refresh timer",
+    "custom footer and two translations"
+  ],
+  "camera_control_changed": false,
+  "device_validation": false,
+  "user_trip_data_deleted": false
+}

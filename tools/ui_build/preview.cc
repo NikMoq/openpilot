@@ -19,6 +19,8 @@
 #include "selfdrive/ui/sunnypilot/qt/onroad/hud.h"
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h"
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal_panel.h"
+#include "selfdrive/ui/sunnypilot/qt/widgets/drive_stats.h"
+#include "selfdrive/ui/sunnypilot/qt/offroad/settings/trips_panel.h"
 
 class CameraUiFixture {
 public:
@@ -386,6 +388,44 @@ int main(int argc, char **argv) {
   for (int value = 950; value >= 50; value -= 50) { minus->click(); capture(value); }
   minus->click(); capture(50);
   assert(params.get("SpeedLimitValueOffset") == "15");
+  // Both stock trip views share the original API-backed DriveStats widget.
+  // Feed its actual Qt response slot, with no dongle/request object or network.
+  params.remove("DongleId");
+  const QString trip_response = R"({"all":{"routes":12,"distance":100,"minutes":240},"week":{"routes":3,"distance":20,"minutes":60}})";
+  auto verify_stock_stats = [&](DriveStats *stats) {
+    assert(stats);
+    assert(QMetaObject::invokeMethod(stats, "parseResponse", Qt::DirectConnection,
+                                    Q_ARG(QString, trip_response), Q_ARG(bool, true)));
+    settle();  // Let the stock layout resize labels after the response.
+    QStringList values;
+    for (auto *label : stats->findChildren<QLabel *>()) {
+      assert(label->property("type").toString() != "source");
+      if (label->property("type").toString() == "number") {
+        values << label->text();
+        assert(label->width() >= label->fontMetrics().horizontalAdvance(label->text()));
+      }
+    }
+    assert(values == QStringList({"12", "160", "4", "3", "32", "1"}));
+  };
+  DriveStats home_stats;
+  home_stats.setStyleSheet(home_stats.styleSheet() + " QLabel { color: white; }");
+  home_stats.setFont(QFont("Inter"));
+  home_stats.resize(900, 900);
+  home_stats.show(); settle();
+  verify_stock_stats(&home_stats);
+  assert(home_stats.grab().save(output + "/stock-home-trip-statistics.png"));
+  home_stats.hide();
+  QStackedWidget stock_trips_canvas;
+  stock_trips_canvas.setStyleSheet(panel.styleSheet());
+  stock_trips_canvas.setFont(QFont("Inter"));
+  auto *stock_trips = new TripsPanel(&stock_trips_canvas);
+  stock_trips_canvas.addWidget(stock_trips);
+  stock_trips_canvas.resize(1800, 1000);
+  stock_trips_canvas.show(); settle();
+  verify_stock_stats(stock_trips->findChild<DriveStats *>());
+  assert(stock_trips_canvas.grab().save(output + "/stock-trips-panel.png"));
+  stock_trips_canvas.hide();
+
   QFile result(output + "/result.json");
   assert(result.open(QIODevice::WriteOnly));
   result.write(QJsonDocument(QJsonObject{{"actual_native_sign", true}, {"same_sign_offset_preserved", true},
