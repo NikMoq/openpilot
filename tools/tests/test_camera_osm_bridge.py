@@ -93,6 +93,20 @@ def test_turning_branch_is_not_guessed(tmp_path):
   assert bridge.snapshot.camera_distance(point(),0,point(900),0) is None
 
 
+@pytest.mark.parametrize('vehicle,camera', [(-5.,5.),(-50.,0.),(0.,50.)])
+def test_distinct_packed_ways_on_unique_continuation_associate_at_joint(tmp_path,vehicle,camera):
+  tile(tmp_path,[[point(-100),point(0)],[point(0),point(1500)]])
+  bridge = load(tmp_path)
+  assert bridge.snapshot.camera_distance(point(vehicle),0,point(camera),0) == pytest.approx(camera-vehicle,abs=.01)
+
+
+def test_near_joint_branch_is_not_treated_as_unique_continuation(tmp_path):
+  tile(tmp_path,[[point(-100),point(0)],[point(0),point(1500)],[point(0),point(1500,500)]])
+  bridge = load(tmp_path)
+  assert bridge.snapshot.associate(point(-5),0) is None
+  assert bridge.snapshot.camera_distance(point(-50),0,point(5),0) is None
+
+
 def test_distinct_crossing_polylines_do_not_acquire_node_connectivity(tmp_path):
   tile(tmp_path,[[point(-100),point(1500)],[point(300,-500),point(300,500)]])
   bridge = load(tmp_path)

@@ -254,6 +254,19 @@ class SpeedLimitResolver:
     self.camera_display_raw_limit = self.camera_display_offset = 0.0
     self.camera_target_below_minimum = False
 
+    if self._camera_requested:
+      # Camera-only authority was requested but is unavailable for these
+      # CarParams. Do not silently substitute road limits or cached road data.
+      self.speed_limit = self.speed_limit_last = 0.0
+      self.speed_limit_final = self.speed_limit_final_last = 0.0
+      self.speed_limit_offset = self.distance = 0.0
+      self.source = SpeedLimitSource.none
+      self._camera_final_hold = None
+      for source in ALL_SOURCES:
+        self._reset_limit_sources(source)
+      self.frame += 1
+      return
+
     self.speed_limit, self.distance, self.source = self._resolve_limit_sources(sm)
     self.speed_limit_offset = self._get_speed_limit_offset()
 

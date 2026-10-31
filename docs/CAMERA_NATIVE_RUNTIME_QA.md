@@ -52,3 +52,7 @@ native modules into a new output directory, and its generated runner passed
 26 override/runtime tests. This includes stable held-button release with no later
 feedback change, delayed final feedback, and actual SCC-V geometry changing stock
 speed without rewriting the remembered manual target.
+
+The core compatibility plugin also selects camera OFF for the original road-only
+suite and restores the preceding disposable-container value afterward. This
+prevents retained camera Params from changing which authority that suite tests.

@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-31",
+  "base_commit": "e3b53707e72994e01c2194c725ef7a3717916aca",
+  "status": "OFFLINE_REGRESSION_VALIDATED",
+  "fixes": [
+    {
+      "path": "sunnypilot/mapd/camera_osm_bridge.py",
+      "issue": "Distinct packed ways at an exact shared endpoint were always treated as rival roads",
+      "change": "Accept only unique directed continuation, excluding immediate reversal; preserve rejection of branches and parallel roads",
+      "before_evidence": "Three packed-tile near-joint regression cases failed before change; pass after"
+    },
+    {
+      "path": "sunnypilot/selfdrive/controls/lib/speed_limit/speed_limit_resolver.py",
+      "issue": "Requested but incompatible camera control fell through to ordinary car/OSM limits",
+      "change": "Clear current and cached constraints and candidates, return without road fallback; explicitly disabled camera preserves native road-mode behavior"
+    }
+  ],
+  "diagnostics": "Existing once-per-second speed_target_diagnostic now records SCC active/enabled and camera requested/compatible/mode; no new UI statuses",
+  "tests": {
+    "packed_bridge": "30 passed",
+    "resolver_integration": "22 passed",
+    "offline_camera_suites": "985 passed, 8 skipped in 54.28s",
+    "native_params_ipc_core_sla_runtime": "93 passed in 33.99s",
+    "signed_release_preflight": "PASS",
+    "ui_binary_sha256_unchanged": "a3fa2f12d914cc49d81742a54e599c9f1414d8b0ce080fa79a66b6de5a1ef465"
+  },
+  "test_isolation_note": "Original road-only suite explicitly disables camera flag and restores prior disposable-container value, avoiding retained test Params affecting its selected mode",
+  "confirmed_behavior": "With SCCV/SCCM off, enabled ICBM still tracks preserved driver/virtual cruise. It can change native ACC even with selected source cruise and no limiter. This behavior was not changed.",
+  "device_connection": "Unavailable on 2026-10-31; no device writes or road observations",
+  "unresolved": [
+    "Actual source of reported ACC setpoint movement requires synchronized speed_target_diagnostic and native/virtual values",
+    "Actual missing-camera event can also depend on GPS/LLK, installed packed tile location/coverage, branch geometry and metadata; no claim these fixes resolve every route"
+  ]
+}

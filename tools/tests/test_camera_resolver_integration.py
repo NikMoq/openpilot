@@ -394,12 +394,45 @@ def test_scc_feedback_after_camera_button_release_cannot_rewrite_pre_camera_base
   assert runtime.helper.v_cruise_kph == 100
 
 
-def test_disabled_camera_has_no_effect_and_ordinary_sla_confirmation_remains(control):
+def test_unrequested_camera_preserves_ordinary_sla_confirmation(control, monkeypatch):
   c = control
+  monkeypatch.setitem(Params.values, 'SpeedCameraControlEnabled', '0')
   c.planner.camera_compatible = False
   assert update(c) == pytest.approx(100/3.6)
   assert c.resolver.speed_limit == pytest.approx(20/3.6)  # ordinary OSM restored, not cameras
   assert c.sla.state != c.states.active
+
+
+def test_incompatible_requested_camera_cannot_fall_back_to_road_or_cached_limit(control):
+  c = control
+  c.planner.camera_compatible = False
+  # Simulate positive road state already retained before compatibility failed.
+  c.resolver.speed_limit = c.resolver.speed_limit_last = 60/3.6
+  c.resolver.speed_limit_final = c.resolver.speed_limit_final_last = 75/3.6
+  c.resolver.speed_limit_offset = 15/3.6
+  c.resolver.distance = 120.
+  c.resolver._camera_final_hold = 75/3.6
+  for source in c.resolver.limit_solutions:
+    c.resolver.limit_solutions[source] = 60/3.6
+    c.resolver.distance_solutions[source] = 120.
+  assert Params.values['SpeedLimitMode'] == 3
+  assert c.lmd.speedLimitValid and c.sm['carStateSP'].speedLimit > 0
+  for _ in range(3):
+    assert update(c) == pytest.approx(100/3.6)
+    assert c.planner.source == 'cruise'
+    assert c.sla.output_v_target == 255.
+    assert not c.resolver.camera_mode
+    assert not c.resolver.camera.output.automatic
+    assert c.resolver.camera.output.reason == 'disabled'
+    assert not c.resolver.speed_limit_valid and not c.resolver.speed_limit_last_valid
+    assert c.resolver.speed_limit_final == c.resolver.speed_limit_final_last == 0.
+    assert c.resolver.speed_limit_offset == c.resolver.distance == 0.
+    assert c.resolver.source == 0
+    assert all(limit == 0. for limit in c.resolver.limit_solutions.values())
+    assert all(distance == 0. for distance in c.resolver.distance_solutions.values())
+    assert c.resolver._camera_final_hold is None
+  c.planner.camera_compatible = True
+  assert update(c) == pytest.approx(75/3.6)
 
 
 def test_camera_authority_independent_ordinary_sla_mode_and_warning_toggle(control, monkeypatch):

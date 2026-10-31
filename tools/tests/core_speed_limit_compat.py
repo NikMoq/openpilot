@@ -17,6 +17,25 @@ def pytest_configure(config):
     raise pytest.UsageError('core compatibility runner requires explicit disposable Linux runtime opt-in')
 
 
+@pytest.fixture(autouse=True)
+def ordinary_speed_limit_mode(request):
+  # The original road-only suite predates the camera switch. Reused disposable
+  # containers may retain it from native camera scenarios; select this suite's
+  # intended mode explicitly and restore the previous test-container setting.
+  path = str(getattr(request.module, '__file__', '')).replace('\\', '/')
+  if '/speed_limit/tests/' not in path:
+    yield
+    return
+  from openpilot.sunnypilot.mapd.camera_updater import CameraParams
+  params = CameraParams()
+  previous = params.get('SpeedCameraControlEnabled')
+  params.put('SpeedCameraControlEnabled', '0')
+  try:
+    yield
+  finally:
+    params.put('SpeedCameraControlEnabled', previous)
+
+
 def pytest_collection_modifyitems(items):
   # Windows may materialize the tracked opendbc symlink as a plain text file.
   # Resolve only its original source-data target; no interface behavior is stubbed.

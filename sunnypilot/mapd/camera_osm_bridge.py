@@ -119,9 +119,19 @@ class OfflineRoadSnapshot:
     distance,_,edge,along = candidates[0]
     for rival_distance,_,rival,_ in candidates[1:]:
       same_road = rival.way == edge.way and bool({rival.start,rival.end}.intersection((edge.start,edge.end)))
+      same_road = same_road or self._unique_continuation(edge,rival) or self._unique_continuation(rival,edge)
       if not same_road and rival_distance <= distance+8:
         return None
     return edge,along
+
+  def _unique_continuation(self, before, after):
+    # Packed tiles have no original OSM way ID. A metadata/geometry split is
+    # not a rival road when its exact shared endpoint has one forward choice.
+    # Apply the same no-branch rule as routing, excluding only immediate reverse.
+    if before.end != after.start:
+      return False
+    following = [edge for edge in self.outgoing.get(before.end, ()) if edge.end != before.start]
+    return len(following) == 1 and following[0].key == after.key
 
   def segment_covered(self, start, end):
     intervals = []

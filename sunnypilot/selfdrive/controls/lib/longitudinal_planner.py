@@ -105,9 +105,15 @@ class LongitudinalPlannerSP:
                                 final=self.resolver.speed_limit_final, finalLast=self.resolver.speed_limit_final_last,
                                 offset=self.resolver.speed_limit_offset, source=str(self.resolver.source)),
                   sla=dict(state=str(self.sla.state), active=self.sla.is_active, target=self.sla.output_v_target),
+                  scc=dict(visionEnabled=bool(getattr(self.scc.vision, 'is_enabled', False)),
+                           visionActive=bool(getattr(self.scc.vision, 'is_active', False)),
+                           mapEnabled=bool(getattr(self.scc.map, 'is_enabled', False)),
+                           mapActive=bool(getattr(self.scc.map, 'is_active', False))),
                   icbm=dict(valid=sm.valid['selfdriveStateSP'], alive=sm.alive['selfdriveStateSP'], state=str(icbm.state),
                             command=str(icbm.sendButton), target=icbm.vTarget),
                   camera=dict(state=str(self.camera.output.state), reason=self.camera.output.reason,
+                              requested=self.resolver._camera_requested, mode=self.resolver.camera_mode,
+                              compatible=self.camera_compatible,
                               raw=self.camera.output.raw_limit, eventId=self.camera.output.event_id,
                               belowStockMinimum=self.resolver.camera_target_below_minimum))
     cloudlog.info('speed_target_diagnostic %s', json.dumps(record, sort_keys=True))
