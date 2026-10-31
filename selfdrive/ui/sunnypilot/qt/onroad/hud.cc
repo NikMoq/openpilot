@@ -128,13 +128,8 @@ void HudRendererSP::updateState(const UIState &s) {
   // The sole retained bit permits an explicit position-lost notice after a
   // visible warning; it never retains a limit/distance or opens a new warning.
   const bool fresh_map = sm.alive("liveMapDataSP") && nanos_since_boot() - sm.rcv_time("liveMapDataSP") < 2500000000ULL;
-  cameraGpsWeak = fresh_map && (lmd.getSpeedCameraControlReason() == "gps_unreliable");
-  const bool position_lost = fresh_map && !lmd.getLocationValid();
-  const bool fresh_warning = fresh_map && sm.valid("liveMapDataSP") && lmd.getLocationValid() &&
-                             speedCameraAheadValid && std::isfinite(speedCameraAheadDistance) &&
-                             speedCameraAheadDistance >= 0 && speedCameraAheadDistance <= speedCameraAlertDistance;
-  cameraPositionLost = speedCameraEnabled && position_lost && (cameraWarningVisible || cameraPositionLost);
-  cameraWarningVisible = speedCameraEnabled && fresh_warning;
+  updateCameraWarningPresentation(lmd, fresh_map, sm.valid("liveMapDataSP"));
+  updateCameraDiagnosticText(nanos_since_boot() * 1e-9);
 
   static int reverse_delay = 0;
   bool reverse_allowed = false;
@@ -377,6 +372,28 @@ void HudRendererSP::drawSpeedCameraWarning(QPainter &p, const QRect &surface_rec
                     speedCameraAheadDistance, speedCameraSpeedLimit, is_metric, control, cameraPositionLost);
 }
 
+void HudRendererSP::updateCameraWarningPresentation(cereal::LiveMapDataSP::Reader map,
+                                                    bool fresh, bool valid) {
+  const QString reason = QString::fromStdString(map.getSpeedCameraControlReason());
+  cameraGpsWeak = fresh && reason == "gps_unreliable";
+  if (fresh && valid && reason == "odometry_passed") {
+    cameraWarningVisible = cameraPositionLost = false;
+    return;
+  }
+  const double distance = map.getSpeedCameraAheadDistance();
+  // Only the producer's explicitly retained identity may use speed-integrated
+  // distance without GPS. This renderer never integrates or selects a camera.
+  const bool odometry_warning = fresh && valid && reason == "odometry_tracking" &&
+                                map.getSpeedCameraAheadValid() && map.getSpeedCameraEventId().size() > 0 &&
+                                std::isfinite(distance) && distance >= 0;
+  const bool location_ready = map.getLocationValid() || odometry_warning;
+  const bool position_lost = fresh && !location_ready;
+  const bool fresh_warning = fresh && valid && location_ready && map.getSpeedCameraAheadValid() &&
+                             std::isfinite(distance) && distance >= 0 && distance <= speedCameraAlertDistance;
+  cameraPositionLost = speedCameraEnabled && position_lost && (cameraWarningVisible || cameraPositionLost);
+  cameraWarningVisible = speedCameraEnabled && fresh_warning;
+}
+
 int HudRendererSP::cameraReactionDistance() {
   return camera_ui::reactionDistance(QString::fromStdString(params.get("SpeedCameraReactionDistance")).toInt());
 }
@@ -439,7 +456,7 @@ void HudRendererSP::updateCameraCruisePresentation(cereal::LongitudinalPlanSP::R
                             plan.getSpeedLimit().getAssist().getActive();
 }
 
-QString HudRendererSP::cameraStatusText() const {
+QString HudRendererSP::cameraRawStatusText() const {
   if (!cameraMode) return {};
   const bool russian = Params().get("LanguageSetting") == "main_ru";
   auto text = [russian](const char *english, const char *ru) {
@@ -449,11 +466,15 @@ QString HudRendererSP::cameraStatusText() const {
   // that the current road is clear. An existing sign must not hide a failure.
   if (!cameraPlanFresh) return text("No planner data", "Нет плана камеры");
   const QString reason = speedCameraControlReason.section(':', 0, 0);
-  if (cameraGpsWeak || reason == "gps_unreliable") return text("Weak GPS", "Слабый GPS");
+  if ((cameraGpsWeak && !reason.startsWith("odometry_")) || reason == "gps_unreliable") {
+    return text("Weak GPS", "Слабый GPS");
+  }
   struct Status { const char *reason; const char *english; const char *ru; };
   static const Status statuses[] = {
     {"lmd_unreliable", "No camera data", "Нет данных камер"},
     {"localizer_unreliable", "No localization", "Нет локализации"},
+    {"odometry_tracking", "Speed-based distance", "Путь по скорости"},
+    {"odometry_unavailable", "No vehicle speed", "Нет скорости авто"},
     {"camera_control_unavailable", "Control unavailable", "Управление недоступно"},
     {"camera_contract_invalid", "Invalid camera data", "Ошибка данных камер"},
     {"offline_maps_loading", "Reading maps", "Чтение карт"},
@@ -493,7 +514,7 @@ QString HudRendererSP::cameraStatusText() const {
     status = text("Camera database error", "Ошибка базы камер");
   }
   if (status.isEmpty()) {
-    if (reason == "no_camera" || reason == "route_pass_proven" || speedCameraControlState == "passed") {
+    if (reason == "no_camera" || reason == "route_pass_proven" || reason == "odometry_passed" || speedCameraControlState == "passed") {
       status = reason == "no_camera" && cameraSignVisible ? text("Camera limit held", "Лимит удержан") : text("No cameras", "Камер нет");
     } else if (reason.isEmpty() || reason == "idle" || reason == "camera_limit" ||
                reason == "offline_approach" || reason == "matched") {
@@ -512,6 +533,74 @@ QString HudRendererSP::cameraStatusText() const {
     status += text("Below ACC minimum", "Ниже минимума ACC");
   }
   return status;
+}
+
+void HudRendererSP::clearCameraDiagnosticText() {
+  cameraDiagnosticText.clear();
+  cameraDiagnosticCandidate.clear();
+  cameraDiagnosticEventId.clear();
+  cameraDiagnosticFirstText.clear();
+  cameraDiagnosticCandidateSince = cameraDiagnosticUpdatedAt = -1.;
+  cameraDiagnosticDisplayedAt = cameraDiagnosticFirstSince = -1.;
+}
+
+void HudRendererSP::updateCameraDiagnosticText(double now_s) {
+  // Stabilize only explanatory text. Sign validity, distance and speed targets
+  // above continue to follow the current messages immediately.
+  if (!cameraMode || speedCameraControlState == "passed" || !std::isfinite(now_s) || now_s < 0) {
+    clearCameraDiagnosticText();
+    return;
+  }
+  if (now_s < cameraDiagnosticUpdatedAt ||
+      (!cameraEventId.empty() && cameraEventId != cameraDiagnosticEventId)) {
+    clearCameraDiagnosticText();
+    cameraDiagnosticEventId = cameraEventId;
+  }
+  cameraDiagnosticUpdatedAt = now_s;
+  const QString candidate = cameraRawStatusText();
+  if (!candidate.isEmpty() && candidate != cameraDiagnosticText) {
+    if (cameraDiagnosticFirstSince < 0) {
+      cameraDiagnosticFirstText = candidate;
+      cameraDiagnosticFirstSince = now_s;
+    }
+  } else {
+    cameraDiagnosticFirstText.clear();
+    cameraDiagnosticFirstSince = -1.;
+  }
+  if (candidate == cameraDiagnosticText) {
+    cameraDiagnosticCandidate.clear();
+    cameraDiagnosticCandidateSince = -1.;
+    return;
+  }
+  if (cameraDiagnosticCandidateSince < 0 || candidate != cameraDiagnosticCandidate) {
+    cameraDiagnosticCandidate = candidate;
+    cameraDiagnosticCandidateSince = now_s;
+  }
+  auto accept = [&](const QString &text) {
+    cameraDiagnosticText = text;
+    cameraDiagnosticDisplayedAt = now_s;
+    cameraDiagnosticCandidate.clear();
+    cameraDiagnosticCandidateSince = -1.;
+    cameraDiagnosticFirstText.clear();
+    cameraDiagnosticFirstSince = -1.;
+  };
+  const double stable_for = candidate.isEmpty() ? 1.0 : .7;
+  // mapd updates at 1 Hz. Candidate filtering alone would still alternate text
+  // every second, so each accepted diagnostic stays readable for at least 2 s.
+  const bool readable = cameraDiagnosticText.isEmpty() || now_s - cameraDiagnosticDisplayedAt + 1e-9 >= 2.;
+  if (readable && now_s - cameraDiagnosticCandidateSince + 1e-9 >= stable_for) {
+    accept(candidate);
+  } else if (readable && cameraDiagnosticFirstSince >= 0 &&
+             now_s - cameraDiagnosticFirstSince + 1e-9 >= 2.) {
+    // Continuous mixed failures must replace stale text too: otherwise an
+    // earlier "No cameras" could hide alternating GPS/localization failures.
+    const QString first = cameraDiagnosticFirstText;
+    accept(first);
+  }
+}
+
+QString HudRendererSP::cameraStatusText() const {
+  return cameraDiagnosticText;
 }
 
 void HudRendererSP::drawCameraStatus(QPainter &p, const QRect &sign_rect) {

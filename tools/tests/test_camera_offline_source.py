@@ -56,7 +56,7 @@ def test_ready_matched_graph_without_camera_keeps_honest_no_camera_reason():
 
 @pytest.mark.parametrize('localizer_ok,llk_gps_ok,accuracy,expected',[
   (False,True,3.,'localizer_unreliable'), (True,False,3.,'localizer_unreliable'),
-  (False,True,30.,'gps_unreliable')])
+  (False,True,120.,'gps_unreliable')])
 def test_good_raw_gps_distinguishes_localizer_failure(map_pipeline,localizer_ok,llk_gps_ok,accuracy,expected):
   instance,_,publish = map_pipeline
   publish(bkm_row(18059,700))
@@ -202,11 +202,131 @@ def test_gps_contract_uses_fresh_raw_accuracy_course_and_speed():
   gps = SimpleNamespace(latitude=55., longitude=37., bearingDeg=0., horizontalAccuracy=3.,
                         bearingAccuracyDeg=2., speed=20., unixTimestampMillis=NOW*1000, hasFix=True)
   assert camera_gps_reliable(gps, NOW)
-  for name, value in [('horizontalAccuracy', 30), ('bearingAccuracyDeg', 30), ('speed', 0), ('hasFix', False)]:
+  for name, value in [('horizontalAccuracy', 30.01), ('horizontalAccuracy', 120), ('bearingAccuracyDeg', 45.01), ('speed', 0), ('hasFix', False)]:
     changed = SimpleNamespace(**vars(gps))
     setattr(changed, name, value)
     assert not camera_gps_reliable(changed, NOW)
   assert not camera_gps_reliable(gps, NOW+3)
+  assert not camera_gps_reliable(gps, NOW-1)
+  for accuracy, bearing in [(25.,35.),(30.,45.)]:
+    changed = SimpleNamespace(**vars(gps))
+    changed.horizontalAccuracy, changed.bearingAccuracyDeg = accuracy,bearing
+    assert camera_gps_reliable(changed,NOW)
+
+
+def test_publisher_uses_reported_uncertainty_in_actual_packed_graph(map_pipeline):
+  instance,_,publish = map_pipeline
+  gps = instance.sm[instance.camera_gps_service]
+  gps.latitude,gps.longitude = point(0,25)
+  gps.bearingDeg,gps.horizontalAccuracy,gps.bearingAccuracyDeg = 40.,30.,45.
+  graph = instance.camera_osm_bridge.snapshot
+  assert graph.associate((gps.latitude,gps.longitude),gps.bearingDeg) is None
+  message,_ = publish(bkm_row(18059,700))
+  assert message.speedCameraControlValid
+  assert message.speedCameraControlDistance == pytest.approx(700,abs=.2)
+
+
+@pytest.mark.parametrize('control_type',[18059,18952])
+def test_publisher_retained_camera_uses_actual_can_distance_without_gps(map_pipeline,monkeypatch,control_type):
+  instance,_,publish = map_pipeline
+  module = sys.modules[type(instance).__module__]
+  clock = [500.]
+  monkeypatch.setattr(module.time,'monotonic',lambda: clock[0])
+  instance.sm['carState'] = SimpleNamespace(canValid=True,gearShifter='drive',vEgo=10.)
+  instance.sm.valid['carState'] = instance.sm.alive['carState'] = True
+  instance.sm.logMonoTime = {'carState':int(clock[0]*1e9)}
+  initial,_ = publish(bkm_row(control_type,30))
+  assert initial.speedCameraAheadValid
+  assert initial.speedCameraControlValid is (control_type == 18059)
+  identity = initial.speedCameraEventId
+  instance.sm[instance.camera_gps_service].hasFix = False
+  instance.sm['liveLocationKalman'].gpsOK = False
+  sent = []
+  instance.pm.send = lambda service,msg: sent.append(msg)
+  for remaining in (20.,10.,0.):
+    clock[0] += 1
+    instance.sm.logMonoTime['carState'] = int(clock[0]*1e9)
+    instance.publish()
+    envelope = sent[-1]
+    message = envelope.liveMapDataSP
+    assert not message.locationValid
+    if remaining:
+      assert envelope.valid and message.speedCameraAheadValid
+      assert message.speedCameraEventId == identity
+      assert message.speedCameraAheadDistance == pytest.approx(remaining,abs=.1)
+      assert message.speedCameraControlReason == 'odometry_tracking'
+      assert message.speedCameraControlValid is (control_type == 18059)
+      if control_type == 18059:
+        assert message.speedCameraControlEventId == identity
+        assert message.speedCameraControlDistance == pytest.approx(remaining,abs=.1)
+      else:
+        assert not message.speedCameraControlEventId
+    else:
+      assert not message.speedCameraAheadValid and not message.speedCameraControlValid
+      if control_type == 18059:
+        assert envelope.valid and message.speedCameraControlPassProven
+        assert message.speedCameraControlAutoControlAllowed
+        assert message.speedCameraControlState == 'PASSED'
+        assert message.speedCameraControlReason == 'odometry_passed'
+      else:
+        assert envelope.valid and message.speedCameraControlReason == 'odometry_passed'
+        assert not message.speedCameraControlEventId and not message.speedCameraControlPassProven
+        assert not message.speedCameraControlAutoControlAllowed
+        clock[0] += 1
+        instance.sm.logMonoTime['carState'] = int(clock[0]*1e9)
+        instance.publish()
+        assert sent[-1].liveMapDataSP.speedCameraControlReason != 'odometry_passed'
+
+
+def test_can_distance_without_initial_gps_camera_cannot_acquire_or_pass():
+  source = CameraSpeedSource()
+  for t in range(10):
+    source.update([camera()],*point(),0,gps_valid=False,fix_time_s=NOW+t,now_s=NOW+t)
+    selected = source.update_odometry((500.+t,50.),trusted_position=False)
+    assert not selected.camera_id and not selected.valid and not selected.pass_proven
+
+
+@pytest.mark.parametrize('camera_type',[18059,18952])
+def test_frozen_gps_fix_never_reanchors_can_remaining_distance(map_pipeline,monkeypatch,camera_type):
+  instance,_,publish = map_pipeline
+  module = sys.modules[type(instance).__module__]
+  gps = instance.sm[instance.camera_gps_service]
+  gps.unixTimestampMillis = 1_793_450_000_008  # /1000 rounds one ULP below *.001.
+  # Match the production Unix conversion exactly. Division can round one ULP
+  # below multiplication, making this nominally equal-time fixture future GPS.
+  unix = gps.unixTimestampMillis*.001
+  clock = [500.]
+  monkeypatch.setattr(module.time,'monotonic',lambda: clock[0])
+  monkeypatch.setattr(module.time,'time',lambda: unix+(clock[0]-500.))
+  assert camera_gps_reliable(gps,module.time.time())
+  instance.sm['carState'] = SimpleNamespace(canValid=True,gearShifter='drive',vEgo=10.)
+  instance.sm.valid['carState'] = instance.sm.alive['carState'] = True
+  instance.sm.logMonoTime = {'carState':int(clock[0]*1e9)}
+  first,_ = publish(bkm_row(camera_type,100))
+  assert first.speedCameraAheadDistance == pytest.approx(100,abs=.1)
+  sent = []
+  instance.pm.send = lambda service,msg: sent.append(msg)
+  for step in (1,2,3):
+    clock[0] += 1
+    instance.sm.logMonoTime['carState'] = int(clock[0]*1e9)
+    instance.publish()
+    message = sent[-1].liveMapDataSP
+    assert sent[-1].valid and message.speedCameraAheadValid
+    assert message.speedCameraAheadDistance == pytest.approx(100-step*10,abs=.1)
+    if camera_type == 18059:
+      assert message.speedCameraControlValid
+      assert message.speedCameraControlDistance == pytest.approx(100-step*10,abs=.1)
+
+
+def test_legacy_four_argument_graph_remains_compatible_with_reported_uncertainty():
+  class LegacyGraph:
+    def camera_distance(self,vehicle,heading,target,target_heading):
+      return (target[0]-vehicle[0])*6371000*math.pi/180
+  source = CameraSpeedSource()
+  for t,north in enumerate((0,10)):
+    result = source.update([camera()],*point(north),0,gps_valid=True,fix_time_s=NOW+t,now_s=NOW+t,
+                           road_graph=LegacyGraph(),vehicle_tolerance_m=30.,vehicle_heading_tolerance_deg=45.)
+  assert result.valid
 
 
 def test_explicit_all_direction_camera_tolerates_small_course_jitter():

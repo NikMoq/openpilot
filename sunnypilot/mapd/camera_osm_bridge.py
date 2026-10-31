@@ -74,18 +74,24 @@ class RoadEdge:
 
 
 class OfflineRoadSnapshot:
+  supports_vehicle_uncertainty = True
+
   def __init__(self, edges, bounds, anchor):
     self.edges = tuple(edges)
+    if len(self.edges) > MAX_LOCAL_EDGES:
+      raise ValueError('offline_map_edge_budget')
     self.bounds = tuple(bounds)
     self.anchor = anchor
     self.cells = {}
     self.outgoing = {}
+    self.incoming = {}
     self._association_cache = OrderedDict()
     self._route_key = None
     self._route_entries = {}
     index_references = 0
     for edge in self.edges:
       self.outgoing.setdefault(edge.start, []).append(edge)
+      self.incoming.setdefault(edge.end, []).append(edge)
       low = [math.floor(min(edge.start[i], edge.end[i])/.002) for i in (0, 1)]
       high = [math.floor(max(edge.start[i], edge.end[i])/.002) for i in (0, 1)]
       references = math.prod(high[i]-low[i]+1 for i in (0, 1))
@@ -101,21 +107,21 @@ class OfflineRoadSnapshot:
   def inside(self, point):
     return any(inside(bounds, point) for bounds in self.bounds)
 
-  def associate(self, point, heading, tolerance=12.):
+  def associate(self, point, heading, tolerance=12., heading_tolerance=35.):
     # Static camera projections recur for every GPS fix. Keep a small LRU;
     # snapshot geometry never changes, so a cached refusal is equally stable.
-    key = (tuple(point),heading,tolerance)
+    key = (tuple(point),heading,tolerance,heading_tolerance)
     if key in self._association_cache:
       value = self._association_cache.pop(key)
       self._association_cache[key] = value
       return value
-    value = self._associate_uncached(point,heading,tolerance)
+    value = self._associate_uncached(point,heading,tolerance,heading_tolerance)
     self._association_cache[key] = value
     if len(self._association_cache) > 256:
       self._association_cache.popitem(last=False)
     return value
 
-  def _associate_uncached(self, point, heading, tolerance=12.):
+  def _associate_uncached(self, point, heading, tolerance=12., heading_tolerance=35.):
     if not self.inside(point):
       return None
     lat, lon = point
@@ -132,7 +138,7 @@ class OfflineRoadSnapshot:
       along = max(0., min(edge.length, (x*vx+y*vy)/edge.length))
       distance = math.hypot(x-along*vx/edge.length, y-along*vy/edge.length)
       bearing = math.degrees(math.atan2(vx,vy)) % 360
-      if distance <= tolerance and angle_difference(bearing, heading) <= 35:
+      if distance <= tolerance and self._heading_matches(edge,point,bearing,heading,tolerance,heading_tolerance):
         candidates.append((distance, edge.key, edge, along))
     if not candidates:
       return None
@@ -144,6 +150,39 @@ class OfflineRoadSnapshot:
       if not same_road and rival_distance <= distance+8:
         return None
     return edge,along
+
+  def _heading_matches(self, edge, point, bearing, heading, tolerance, heading_tolerance=35.):
+    if angle_difference(bearing,heading) <= heading_tolerance:
+      return True
+    # A sparse polyline can encode a real bend as two coarse segments. Near
+    # their exact joint, compare the course with the joined local tangent too;
+    # keep the original segment's lateral and heading tests everywhere else.
+    for joint,before_side in ((edge.start,True),(edge.end,False)):
+      if math.hypot(*xy(point,joint)) > tolerance:
+        continue
+      incoming = self.incoming.get(joint,())
+      outgoing = self.outgoing.get(joint,())
+      # At most a continuation and its immediate reverse are admissible. This
+      # bounds lookup work and refuses merges/forks rather than choosing one.
+      if len(incoming) > 2 or len(outgoing) > 2:
+        continue
+      neighbors = incoming if before_side else outgoing
+      for neighbor in neighbors:
+        before,after = (neighbor,edge) if before_side else (edge,neighbor)
+        if not self._unique_continuation(before,after):
+          continue
+        preceding = [candidate for candidate in incoming if candidate.start != after.end]
+        if len(preceding) != 1 or preceding[0].key != before.key:
+          continue
+        ax,ay = xy(before.end,before.start)
+        bx,by = xy(after.end,after.start)
+        tx,ty = ax/before.length+bx/after.length,ay/before.length+by/after.length
+        if math.hypot(tx,ty) <= 1e-9:
+          continue  # Opposite/degenerate legs do not define a travel tangent.
+        tangent = math.degrees(math.atan2(tx,ty)) % 360
+        if angle_difference(tangent,heading) <= heading_tolerance:
+          return True
+    return False
 
   def _unique_continuation(self, before, after):
     # Packed tiles have no original OSM way ID. A metadata/geometry split is
@@ -178,13 +217,15 @@ class OfflineRoadSnapshot:
         return True
     return False
 
-  def camera_distance(self, point, heading, camera_point, camera_heading):
-    return self._distance_between(self.associate(point,heading),
+  def camera_distance(self, point, heading, camera_point, camera_heading, *, vehicle_tolerance_m=12., vehicle_heading_tolerance_deg=35.):
+    return self._distance_between(self.associate(point,heading,tolerance=min(30.,max(12.,vehicle_tolerance_m)),
+                                                heading_tolerance=min(45.,max(35.,vehicle_heading_tolerance_deg))),
                                   self.associate(camera_point,camera_heading,tolerance=25.))
 
-  def passed_distance(self, point, heading, camera_point, camera_heading):
+  def passed_distance(self, point, heading, camera_point, camera_heading, *, vehicle_tolerance_m=12., vehicle_heading_tolerance_deg=35.):
     return self._distance_between(self.associate(camera_point,camera_heading,tolerance=25.),
-                                  self.associate(point,heading))
+                                  self.associate(point,heading,tolerance=min(30.,max(12.,vehicle_tolerance_m)),
+                                                 heading_tolerance=min(45.,max(35.,vehicle_heading_tolerance_deg))))
 
   def _route(self, origin):
     edge,along = origin

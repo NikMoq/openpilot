@@ -42,6 +42,58 @@ def test_raw20_camera_uses_native_offset_before_stock_target_minimum(map_pipelin
   assert runtime.helper.v_cruise_kph == 100
 
 
+@pytest.mark.parametrize('can_speed', [0., 10.])
+def test_actual_source_can_distance_ends_warning_and_control_only_after_motion(map_pipeline, control, monkeypatch, can_speed):
+  instance, _, publish = map_pipeline
+  c = control
+  runtime = real_wire_controls(c, monkeypatch)
+  clock = [500.]
+  monkeypatch.setattr(time, 'monotonic', lambda: clock[0])
+  c.cs.canValid, c.cs.gearShifter, c.cs.vEgo = True, 'drive', can_speed
+  instance.sm['carState'] = c.cs
+  for sm in (instance.sm, c.sm):
+    sm.valid['carState'] = sm.alive['carState'] = True
+    sm.logMonoTime = {'carState': int(clock[0] * 1e9)}
+  c.sm.recv_time['carState'] = c.sm.recv_time['liveMapDataSP'] = clock[0]
+  c.sm['gps'] = instance.sm[instance.camera_gps_service]
+  initial, _ = publish(bkm_row(18059, 100))
+  c.sm['liveMapDataSP'] = initial
+  assert update(c) == pytest.approx(75/3.6)
+  runtime.publish()
+  c.sm['gps'].hasFix = False
+  instance.sm['liveLocationKalman'].gpsOK = False
+  sent = []
+  instance.pm.send = lambda service, envelope: sent.append(envelope)
+  cc = NS(enabled=True, cruiseControl=NS(override=False, cancel=False, resume=False))
+  for second in range(1, 11):
+    # Cover the sub-centimetre packed-coordinate round-off at the final fix.
+    clock[0] = 500. + second + (.01 if second == 10 else 0.)
+    for sm in (instance.sm, c.sm):
+      sm.logMonoTime['carState'] = int(clock[0] * 1e9)
+    c.sm.recv_time['carState'] = c.sm.recv_time['liveMapDataSP'] = clock[0]
+    instance.publish()
+    assert sent[-1].valid
+    with runtime.custom.LiveMapDataSP.from_bytes(sent[-1].liveMapDataSP.to_bytes()) as wire:
+      c.sm['liveMapDataSP'] = wire.as_builder()
+    passed = can_speed > 0 and second == 10
+    assert update(c) == pytest.approx((100 if passed else 75)/3.6)
+    plan = runtime.publish()
+    for _ in range(60):
+      runtime.icbm.run(c.cs, cc, plan, True)
+    remaining = 100. - second * can_speed
+    if passed:
+      assert not c.sm['liveMapDataSP'].speedCameraAheadValid
+      assert plan.speedCameraControl.reason == 'odometry_passed'
+      assert not plan.speedLimit.resolver.speedLimitLastValid
+      assert runtime.icbm.cruise_button == runtime.icbm_mod.SendButtonState.increase
+    else:
+      assert plan.speedCameraControl.reason == 'odometry_tracking'
+      assert plan.speedCameraControl.countdownValid
+      assert plan.speedCameraControl.distance == pytest.approx(remaining, abs=.1)
+      assert runtime.icbm.cruise_button == runtime.icbm_mod.SendButtonState.none
+    assert runtime.helper.v_cruise_kph == 100
+
+
 def test_source_wire_controls_pass_and_new_equal_limit(map_pipeline, control, monkeypatch):
   instance, _, publish = map_pipeline
   c = control

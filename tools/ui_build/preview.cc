@@ -49,19 +49,19 @@ public:
     camera.setState("driverOverride"); camera.setManualTakeover(true);
     camera.setReason("awaiting_driver_feedback");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText().isEmpty());  // Legacy manual flags no longer create a camera override.
+    assert(hud.cameraRawStatusText().isEmpty());  // Legacy manual flags no longer create a camera override.
     camera.setReason("button_event");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText().isEmpty());
+    assert(hud.cameraRawStatusText().isEmpty());
     assert(hud.cameraSignVisible && hud.speedCameraControlManualTakeover);
     assert(std::abs(hud.speedLimitOffset - 15) < .01);
     camera.setState("active"); camera.setManualTakeover(false); camera.setReason("camera_limit");
     camera.setRawLimit(20 / 3.6f);
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(std::abs(hud.speedLimitFinalLast - 35) < .01 && hud.cameraStatusText().isEmpty());
+    assert(std::abs(hud.speedLimitFinalLast - 35) < .01 && hud.cameraRawStatusText().isEmpty());
     camera.setAppliedOffset(0);
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText() == "Below ACC minimum");
+    assert(hud.cameraRawStatusText() == "Below ACC minimum");
     camera.setState("passed");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
     assert(!hud.cameraSignVisible && !hud.cameraRemaining && !hud.speedLimitLastValid && hud.speedLimitLast == 0);
@@ -98,13 +98,13 @@ public:
     assert(!hud.speedLimitLastValid && hud.speedLimitLast == 0);
     assert(hud.speedLimitOffsetText() == "15");
     prefs.put("LanguageSetting", "main_ru");
-    assert(hud.cameraStatusText() == QStringLiteral("Камер нет"));
+    assert(hud.cameraRawStatusText() == QStringLiteral("Камер нет"));
     camera.setReason("gps_unreliable");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText() == QStringLiteral("Слабый GPS"));
+    assert(hud.cameraRawStatusText() == QStringLiteral("Слабый GPS"));
     camera.setReason("road_graph_downloading");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText() == QStringLiteral("Ошибка камер"));
+    assert(hud.cameraRawStatusText() == QStringLiteral("Ошибка камер"));
     prefs.remove("LanguageSetting");
     prefs.put("SpeedLimitOffsetType", "2");
     assert(hud.speedLimitOffsetText() == "15%");
@@ -131,6 +131,8 @@ public:
       {"gps_unreliable", "Weak GPS", "Слабый GPS"},
       {"lmd_unreliable", "No camera data", "Нет данных камер"},
       {"localizer_unreliable", "No localization", "Нет локализации"},
+      {"odometry_tracking", "Speed-based distance", "Путь по скорости"},
+      {"odometry_unavailable", "No vehicle speed", "Нет скорости авто"},
       {"camera_control_unavailable", "Control unavailable", "Управление недоступно"},
       {"camera_contract_invalid", "Invalid camera data", "Ошибка данных камер"},
       {"offline_maps_loading", "Reading maps", "Чтение карт"},
@@ -172,24 +174,24 @@ public:
           camera.setReason(entry.reason);
           hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
           const QString expected = QString::fromUtf8(russian ? entry.ru : entry.english);
-          assert(hud.cameraStatusText() == expected);
+          assert(hud.cameraRawStatusText() == expected);
           assert(QFontMetrics(InterFont(28, QFont::DemiBold)).horizontalAdvance(expected) <= 360);
         }
         // Old nonpersistent manual flags must not revive a driver override.
         for (const char *reason : {"awaiting_driver_feedback", "button_event"}) {
           camera.setReason(reason);
           hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-          assert(hud.cameraStatusText().isEmpty());
+          assert(hud.cameraRawStatusText().isEmpty());
         }
         camera.setReason("no_camera");
         hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-        assert(hud.cameraStatusText() == QString::fromUtf8(retained ? (russian ? "Лимит удержан" : "Camera limit held") : (russian ? "Камер нет" : "No cameras")));
+        assert(hud.cameraRawStatusText() == QString::fromUtf8(retained ? (russian ? "Лимит удержан" : "Camera limit held") : (russian ? "Камер нет" : "No cameras")));
         camera.setReason("matched");
         hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-        assert(retained ? hud.cameraStatusText().isEmpty() : hud.cameraStatusText() == QString::fromUtf8(russian ? "Ожидание камеры" : "Waiting for camera"));
+        assert(retained ? hud.cameraRawStatusText().isEmpty() : hud.cameraRawStatusText() == QString::fromUtf8(russian ? "Ожидание камеры" : "Waiting for camera"));
         camera.setReason("camera_limit");
         hud.updateCameraPresentation(camera.asReader(), true, false, 3.6f);
-        assert(hud.cameraStatusText() == QString::fromUtf8(russian ? "Нет плана камеры" : "No planner data"));
+        assert(hud.cameraRawStatusText() == QString::fromUtf8(russian ? "Нет плана камеры" : "No planner data"));
       }
     }
     // A retained low limit may need both the real failure and stock minimum.
@@ -198,8 +200,237 @@ public:
     camera.setEventId("held-low-camera"); camera.setState("active");
     camera.setReason("offline_map_decode_error:below_stock_acc_minimum");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText() == QStringLiteral("Ошибка формата карт\nНиже минимума ACC"));
+    assert(hud.cameraRawStatusText() == QStringLiteral("Ошибка формата карт\nНиже минимума ACC"));
     prefs.remove("LanguageSetting");
+  }
+  static void verifyCameraDiagnosticStability() {
+    Params prefs;
+    prefs.put("LanguageSetting", "main_ru");
+    HudRendererSP hud;
+    hud.is_metric = true;
+    hud.is_cruise_set = hud.is_cruise_available = true;
+    capnp::MallocMessageBuilder message;
+    auto plan = message.initRoot<cereal::LongitudinalPlanSP>();
+    auto camera = plan.initSpeedCameraControl();
+    camera.setEnabled(true); camera.setActive(true); camera.setEventId("event-a");
+    camera.setState("active"); camera.setRawLimit(90 / 3.6f); camera.setAppliedOffset(0);
+    camera.setReactionDistance(900); camera.setDistance(800); camera.setCountdownValid(true);
+    plan.initSpeedLimit().initAssist().setActive(true);
+    plan.setVTarget(90 / 3.6f);
+    plan.setLongitudinalPlanSource(cereal::LongitudinalPlanSP::LongitudinalPlanSource::SPEED_LIMIT_ASSIST);
+    auto frame = [&](const char *reason, double now, bool fresh = true, bool mode = true) {
+      camera.setReason(reason);
+      hud.updateCameraPresentation(camera.asReader(), mode, fresh, 3.6f);
+      hud.updateCameraDiagnosticText(now);
+    };
+    const QString road = QStringLiteral("Дорога не выбрана"), gps = QStringLiteral("Слабый GPS");
+    frame("road_not_matched", 0.);
+    frame("road_not_matched", .69);
+    assert(hud.cameraStatusText().isEmpty());
+    frame("road_not_matched", .7);
+    assert(hud.cameraStatusText() == road);
+    // Stale-plan sign/countdown gates remain immediate despite stable text.
+    frame("road_not_matched", .8, false);
+    assert(!hud.cameraSignVisible && !hud.cameraRemaining && hud.cameraStatusText() == road);
+    camera.setCountdownValid(false);
+    frame("gps_unreliable", 1.0);
+    assert(!hud.cameraRemaining && hud.cameraRawStatusText() == gps && hud.cameraStatusText() == road);
+    plan.setVTarget(80 / 3.6f);
+    plan.setLongitudinalPlanSource(cereal::LongitudinalPlanSP::LongitudinalPlanSource::SCC_MAP);
+    hud.set_speed = 110;
+    hud.updateCameraCruisePresentation(plan.asReader(), true, 3.6f, 110);
+    assert(std::abs(hud.set_speed - 80) < .001f);  // No text-induced target delay.
+    frame("road_not_matched", 1.2);
+    frame("gps_unreliable", 1.4);
+    frame("road_not_matched", 1.6);
+    assert(hud.cameraStatusText() == road);
+    frame("gps_unreliable", 1.8);
+    frame("gps_unreliable", 2.49);
+    frame("gps_unreliable", 2.5);
+    assert(hud.cameraStatusText() == road);  // Prior text still has its 2 s readable hold.
+    frame("gps_unreliable", 2.7);
+    assert(hud.cameraStatusText() == gps);
+    frame("camera_limit", 2.8);
+    frame("camera_limit", 3.8);
+    assert(hud.cameraStatusText() == gps);
+    frame("camera_limit", 4.7);
+    assert(hud.cameraStatusText().isEmpty());
+    frame("road_not_matched", 5.0);
+    frame("road_not_matched", 5.7);
+    frame("road_not_matched", 7.7);
+    frame("camera_limit", 7.8);
+    frame("camera_limit", 8.79);
+    assert(hud.cameraStatusText() == road);
+    frame("camera_limit", 8.8);
+    assert(hud.cameraStatusText().isEmpty());  // Stable healthy recovery needs 1 s.
+    frame("road_not_matched", 9.0);
+    frame("road_not_matched", 9.7);
+    frame("road_not_matched", 9.8, true, false);
+    assert(hud.cameraStatusText().isEmpty());  // Disable bypasses the readable hold.
+    frame("gps_unreliable", 10.0);
+    frame("gps_unreliable", 10.7);
+    assert(hud.cameraStatusText() == gps);
+    camera.setState("passed");
+    frame("gps_unreliable", 10.8);
+    assert(hud.cameraStatusText().isEmpty());
+    camera.setState("active");
+    frame("road_not_matched", 10.9);
+    frame("road_not_matched", 11.6);
+    assert(hud.cameraStatusText() == road);
+    camera.setEventId("event-b");
+    frame("gps_unreliable", 11.7);
+    assert(hud.cameraStatusText().isEmpty());  // A new event cannot inherit old text.
+    frame("gps_unreliable", 12.39);
+    assert(hud.cameraStatusText().isEmpty());
+    frame("gps_unreliable", 12.4);
+    assert(hud.cameraStatusText() == gps);
+
+    HudRendererSP one_hz;
+    one_hz.is_metric = true;
+    auto feed = [&](HudRendererSP &display, const char *reason, double now) {
+      camera.setReason(reason);
+      display.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+      display.updateCameraDiagnosticText(now);
+    };
+    feed(one_hz, "gps_unreliable", 0.);
+    feed(one_hz, "gps_unreliable", .7);
+    QString previous = one_hz.cameraStatusText();
+    double changed_at = .7;
+    int transitions = 0;
+    for (int second = 1; second <= 8; ++second) {
+      const char *reason = second % 2 ? "road_not_matched" : "gps_unreliable";
+      for (double time : {double(second), second + .7}) {
+        feed(one_hz, reason, time);
+        if (one_hz.cameraStatusText() != previous) {
+          assert(time - changed_at >= 2. - 1e-9);
+          changed_at = time; previous = one_hz.cameraStatusText(); ++transitions;
+        }
+      }
+    }
+    assert(transitions > 0 && transitions <= 3);  // Raw status changed eight times.
+    HudRendererSP fast_initial;
+    fast_initial.is_metric = true;
+    for (int sample = 0; sample <= 11; ++sample) {
+      feed(fast_initial, sample % 2 ? "gps_unreliable" : "road_not_matched", sample * .2);
+    }
+    assert(fast_initial.cameraStatusText() == road);  // Mixed failures cannot stay blank indefinitely.
+    // A previously accepted nonempty status must not hide persistent mixed
+    // failures merely because neither individual failure stays for 700 ms.
+    camera.setEventId(""); camera.setState("inactive"); camera.setRawLimit(0);
+    camera.setActive(false); camera.setCountdownValid(false);
+    for (const char *initial : {"no_camera", "road_not_matched"}) {
+      HudRendererSP accepted_then_mixed;
+      accepted_then_mixed.is_metric = true;
+      feed(accepted_then_mixed, initial, 0.);
+      feed(accepted_then_mixed, initial, .7);
+      const QString original = accepted_then_mixed.cameraStatusText();
+      assert(!original.isEmpty());
+      QString previous = original;
+      double last_transition = .7;
+      int changes = 0;
+      for (int sample = 0; sample <= 300; ++sample) {
+        const double now = 1. + sample * .1;
+        feed(accepted_then_mixed, sample % 2 ? "localizer_unreliable" : "gps_unreliable", now);
+        const QString shown = accepted_then_mixed.cameraStatusText();
+        if (shown != previous) {
+          assert(now - last_transition >= 2. - 1e-9);
+          last_transition = now; previous = shown; ++changes;
+        }
+        if (sample >= 20) {
+          assert(shown != original && !shown.isEmpty());
+          assert(shown == gps || shown == QStringLiteral("Нет локализации"));
+        }
+      }
+      assert(changes > 0 && changes <= 15);  // Thirty seconds of 100 ms input alternation.
+    }
+    prefs.remove("LanguageSetting");
+  }
+  static void verifyOdometryPresentation() {
+    Params prefs;
+    prefs.put("LanguageSetting", "main_ru");
+    HudRendererSP hud;
+    hud.is_metric = true;
+    hud.is_cruise_set = hud.is_cruise_available = true;
+    hud.cameraGpsWeak = true;  // A lingering map-level GPS flag must not hide odometry.
+    capnp::MallocMessageBuilder message;
+    auto plan = message.initRoot<cereal::LongitudinalPlanSP>();
+    auto camera = plan.initSpeedCameraControl();
+    camera.setEnabled(true); camera.setActive(true); camera.setEventId("retained-camera");
+    camera.setState("active"); camera.setRawLimit(70 / 3.6f); camera.setAppliedOffset(15 / 3.6f);
+    camera.setReactionDistance(900); camera.setDistance(100); camera.setCountdownValid(false);
+    plan.initSpeedLimit().initAssist().setActive(true);
+    plan.setVTarget(85 / 3.6f);
+    plan.setLongitudinalPlanSource(cereal::LongitudinalPlanSP::LongitudinalPlanSource::SPEED_LIMIT_ASSIST);
+    auto frame = [&](const char *reason, double now) {
+      camera.setReason(reason);
+      hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+      hud.set_speed = 110;
+      hud.updateCameraCruisePresentation(plan.asReader(), true, 3.6f, 110);
+      hud.updateCameraDiagnosticText(now);
+    };
+    frame("gps_unreliable", 0.);
+    frame("gps_unreliable", .7);
+    assert(hud.cameraStatusText() == QStringLiteral("Слабый GPS"));
+    camera.setCountdownValid(true);
+    frame("odometry_tracking", 1.0);
+    assert(hud.cameraRemaining == 100 && hud.cameraSignVisible);
+    assert(hud.cameraRawStatusText() == QStringLiteral("Путь по скорости"));
+    assert(hud.cameraStatusText() == QStringLiteral("Слабый GPS"));  // Diagnostic hold does not hold the badge.
+    camera.setDistance(50);
+    frame("odometry_tracking", 1.3);
+    assert(hud.cameraRemaining == 50 && std::abs(hud.set_speed - 85) < .001f);
+    camera.setState("passed"); camera.setActive(false); camera.setDistance(0); camera.setCountdownValid(false);
+    plan.setVTarget(110 / 3.6f);
+    plan.setLongitudinalPlanSource(cereal::LongitudinalPlanSP::LongitudinalPlanSource::CRUISE);
+    frame("odometry_passed", 1.4);
+    assert(!hud.cameraRemaining && !hud.cameraSignVisible && hud.cameraStatusText().isEmpty());
+    assert(hud.cameraRawStatusText() == QStringLiteral("Камер нет"));
+    assert(hud.set_speed == 110);
+    camera.setState("active"); camera.setActive(true); camera.setEventId("next-camera");
+    frame("odometry_unavailable", 2.0);
+    assert(!hud.cameraRemaining && hud.cameraRawStatusText() == QStringLiteral("Нет скорости авто"));
+    prefs.remove("LanguageSetting");
+  }
+
+  static void verifyOdometryWarningVisibility() {
+    HudRendererSP hud;
+    hud.speedCameraEnabled = true;
+    hud.speedCameraAlertDistance = 900;
+    capnp::MallocMessageBuilder message;
+    auto map = message.initRoot<cereal::LiveMapDataSP>();
+    map.setLocationValid(false);
+    map.setSpeedCameraAheadValid(true); map.setSpeedCameraEventId("known-warning-camera");
+    map.setSpeedCameraAheadDistance(800); map.setSpeedCameraControlReason("odometry_tracking");
+    hud.cameraPositionLost = true;
+    hud.updateCameraWarningPresentation(map.asReader(), true, true);
+    assert(hud.cameraWarningVisible && !hud.cameraPositionLost && !hud.cameraGpsWeak);
+    map.setSpeedCameraAheadDistance(901);
+    hud.updateCameraWarningPresentation(map.asReader(), true, true);
+    assert(!hud.cameraWarningVisible && !hud.cameraPositionLost);
+    map.setSpeedCameraAheadDistance(500);
+    hud.updateCameraWarningPresentation(map.asReader(), false, true);
+    assert(!hud.cameraWarningVisible);
+    hud.updateCameraWarningPresentation(map.asReader(), true, false);
+    assert(!hud.cameraWarningVisible);
+    map.setSpeedCameraEventId("");
+    hud.updateCameraWarningPresentation(map.asReader(), true, true);
+    assert(!hud.cameraWarningVisible);  // A reason alone cannot acquire an unknown camera.
+    map.setSpeedCameraEventId("known-warning-camera");
+    hud.updateCameraWarningPresentation(map.asReader(), true, true);
+    assert(hud.cameraWarningVisible && !hud.cameraPositionLost);
+    map.setSpeedCameraControlReason("gps_unreliable");
+    hud.updateCameraWarningPresentation(map.asReader(), true, true);
+    assert(!hud.cameraWarningVisible && hud.cameraPositionLost);
+    map.setSpeedCameraControlReason("odometry_tracking");
+    hud.updateCameraWarningPresentation(map.asReader(), true, true);
+    assert(hud.cameraWarningVisible && !hud.cameraPositionLost);
+    map.setSpeedCameraAheadValid(false); map.setSpeedCameraControlReason("odometry_passed");
+    hud.updateCameraWarningPresentation(map.asReader(), true, true);
+    assert(!hud.cameraWarningVisible && !hud.cameraPositionLost);
+    // Existing GPS-qualified warnings still work without an odometry reason.
+    map.setLocationValid(true); map.setSpeedCameraAheadValid(true); map.setSpeedCameraControlReason("no_camera");
+    hud.updateCameraWarningPresentation(map.asReader(), true, true);
+    assert(hud.cameraWarningVisible && !hud.cameraPositionLost);
   }
   static void verifySharedCameraDistance() {
     Params prefs;
@@ -333,6 +564,8 @@ public:
     camera.setReason(reason);
     camera.setManualTakeover(std::string(state) == "driverOverride");
     hud.updateCameraPresentation(camera.asReader(), true, fresh, 3.6f);
+    hud.updateCameraDiagnosticText(0.);
+    hud.updateCameraDiagnosticText(1.1);
     const bool passed = std::string(state) == "passed";
     assert(hud.cameraSignVisible == (fresh && !passed && raw > 0));
     assert(bool(hud.cameraRemaining) == (fresh && !passed && countdown && distance <= threshold));
@@ -378,6 +611,9 @@ int main(int argc, char **argv) {
   CameraUiFixture::verifyTransitions();
   CameraUiFixture::verifyPlaceholder();
   CameraUiFixture::verifyFailureStatuses();
+  CameraUiFixture::verifyCameraDiagnosticStability();
+  CameraUiFixture::verifyOdometryPresentation();
+  CameraUiFixture::verifyOdometryWarningVisibility();
   CameraUiFixture::verifyCameraCruisePresentation(output);
   CameraUiFixture::verifySharedCameraDistance();
   Params placeholder_params;

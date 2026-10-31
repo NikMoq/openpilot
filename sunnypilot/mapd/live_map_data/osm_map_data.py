@@ -16,7 +16,9 @@ from openpilot.common.params import Params
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import load_database
 from openpilot.sunnypilot.mapd.camera_osm_bridge import OfflineOsmBridge
-from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_gps_reliable
+from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_gps_reliable, camera_identity
+from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry, car_speed_sample
+from openpilot.sunnypilot.mapd.camera_gps_quality import MAX_HORIZONTAL_ACCURACY_M
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
 from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera
@@ -103,7 +105,58 @@ class OsmMapData(BaseMapData):
       self.camera_speed_source = CameraSpeedSource()
       self.camera_selection = self.camera_speed_source.selection
       self._set_camera_graph_status('disabled')
+    self._update_warning_odometry()
     return self.camera_match
+
+  def _update_warning_odometry(self):
+    self.camera_warning_tracking = False
+    self.camera_warning_passed = False
+    if not hasattr(self,'camera_warning_odometry'):
+      self.camera_warning_odometry = CameraOdometry()
+      self.camera_warning_retained = None
+      self.camera_warning_completed = []
+      self.camera_warning_fix_time = None
+    if not self.camera_warning_enabled:
+      self.camera_warning_retained = None
+      self.camera_warning_odometry = CameraOdometry()
+      self.camera_warning_fix_time = None
+      return
+    now = time.time()
+    gps = self.sm[self.camera_gps_service]
+    trusted = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK and
+                   self.sm.valid[self.camera_gps_service] and self.sm.alive[self.camera_gps_service] and
+                   camera_gps_reliable(gps,now))
+    sample = car_speed_sample(self.sm,time.monotonic())
+    same_fix = trusted and self.camera_warning_fix_time == gps.unixTimestampMillis
+    if trusted and not same_fix and self.camera_match is not None:
+      identity = camera_identity(self.camera_match.camera)
+      if identity in self.camera_warning_completed:
+        self.camera_match = None
+      else:
+        self.camera_warning_retained = self.camera_match
+        self.camera_warning_odometry.anchor(identity,self.camera_match.distance_m,sample)
+        self.camera_warning_fix_time = gps.unixTimestampMillis
+    elif not trusted or same_fix:
+      retained = self.camera_warning_retained
+      # A still-qualified duplicate fix may retain its existing warning while
+      # CAN is absent; it must never reset the distance integration anchor.
+      if not trusted:
+        self.camera_match = None
+      if retained is not None:
+        identity = camera_identity(retained.camera)
+        remaining = self.camera_warning_odometry.advance(identity,sample)
+        if remaining is not None:
+          if remaining <= 0:
+            self.camera_warning_completed = (self.camera_warning_completed+[identity])[-128:]
+            self.camera_warning_retained = None
+            self.camera_warning_passed = True
+          else:
+            self.camera_match = replace(retained,distance_m=remaining)
+            self.camera_warning_tracking = True
+    selection = self.camera_selection
+    if selection.pass_proven and self.camera_match is not None and camera_identity(self.camera_match.camera) == selection.camera_id:
+      self.camera_match = None
+      self.camera_warning_retained = None
 
   def _set_camera_graph_status(self, status):
     # Params.put is an atomic file replacement; do not fsync unchanged status
@@ -123,7 +176,7 @@ class OsmMapData(BaseMapData):
     position_values = (gps.latitude, gps.longitude, gps.horizontalAccuracy, gps.unixTimestampMillis)
     position_valid = bool(raw_stream_valid and gps.hasFix and all(math.isfinite(value) for value in position_values) and
                           -90 <= gps.latitude <= 90 and -180 <= gps.longitude <= 180 and
-                          0 < gps.horizontalAccuracy <= 12 and 0 <= now - gps.unixTimestampMillis * .001 <= 2)
+                          0 < gps.horizontalAccuracy <= MAX_HORIZONTAL_ACCURACY_M and 0 <= now - gps.unixTimestampMillis * .001 <= 2)
     gps_valid = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK and raw_gps_valid)
     if getattr(self, 'camera_osm_bridge', None) is None:
       self.camera_osm_bridge = OfflineOsmBridge(Paths.mapd_root())
@@ -134,8 +187,11 @@ class OsmMapData(BaseMapData):
       self.camera_index or (), gps.latitude, gps.longitude, gps.bearingDeg,
       gps_valid=gps_valid and self.camera_database is not None and roads is not None,
       fix_time_s=gps.unixTimestampMillis * .001, now_s=now,
-      reaction_distance_m=reaction, road_graph=roads)
-    if not self.camera_selection.valid:
+      reaction_distance_m=reaction, road_graph=roads,
+      vehicle_tolerance_m=gps.horizontalAccuracy,vehicle_heading_tolerance_deg=gps.bearingAccuracyDeg)
+    self.camera_selection = self.camera_speed_source.update_odometry(
+      car_speed_sample(self.sm,time.monotonic()),trusted_position=gps_valid,reaction_distance_m=reaction)
+    if not self.camera_selection.valid and not self.camera_selection.pass_proven:
       if not gps_valid:
         # Stationary course is undefined, not a weak-GPS signal.
         localizer_ok = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK)

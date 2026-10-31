@@ -53,7 +53,8 @@ class CameraSpeedAdapter:
     self._raw_limit = self._distance = 0.0
     self._active = False
 
-  def update(self, lmd, *, enabled, reliable, engaged, reaction_distance, unreliable_reason="unreliable_hold"):
+  def update(self, lmd, *, enabled, reliable, engaged, reaction_distance, unreliable_reason="unreliable_hold",
+             odometry_reliable=False, odometry_pass_reliable=False):
     if not enabled:
       self._clear_event()
       self.output = CameraLimit(reason="disabled")
@@ -66,24 +67,37 @@ class CameraSpeedAdapter:
     source_state = str(getattr(lmd, "speedCameraControlState", ""))
     distance = float(getattr(lmd, "speedCameraControlDistance", 0.0))
     raw = float(getattr(lmd, "speedCameraControlSpeedLimit", 0.0))
-    valid = bool(reliable and version_ok and source_state in ("APPROACHING", "ACTIVE", "DRIVER_OVERRIDE") and
+    same = bool(self._event_id and event_id == self._event_id)
+    odometry_message = source_reason in ("odometry_tracking", "odometry_passed")
+    metadata_valid = bool(version_ok and same and getattr(lmd, "speedCameraControlAutoControlAllowed", False) and
+                          math.isfinite(raw) and 0 < raw <= 300 / 3.6)
+    odometry_tracking = bool(odometry_reliable and metadata_valid and source_reason == "odometry_tracking" and
+                             source_state in ("APPROACHING", "ACTIVE") and math.isfinite(distance) and distance >= 0 and
+                             getattr(lmd, "speedCameraControlValid", False) and not getattr(lmd, "speedCameraControlPassProven", False))
+    odometry_passed = bool(odometry_pass_reliable and metadata_valid and source_reason == "odometry_passed" and
+                           source_state == "PASSED" and math.isfinite(distance) and distance <= 0 and
+                           not getattr(lmd, "speedCameraControlValid", False) and getattr(lmd, "speedCameraControlPassProven", False))
+    if odometry_message and metadata_valid and not (odometry_tracking or odometry_passed):
+      diagnostic = unreliable_reason
+    gps_authority = reliable and not odometry_message
+    valid = bool((gps_authority or odometry_tracking) and version_ok and source_state in ("APPROACHING", "ACTIVE", "DRIVER_OVERRIDE") and
                  getattr(lmd, "speedCameraControlValid", False) and
                  getattr(lmd, "speedCameraControlAutoControlAllowed", False) and event_id and
                  math.isfinite(distance) and distance >= 0 and math.isfinite(raw) and 0 < raw <= 300 / 3.6)
-    same = event_id == self._event_id
-    passed = bool(reliable and version_ok and source_state == "PASSED" and same and
-                  getattr(lmd, "speedCameraControlPassProven", False))
-    if self._active and passed:
+    passed = bool(odometry_passed or (gps_authority and version_ok and source_state == "PASSED" and same and
+                                     getattr(lmd, "speedCameraControlPassProven", False)))
+    if (self._active or odometry_passed) and passed:
       # Passage completes this camera even if a physical speed button is held.
       # Any temporary button/pedal transmission pause belongs to ICBM, not an
       # expired camera or a waiting-for-stock-feedback latch.
       self._suppressed.add(self._event_id)
-      self.output = CameraLimit(event_id=self._event_id, state="PASSED", reason="route_pass_proven")
+      self.output = CameraLimit(event_id=self._event_id, state="PASSED",
+                                reason="odometry_passed" if odometry_passed else "route_pass_proven")
       self._clear_event()
       return self.output
 
     if not self._active and valid and event_id not in self._suppressed:
-      self._event_id, self._raw_limit, self._distance = event_id, raw, distance
+      self._event_id, self._raw_limit, self._distance = event_id, raw if gps_authority else self._raw_limit, distance
       if distance <= reaction_distance and engaged:
         self._active = True
         same = True
@@ -100,9 +114,11 @@ class CameraSpeedAdapter:
     # event's explicit route-backed end rather than inventing a timeout release.
     if same and valid:
       self._distance = min(self._distance, distance)
-      self._raw_limit = min(self._raw_limit, raw)
+      if gps_authority:
+        self._raw_limit = min(self._raw_limit, raw)
     countdown = bool(same and valid and self._distance <= reaction_distance)
     hold_reason = diagnostic if diagnostic not in ("no_camera", "matched", "offline_approach", "route_associated") else "unreliable_hold"
-    self.output = CameraLimit(self._event_id, "ACTIVE", "camera_limit" if same and valid else hold_reason,
+    active_reason = "odometry_tracking" if odometry_tracking else "camera_limit"
+    self.output = CameraLimit(self._event_id, "ACTIVE", active_reason if same and valid else hold_reason,
                               self._raw_limit, self._distance, countdown, automatic=True)
     return self.output

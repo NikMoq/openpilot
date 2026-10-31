@@ -186,7 +186,7 @@ def test_explicit_no_candidate_never_falls_back_to_warning(map_pipeline, mode):
   lmd, cameras = publish(rows)
   assert len(cameras) >= 1
   assert lmd.speedCameraControlVersion == 1 and not lmd.speedCameraControlValid
-  assert lmd.speedCameraAheadValid is (mode != 'warnings-disabled')
+  assert lmd.speedCameraAheadValid is (mode != 'no-heading')
   assert plan(lmd, camera_speed_offset_kph=30).speed_cap_mps is None
 
 
@@ -212,7 +212,7 @@ def test_shared_reaction_zone_bounds_warnings_without_shortening_control_lookahe
                 SpeedCameraEnabled=str(int(warnings)),SpeedCameraControlEnabled=str(int(control)))
   module = sys.modules[instance.__class__.__module__]
   epoch = time.time()
-  monkeypatch.setattr(module,'time',NS(time=lambda: epoch))
+  monkeypatch.setattr(module,'time',NS(time=lambda: epoch,monotonic=time.monotonic))
   rows = bkm_row(18059,distance+5)
   outside,_ = publish(rows)
   assert instance.camera_alert_distance_m == distance
@@ -380,7 +380,7 @@ def test_real_publisher_uncertain_gps_retains_id_without_pass(map_pipeline):
   lost, _ = publish(bkm_row(18059, 100))
   assert lost.speedCameraControlEventId == identity
   assert not lost.speedCameraControlValid and not lost.speedCameraControlPassProven
-  assert lost.speedCameraAheadValid
+  assert not lost.speedCameraAheadValid  # No fresh CAN sample to retain warning countdown.
   assert lost.speedCameraControlReason == 'gps_unreliable'
 
 

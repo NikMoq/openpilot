@@ -118,8 +118,8 @@ def test_identity_does_not_depend_on_limit_or_user_offset():
   assert camera_identity(first) != camera_identity(other)
 
 
-@pytest.mark.parametrize('changes', [dict(horizontalAccuracy=13), dict(horizontalAccuracy=0),
-  dict(bearingAccuracyDeg=16), dict(speed=.5), dict(unixTimestampMillis=997000),
+@pytest.mark.parametrize('changes', [dict(horizontalAccuracy=31), dict(horizontalAccuracy=0),
+  dict(bearingAccuracyDeg=46), dict(speed=.5), dict(unixTimestampMillis=997000),
   dict(unixTimestampMillis=1001000), dict(latitude=91), dict(longitude=float('nan')), dict(hasFix=False)])
 def test_raw_gps_quality_is_camera_specific(changes):
   gps = dict(latitude=55., longitude=37., bearingDeg=0., horizontalAccuracy=5.,
@@ -127,3 +127,10 @@ def test_raw_gps_quality_is_camera_specific(changes):
   assert camera_gps_reliable(SimpleNamespace(**gps), 1000.)
   gps.update(changes)
   assert not camera_gps_reliable(SimpleNamespace(**gps), 1000.)
+
+
+@pytest.mark.parametrize('accuracy,bearing',[(25.,35.),(30.,45.)])
+def test_raw_gps_quality_accepts_supported_uncertainty_bounds(accuracy,bearing):
+  gps = SimpleNamespace(latitude=55.,longitude=37.,bearingDeg=0.,horizontalAccuracy=accuracy,
+                        bearingAccuracyDeg=bearing,speed=10.,unixTimestampMillis=1000000,hasFix=True)
+  assert camera_gps_reliable(gps,1000.)

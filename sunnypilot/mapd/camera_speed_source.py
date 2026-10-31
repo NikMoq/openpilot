@@ -12,6 +12,8 @@ import math
 from dataclasses import dataclass
 
 from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, EARTH_RADIUS_M
+from openpilot.sunnypilot.mapd.camera_gps_quality import camera_accuracy_acceptable
+from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry
 
 LATERAL_CORRIDOR_M = 25.0
 HEADING_TOLERANCE_DEG = 45.0
@@ -58,8 +60,7 @@ def camera_gps_reliable(gps, now_s):
             gps.bearingAccuracyDeg, gps.speed, gps.unixTimestampMillis, now_s)
   return bool(all(isinstance(v, (int, float)) and math.isfinite(v) for v in values) and gps.hasFix and
               -90 <= gps.latitude <= 90 and -180 <= gps.longitude <= 180 and
-              0 <= gps.bearingDeg <= 360 and 0 < gps.horizontalAccuracy <= 12 and
-              0 <= gps.bearingAccuracyDeg <= 15 and gps.speed >= 1 and
+              0 <= gps.bearingDeg <= 360 and camera_accuracy_acceptable(gps) and gps.speed >= 1 and
               0 <= now_s - gps.unixTimestampMillis * .001 <= 2)
 
 
@@ -106,6 +107,30 @@ class CameraSpeedSource:
     self._pending = None
     self._previous_projection = None
     self._crossed = False
+    self.odometry = CameraOdometry()
+    self._odometry_fix_time = None
+
+  def update_odometry(self, sample, *, trusted_position, reaction_distance_m=300):
+    selection = self.selection
+    same_anchor = self._odometry_fix_time is not None and self._odometry_fix_time == self._fix_time
+    if trusted_position and selection.valid and selection.reason == 'offline_approach' and not same_anchor:
+      self.odometry.anchor(selection.camera_id,selection.distance_m,sample)
+      self._odometry_fix_time = self._fix_time
+      return selection
+    if trusted_position and not same_anchor and selection.reason not in ('approach_corridor_lost','road_not_matched'):
+      return selection
+    if self._camera is None or selection.pass_proven or not self._confirmed_approach:
+      return selection
+    remaining = self.odometry.advance(selection.camera_id,sample)
+    if remaining is None:
+      return selection
+    if remaining <= 0:
+      self._completed.add(selection.camera_id)
+      self.selection = CameraSelection('PASSED',selection.camera_id,self._camera,0.,False,True,'odometry_passed')
+    else:
+      state = 'ACTIVE' if selection.state == 'ACTIVE' or remaining <= reaction_distance_m else 'APPROACHING'
+      self.selection = CameraSelection(state,selection.camera_id,self._camera,remaining,True,False,'odometry_tracking')
+    return self.selection
 
   def _uncertain(self, reason):
     self.selection = CameraSelection(state=self.selection.state, camera_id=self.selection.camera_id,
@@ -117,7 +142,14 @@ class CameraSpeedSource:
     return self.selection
 
   def update(self, cameras, latitude, longitude, heading, *, gps_valid,
-             fix_time_s=None, now_s=None, reaction_distance_m=300, driver_override_id='', road_graph=None):
+             fix_time_s=None, now_s=None, reaction_distance_m=300, driver_override_id='', road_graph=None,
+             vehicle_tolerance_m=12., vehicle_heading_tolerance_deg=35.):
+    vehicle_tolerance_m = min(30.,max(12.,vehicle_tolerance_m))
+    vehicle_heading_tolerance_deg = min(45.,max(35.,vehicle_heading_tolerance_deg))
+    road_options = ({'vehicle_tolerance_m':vehicle_tolerance_m,
+                     'vehicle_heading_tolerance_deg':vehicle_heading_tolerance_deg}
+                    if getattr(road_graph,'supports_vehicle_uncertainty',False) and
+                    (vehicle_tolerance_m != 12. or vehicle_heading_tolerance_deg != 35.) else {})
     if reaction_distance_m not in range(50, 1001, 50):
       reaction_distance_m = 300
     point = (latitude, longitude)
@@ -150,10 +182,10 @@ class CameraSpeedSource:
       if road_graph is None:
         measured = camera_projection(camera, point, heading, self._travel_heading)
       else:
-        distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading)
+        distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading,**road_options)
         if distance is None:
           if hasattr(road_graph, 'passed_distance'):
-            behind = road_graph.passed_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading)
+            behind = road_graph.passed_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading,**road_options)
           else:
             behind = road_graph.camera_distance((camera.latitude, camera.longitude), self._travel_heading, point, heading)
           distance = -behind if behind is not None and behind > 0 else None
@@ -218,14 +250,16 @@ class CameraSpeedSource:
         if road_graph is None:
           measured = camera_projection(camera, point, heading, direction)
         else:
-          distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), direction)
+          distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), direction,**road_options)
           measured = None if distance is None else (distance, 0.)
         if measured is not None and 0 <= measured[0] <= LOOKAHEAD_M:
           candidates.append((measured[0], identity, camera, direction, measured))
     if not candidates:
       self._pending = None
       associate = getattr(road_graph, 'associate', None)
-      reason = 'road_not_matched' if callable(associate) and associate(point, heading) is None else 'no_camera'
+      association_options = ({'tolerance':vehicle_tolerance_m,'heading_tolerance':vehicle_heading_tolerance_deg}
+                             if road_options else {})
+      reason = 'road_not_matched' if callable(associate) and associate(point, heading,**association_options) is None else 'no_camera'
       self.selection = CameraSelection(reason=reason)
       return self.selection
     distance, identity, camera, direction, measured = min(candidates, key=lambda item: (item[0], item[1]))

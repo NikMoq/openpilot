@@ -1,0 +1,56 @@
+{
+  "date": "2026-10-31",
+  "base_commit": "036d209e0605a38382e785d9870bcf4ca896abd9",
+  "status": "OFFLINE_CURVE_GPS_ODOMETRY_AND_UI_VALIDATED",
+  "curve_fix": "Joined local tangent near exact unique continuation; branches/opposite/disconnected hairpin legs not guessed",
+  "gps_policy": {
+    "max_horizontal_accuracy_m": 30,
+    "max_bearing_accuracy_deg": 45,
+    "vehicle_map_corridor_m": [
+      12,
+      30
+    ],
+    "vehicle_heading_tolerance_deg": [
+      35,
+      45
+    ],
+    "camera_projection_tolerance_unchanged": true,
+    "has_fix_and_freshness_preserved": true
+  },
+  "odometry": {
+    "acquisition": "Only GPS-preselected same camera identity",
+    "speed": "Actual fresh CAN carState.vEgo, never cruise setpoint",
+    "integration": "Monotonic trapezoidal distance, sample age<=0.25s, step gap<=2s",
+    "stopped": "No distance spent at zero measured speed",
+    "invalid_data": "Stale/nonfinite/negative/implausible/reverse CAN cannot spend distance; unknown intervals not interpolated",
+    "frozen_gps": "Duplicate fix cannot re-anchor remaining distance",
+    "completed_event": "Coherent fresh source PASSED/proof clears existing camera ceiling and warning, restores saved driver base; native command readiness remains unchanged",
+    "warning_only": "Independent identity; completion conveys no control authority",
+    "recovery": "Existing GPS acquisition/progression rules retained; no new camera from CAN-only position"
+  },
+  "ui_text": {
+    "new_candidate_s": 0.7,
+    "healthy_recovery_s": 1,
+    "minimum_readable_s": 2,
+    "continuous_mixed_diagnostics_fallback_s": 2,
+    "lifecycle_clear": "Immediate on disable, passage, new event",
+    "control_sign_countdown_and_target_delay": false,
+    "odometry_label_ru": "Путь по скорости"
+  },
+  "tests": {
+    "offline_camera_suites": "1148 passed, 9 skipped in48.36s",
+    "native_params_ipc_core_runtime_and_distance": "98 passed in25.03s",
+    "scoped_source": "198 passed",
+    "scoped_control_reason_wire_odometry": "101 passed",
+    "native_ipc_odometry": "Actual PubMaster carState -> source SubMaster -> mapd -> liveMapDataSP:100->90->...->0/PASSED",
+    "native_qt": "PASS reason mapping, debounce, 30s mixed failure non-sticking, immediate countdown/target, odometry warning-only, pass clears stale text",
+    "independent_review": "Curve55tests and exactQt stability methods independently reviewed; initially found stuck healthy text was fixed and rechecked",
+    "compiled_source_header_inputs_verified": 285,
+    "signed_paired_release_preflight": "PASS"
+  },
+  "arm_ui_sha256": "083574135d5481c376f3c98e17845ead038a9bc143520a19e366dff2d22a11eb",
+  "resource_note": "Incoming adjacency remains bounded by40k local edges; synthetic PC10k-edge index measurement +1.12MiB, no device timing claim",
+  "wire_schema_changed": false,
+  "native_CAN_command_gates_changed": false,
+  "device_or_road_validation": false
+}

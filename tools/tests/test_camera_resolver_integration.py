@@ -662,6 +662,216 @@ def test_published_camera_failure_reason_preserves_existing_authority(control, m
   assert plan.speedCameraControl.enabled == (failure != 'incompatible')
 
 
+@pytest.mark.parametrize('acquired', [False, True])
+@pytest.mark.parametrize('horizontal,bearing,fix,alive,age,accepted', [
+  (25., 35., True, True, 0., True), (30., 45., True, True, 0., True),
+  (30.01, 35., True, True, 0., False), (25., 45.01, True, True, 0., False),
+  (25., 35., False, True, 0., False), (25., 35., True, False, 0., False),
+  (25., 35., True, True, 3., False),
+])
+def test_shared_gps_accuracy_gate_preserves_fix_freshness_and_hold(
+    control, monkeypatch, acquired, horizontal, bearing, fix, alive, age, accepted):
+  c = control
+  runtime = real_wire_controls(c, monkeypatch)
+  if acquired:
+    assert update(c) == pytest.approx(75/3.6)
+  gps = c.sm['gps']
+  gps.horizontalAccuracy, gps.bearingAccuracyDeg, gps.hasFix = horizontal, bearing, fix
+  gps.unixTimestampMillis -= age * 1000
+  c.sm.alive['gps'] = alive
+  held = acquired or accepted
+  assert update(c) == pytest.approx((75 if held else 100)/3.6)
+  plan = runtime.publish()
+  assert plan.speedCameraControl.reason == ('camera_limit' if accepted else 'gps_unreliable')
+  assert plan.speedCameraControl.active == held
+  assert plan.speedCameraControl.countdownValid == accepted
+  assert plan.speedCameraControl.speedCap == pytest.approx(75/3.6 if held else 0.)
+
+
+def odometry_wire_cycle(c, monkeypatch, acquire=True):
+  import time
+  clock = [500.]
+  monkeypatch.setattr(time, 'monotonic', lambda: clock[0])
+  runtime = real_wire_controls(c, monkeypatch)
+  c.cs.canValid, c.cs.vEgo, c.cs.gearShifter = True, 10., 'drive'
+  c.sm.valid['carState'] = c.sm.alive['carState'] = True
+  c.sm.logMonoTime = {'carState': int(clock[0] * 1e9)}
+  c.sm.recv_time['carState'] = c.sm.recv_time['liveMapDataSP'] = clock[0]
+  c.lmd.speedCameraControlDistance = 100.
+  if acquire:
+    assert update(c) == pytest.approx(75/3.6)
+    runtime.publish()
+  c.sm['gps'].hasFix = False
+  c.lmd.locationValid = False
+  def message(distance, passed=False, identity='camera1'):
+    c.lmd.speedCameraControlEventId = identity
+    c.lmd.speedCameraControlState = 'PASSED' if passed else 'ACTIVE'
+    c.lmd.speedCameraControlReason = 'odometry_passed' if passed else 'odometry_tracking'
+    c.lmd.speedCameraControlValid = not passed
+    c.lmd.speedCameraControlPassProven = passed
+    c.lmd.speedCameraControlDistance = distance
+  def fresh(t):
+    clock[0] = t
+    c.sm.recv_time['carState'] = c.sm.recv_time['liveMapDataSP'] = t
+    c.sm.logMonoTime['carState'] = int(t * 1e9)
+  return runtime, clock, message, fresh
+
+
+def test_existing_camera_odometry_advances_countdown_and_restores_base(control, monkeypatch):
+  c = control
+  runtime, clock, message, fresh = odometry_wire_cycle(c, monkeypatch)
+  for t, distance in ((501., 90.), (502., 50.), (503., 0.)):
+    fresh(t)
+    message(distance, passed=distance == 0.)
+    # Neither raw GPS nor fused position is valid during this fallback.
+    assert not c.sm['gps'].hasFix and not c.lmd.locationValid
+    assert update(c) == pytest.approx((100 if distance == 0 else 75)/3.6)
+    plan = runtime.publish()
+    assert plan.speedCameraControl.reason == ('odometry_passed' if distance == 0 else 'odometry_tracking')
+    assert plan.speedCameraControl.countdownValid == (distance > 0)
+    if distance:
+      assert plan.speedCameraControl.distance == pytest.approx(distance)
+      assert plan.speedCameraControl.driverSetSpeed == pytest.approx(100/3.6)
+    else:
+      assert plan.speedCameraControl.state == 'passed'
+      assert not plan.speedLimit.resolver.speedLimitLastValid
+      assert plan.speedCameraControl.rawLimit == 0
+
+
+@pytest.mark.parametrize('fault', ['stale_can', 'can_invalid', 'can_dead', 'envelope_invalid', 'reverse',
+                                  'negative', 'nan', 'huge', 'reversed_can_stamp', 'reversed_car_receipt',
+                                  'reversed_map_receipt', 'stale_map', 'invalid_map'])
+def test_unreliable_odometry_freezes_tracking_and_stale_source_cannot_release_camera(control, monkeypatch, fault):
+  c = control
+  runtime, clock, message, fresh = odometry_wire_cycle(c, monkeypatch)
+  fresh(500.1)
+  message(90.)
+  update(c)
+  fresh(500.2)
+  pass_fault = fault in ('reversed_map_receipt', 'stale_map', 'invalid_map')
+  message(0. if pass_fault else 80., passed=pass_fault)
+  if fault == 'stale_can':
+    c.sm.logMonoTime['carState'] = int(499. * 1e9)
+  elif fault == 'can_invalid':
+    c.cs.canValid = False
+  elif fault == 'can_dead':
+    c.sm.alive['carState'] = False
+  elif fault == 'envelope_invalid':
+    c.sm.valid['carState'] = False
+  elif fault == 'reverse':
+    c.cs.gearShifter = 'reverse'
+  elif fault in ('negative', 'nan', 'huge'):
+    c.cs.vEgo = {'negative': -1., 'nan': float('nan'), 'huge': 1000.}[fault]
+  elif fault == 'reversed_can_stamp':
+    c.sm.logMonoTime['carState'] = int(500.05 * 1e9)
+  elif fault == 'reversed_car_receipt':
+    c.sm.recv_time['carState'] = 500.05
+  elif fault == 'reversed_map_receipt':
+    c.sm.recv_time['liveMapDataSP'] = 500.05
+  elif fault == 'stale_map':
+    c.sm.recv_time['liveMapDataSP'] = 496.
+  elif fault == 'invalid_map':
+    c.sm.valid['liveMapDataSP'] = False
+  assert update(c) == pytest.approx(75/3.6)
+  plan = runtime.publish()
+  assert plan.speedCameraControl.state == 'active'
+  assert not plan.speedCameraControl.countdownValid
+  assert plan.speedLimit.resolver.speedLimitLastValid
+  assert plan.speedCameraControl.reason == ('lmd_unreliable' if pass_fault else 'odometry_unavailable')
+
+
+def test_speed_gap_in_existing_odometry_context_has_explicit_reason(control, monkeypatch):
+  c = control
+  runtime, clock, message, fresh = odometry_wire_cycle(c, monkeypatch)
+  fresh(501.)
+  message(90.)
+  update(c)
+  fresh(502.)
+  c.cs.canValid = False
+  c.sm.valid['liveMapDataSP'] = False
+  c.lmd.speedCameraControlReason = 'gps_unreliable'
+  c.lmd.speedCameraControlValid = False
+  assert update(c) == pytest.approx(75/3.6)
+  assert runtime.publish().speedCameraControl.reason == 'odometry_unavailable'
+
+
+def test_fresh_completed_source_odometry_pass_survives_receiver_can_loss(control, monkeypatch):
+  c = control
+  runtime, clock, message, fresh = odometry_wire_cycle(c, monkeypatch)
+  fresh(501.)
+  c.cs.canValid = False
+  c.cs.brakePressed = True
+  message(0., passed=True)
+  assert update(c) == pytest.approx(100/3.6)
+  plan = runtime.publish()
+  assert plan.speedCameraControl.state == 'passed'
+  assert plan.speedCameraControl.reason == 'odometry_passed'
+  cc = NS(enabled=True, cruiseControl=NS(override=False, cancel=False, resume=False))
+  for _ in range(60):
+    runtime.icbm.run(c.cs, cc, plan, True)
+  assert runtime.icbm.cruise_button == runtime.icbm_mod.SendButtonState.none
+
+
+def test_gps_preselected_approach_can_enter_zone_by_odometry_without_raw_limit_change(control, monkeypatch):
+  c = control
+  runtime, clock, message, fresh = odometry_wire_cycle(c, monkeypatch, acquire=False)
+  c.sm['gps'].hasFix = c.lmd.locationValid = True
+  c.lmd.speedCameraControlDistance = 310.
+  assert update(c) == pytest.approx(100/3.6)
+  assert c.resolver.camera.output.state == 'APPROACHING'
+  c.sm['gps'].hasFix = c.lmd.locationValid = False
+  fresh(501.)
+  message(300.)
+  c.lmd.speedCameraControlSpeedLimit = 30/3.6
+  assert update(c) == pytest.approx(75/3.6)
+  assert runtime.publish().speedCameraControl.rawLimit == pytest.approx(60/3.6)
+
+
+@pytest.mark.parametrize('acquired', [False, True])
+def test_odometry_cannot_acquire_unknown_event_or_replace_existing_one(control, monkeypatch, acquired):
+  c = control
+  runtime, clock, message, fresh = odometry_wire_cycle(c, monkeypatch, acquire=acquired)
+  fresh(501.)
+  message(10., identity='unknown-camera')
+  assert update(c) == pytest.approx((75 if acquired else 100)/3.6)
+  assert c.resolver.camera.output.event_id != 'unknown-camera'
+  fresh(502.)
+  message(0., passed=True, identity='unknown-camera')
+  assert update(c) == pytest.approx((75 if acquired else 100)/3.6)
+  assert runtime.publish().speedCameraControl.state != 'passed'
+
+
+@pytest.mark.parametrize('fault', ['positive_pass_distance', 'missing_pass_proof', 'wrong_version', 'tracking_without_valid'])
+def test_incoherent_odometry_contract_cannot_release_or_advance_camera(control, monkeypatch, fault):
+  c = control
+  runtime, clock, message, fresh = odometry_wire_cycle(c, monkeypatch)
+  fresh(501.)
+  message(0., passed=True)
+  if fault == 'positive_pass_distance':
+    c.lmd.speedCameraControlDistance = 1.
+  elif fault == 'missing_pass_proof':
+    c.lmd.speedCameraControlPassProven = False
+  elif fault == 'wrong_version':
+    c.lmd.speedCameraControlVersion = 2
+  elif fault == 'tracking_without_valid':
+    message(50.)
+    c.lmd.speedCameraControlValid = False
+  assert update(c) == pytest.approx(75/3.6)
+  plan = runtime.publish()
+  assert plan.speedCameraControl.state == 'active'
+  assert not plan.speedCameraControl.countdownValid
+
+
+def test_odometry_never_changes_retained_camera_raw_cap(control, monkeypatch):
+  c = control
+  runtime, clock, message, fresh = odometry_wire_cycle(c, monkeypatch)
+  fresh(501.)
+  message(90.)
+  c.lmd.speedCameraControlSpeedLimit = 30/3.6
+  assert update(c) == pytest.approx(75/3.6)
+  assert runtime.publish().speedCameraControl.rawLimit == pytest.approx(60/3.6)
+
+
 def test_healthy_no_camera_reason_is_not_a_failure(control, monkeypatch):
   c = control
   runtime = real_wire_controls(c, monkeypatch)

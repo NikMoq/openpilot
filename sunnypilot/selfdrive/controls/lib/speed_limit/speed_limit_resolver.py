@@ -18,6 +18,8 @@ from openpilot.sunnypilot import PARAMS_UPDATE_PERIOD, get_sanitize_int_param
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit import LIMIT_MAX_MAP_DATA_AGE, LIMIT_ADAPT_ACC
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Policy, OffsetType
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
+from openpilot.sunnypilot.mapd.camera_gps_quality import camera_accuracy_acceptable
+from openpilot.sunnypilot.mapd.camera_odometry import car_speed_sample, MAX_SAMPLE_AGE_S
 from openpilot.sunnypilot.selfdrive.controls.lib.camera_speed_adapter import CameraSpeedAdapter
 from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.helpers import get_minimum_set_speed
 
@@ -87,6 +89,9 @@ class SpeedLimitResolver:
     self.camera_display_raw_limit = 0.0
     self.camera_display_offset = 0.0
     self.camera_target_below_minimum = False
+    self._last_odometry_car_receipt = None
+    self._last_odometry_map_receipt = None
+    self._last_odometry_car_stamp = None
 
   def update_speed_limit_states(self) -> None:
     self.speed_limit_final = self.speed_limit + self.speed_limit_offset
@@ -216,17 +221,48 @@ class SpeedLimitResolver:
       unix_age = time.time() - gps.unixTimestampMillis * 1e-3  # noqa: TID251
       map_age = time.monotonic() - sm.recv_time['liveMapDataSP']
       gps_reliable = bool(sm.valid[self._gps_location_service] and sm.alive[self._gps_location_service] and gps.hasFix and
-                          0 <= unix_age <= 2.5 and math.isfinite(gps.horizontalAccuracy) and 0 < gps.horizontalAccuracy <= 20 and
-                          math.isfinite(gps.bearingAccuracyDeg) and 0 <= gps.bearingAccuracyDeg <= 30)
+                          0 <= unix_age <= 2.5 and camera_accuracy_acceptable(gps))
       lmd_transport_reliable = bool(sm.alive['liveMapDataSP'] and 0 <= map_age <= 2.5)
       lmd_reliable = bool(sm.valid['liveMapDataSP'] and lmd_transport_reliable and lmd.locationValid)
+      cs = sm['carState']
+      now = time.monotonic()
+      car_receipt = sm.recv_time.get('carState', 0.)
+      map_receipt = sm.recv_time['liveMapDataSP']
+      car_ordered = bool(isinstance(car_receipt, (float, int)) and math.isfinite(car_receipt) and car_receipt > 0 and
+                         0 <= now - car_receipt <= MAX_SAMPLE_AGE_S and
+                         (self._last_odometry_car_receipt is None or car_receipt >= self._last_odometry_car_receipt))
+      map_ordered = bool(math.isfinite(map_receipt) and map_receipt > 0 and
+                         (self._last_odometry_map_receipt is None or map_receipt >= self._last_odometry_map_receipt))
+      if car_ordered:
+        self._last_odometry_car_receipt = car_receipt
+      if map_ordered and lmd_transport_reliable:
+        self._last_odometry_map_receipt = map_receipt
+      sample = car_speed_sample(sm, now)
+      can_ordered = bool(sample is not None and
+                         (self._last_odometry_car_stamp is None or sample[0] >= self._last_odometry_car_stamp))
+      can_reliable = car_ordered and can_ordered
+      if can_reliable:
+        self._last_odometry_car_stamp = sample[0]
       unreliable_reason = ("gps_unreliable" if not gps_reliable else "localizer_unreliable"
                            if lmd_transport_reliable and not lmd.locationValid else "lmd_unreliable")
-      self.camera.observe_car_state(sm['carState'])
+      source_reason = str(getattr(lmd, 'speedCameraControlReason', ''))
+      odometry_context = source_reason in ('odometry_tracking', 'odometry_passed') or (
+        self.camera.output.reason in ('odometry_tracking', 'odometry_unavailable') and self.camera.output.event_id and
+        self.camera.output.event_id == getattr(lmd, 'speedCameraControlEventId', ''))
+      if odometry_context:
+        if not lmd_transport_reliable or not map_ordered:
+          unreliable_reason = 'lmd_unreliable'
+        elif not can_reliable and source_reason != 'odometry_passed':
+          unreliable_reason = 'odometry_unavailable'
+        elif not sm.valid['liveMapDataSP']:
+          unreliable_reason = 'lmd_unreliable'
+      self.camera.observe_car_state(cs)
       output = self.camera.update(lmd, enabled=True, reliable=gps_reliable and lmd_reliable,
                                   engaged=sm['carControl'].enabled and sm['carState'].cruiseState.enabled,
                                   reaction_distance=self.camera_reaction_distance,
-                                  unreliable_reason=unreliable_reason)
+                                  unreliable_reason=unreliable_reason,
+                                  odometry_reliable=can_reliable and map_ordered and lmd_transport_reliable and sm.valid['liveMapDataSP'],
+                                  odometry_pass_reliable=map_ordered and lmd_transport_reliable and sm.valid['liveMapDataSP'])
       self.camera_display_raw_limit = output.raw_limit if output.event_id else 0.0
       self.camera_display_offset = (self._get_speed_limit_offset(self.camera_display_raw_limit)
                                     if self.camera_display_raw_limit > 0 else 0.0)

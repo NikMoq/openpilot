@@ -61,3 +61,8 @@ The maintained native runner also includes test_camera_reaction_runtime.py:
 real Params and IPC verify50/300/900/1000-m outside/inside boundaries, the shared
 warning/reaction threshold, the published value and measured countdown. The old
 SpeedCameraAlertDistanceMeters key no longer overrides this user setting.
+
+The reaction runtime module also publishes actual native CAN-derived carState
+through msgq to the source SubMaster. It verifies retained-camera odometry after
+GPS loss, consumed envelope timestamps and100->90->...->PASSED publication.
+The speed sample deliberately differs from the native cruise setpoint.

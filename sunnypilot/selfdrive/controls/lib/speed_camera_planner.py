@@ -1,9 +1,10 @@
-"""Adapt map/GPS messages to temporary camera ceilings, without vehicle I/O."""
+"""Legacy GPS-only camera ceilings; CAN odometry is handled by Resolver's current adapter."""
 
 from __future__ import annotations
 
 import math
 import struct
+from openpilot.sunnypilot.mapd.camera_gps_quality import camera_accuracy_acceptable
 
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_camera_controller import (
   CameraControlInput, CameraControlOutput, CameraControlState, CameraObservation, SpeedCameraController,
@@ -144,8 +145,7 @@ class SpeedCameraPlanner:
 
     # Message receipt time is monotonic; GPS time is Unix. The caller supplies
     # the receipt AGE, which can be safely converted to this Unix clock.
-    accuracy_ok = (math.isfinite(gps.horizontalAccuracy) and 0 < gps.horizontalAccuracy <= 20 and
-                   math.isfinite(gps.bearingAccuracyDeg) and 0 <= gps.bearingAccuracyDeg <= 30)
+    accuracy_ok = camera_accuracy_acceptable(gps)
     data = CameraControlInput(
       enabled=enabled, acc_engaged=engaged,
       gps_valid=bool(gps_valid and gps.hasFix and accuracy_ok), gps_alive=gps_alive,
