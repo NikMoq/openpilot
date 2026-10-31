@@ -44,6 +44,10 @@ class VCruiseHelper(VCruiseHelperSP):
     return self.v_cruise_kph != V_CRUISE_UNSET
 
   def update_v_cruise(self, CS, enabled, is_metric):
+    previous_native = self._native_driver_last_speed_kph
+    current_native = CS.cruiseState.speed * CV.MS_TO_KPH
+    if math.isfinite(current_native) and current_native > 0:
+      self._native_driver_last_speed_kph = current_native
     was_engaged = self._camera_acc_engaged_prev
     engaged = bool(CS.cruiseState.enabled and not CS.brakePressed)
     self._camera_acc_engaged_prev = engaged
@@ -63,6 +67,13 @@ class VCruiseHelper(VCruiseHelperSP):
           # remembered pre-camera driver setting. Physical +/-/SET responses
           # (including delayed/held changes) must not rewrite that setting or
           # create persistent manual ownership of the camera event.
+          self._native_camera_origin_buttons.update(self._camera_speed_buttons_held)
+          for b in CS.buttonEvents:
+            if b.type in (ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.setCruise, ButtonType.resumeCruise):
+              if b.pressed:
+                self._native_camera_origin_buttons.add(b.type.raw)
+              else:
+                self._native_camera_origin_buttons.discard(b.type.raw)
           self._camera_manual_feedback_pending = False
           self._camera_manual_feedback_baseline = None
           self._camera_manual_gesture = self._camera_manual_follow = False
@@ -83,6 +94,15 @@ class VCruiseHelper(VCruiseHelperSP):
             self.v_cruise_cluster_kph = cluster_kph if math.isfinite(cluster_kph) and cluster_kph > 0 else stock_kph
             self._stock_virtual_cruise_initialized = True
             self._stock_set_pending = False
+            # Released SET establishes native ownership, including a response
+            # arriving after the first valid engagement feedback. A different
+            # published automatic goal closes this initially directionless
+            # follow before its own stock response can replace driver memory.
+            self._camera_manual_feedback_baseline = stock_kph
+            self._camera_manual_feedback_direction = 0
+            self._camera_manual_feedback_pending = self._camera_manual_gesture = False
+            self._camera_manual_follow = True
+            self._camera_release_seen.add(ButtonType.setCruise)
           self.update_button_timers(CS, enabled)
           return
         if (not self._stock_virtual_cruise_initialized and not self._stock_set_held and
@@ -112,9 +132,14 @@ class VCruiseHelper(VCruiseHelperSP):
           if b.type not in (ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.setCruise, ButtonType.resumeCruise):
             continue
           kind = b.type.raw
+          if kind in self._native_camera_origin_buttons:
+            self._native_camera_origin_buttons.discard(kind)
+            if not b.pressed:
+              continue  # The release belongs to the earlier camera-owned gesture.
           if b.type == ButtonType.resumeCruise and b.pressed and kind not in self._camera_speed_buttons_held:
-            self._camera_resume_session = not (was_engaged and engaged)
-          session_resume = b.type == ButtonType.resumeCruise and (self._camera_resume_session or not (was_engaged and engaged))
+            self._camera_resume_session = not (was_engaged and engaged) or CS.cruiseState.standstill
+          session_resume = b.type == ButtonType.resumeCruise and (self._camera_resume_session or not (was_engaged and engaged) or
+                                                                 CS.cruiseState.standstill)
           if b.pressed:
             if kind not in self._camera_speed_buttons_held:
               action = None if session_resume else b.type
@@ -132,22 +157,42 @@ class VCruiseHelper(VCruiseHelperSP):
         stock_kph = CS.cruiseState.speed * CV.MS_TO_KPH
         if action is not None and not self.camera_episode_active:
           self._camera_manual_follow = False
-        if action is not None and (self.camera_episode_active or self._camera_manual_feedback_pending):
+        native_action = action is not None and (action in (ButtonType.setCruise, ButtonType.resumeCruise) or
+                                               not self.custom_acc_enabled)
+        if action is not None and not native_action:
+          # Custom +/- retains the existing user-selected virtual step size.
+          self._camera_manual_feedback_pending = self._camera_manual_gesture = False
+          self._camera_manual_gesture_kind = None
+        if native_action:
           self._camera_manual_feedback_pending = True
           self._camera_manual_feedback_baseline = stock_kph
           self._camera_manual_gesture_kind = action.raw
           self._camera_manual_gesture = action.raw in self._camera_speed_buttons_held
           self._camera_manual_changed_held = self._camera_manual_follow = False
-          self._camera_manual_feedback_direction = 1 if action in (ButtonType.accelCruise, ButtonType.resumeCruise) else -1
+          self._camera_manual_feedback_direction = (0 if action == ButtonType.setCruise else
+                                                    1 if action in (ButtonType.accelCruise, ButtonType.resumeCruise) else -1)
+          # Native SET/RES and coarse/held +/- own their actual native values
+          # outside camera zones. Do not reinterpret them as virtual +/-1.
+          # A response can already be present on the press edge; compare the
+          # preceding native sample rather than waiting for another change.
+          prior_valid = previous_native is not None and math.isfinite(previous_native) and previous_native > 0
+          delta = stock_kph - previous_native if prior_valid else 0.
+          if action == ButtonType.setCruise and abs(delta) > .036:
+            self._camera_manual_feedback_direction = 1 if delta > 0 else -1
+          same_or_expected = (abs(delta) <= .036 or self._camera_manual_feedback_direction == 0 or
+                              delta * self._camera_manual_feedback_direction > 0)
+          if same_or_expected and self.accept_native_driver_speed(CS):
+            self._camera_manual_feedback_pending = False
+            self._camera_manual_changed_held = self._camera_manual_gesture
+            self._camera_manual_follow = not self._camera_manual_gesture
         if released == self._camera_manual_gesture_kind and self._camera_manual_gesture:
           self._camera_manual_gesture = False
           self._camera_manual_feedback_pending = not self._camera_manual_changed_held
           self._camera_manual_follow = self._camera_manual_changed_held
         if self._camera_manual_feedback_pending or self._camera_manual_gesture or self._camera_manual_follow:
-          # Preserve the driver's base until the attributed native response
-          # changes. No unproved ECU latency timeout may replace it with the
-          # old temporary ACC target. The planner marks this uncertainty as
-          # manual so the unchanged ICBM guard pauses requests meanwhile.
+          # Follow only the attributed native gesture, not ordinary SCC/ICBM
+          # stock movement. Published automatic goals close residual follow
+          # when they can explain movement in this direction.
           baseline = self._camera_manual_feedback_baseline
           if not math.isfinite(stock_kph) or not 0 < stock_kph <= V_CRUISE_MAX:
             self._camera_manual_feedback_pending = True
@@ -156,9 +201,9 @@ class VCruiseHelper(VCruiseHelperSP):
               abs(stock_kph - baseline) > .036 and
               (self._camera_manual_feedback_direction == 0 or
                (stock_kph - baseline) * self._camera_manual_feedback_direction > 0)):
-            self.v_cruise_kph = self.driver_set_speed_kph = stock_kph
-            cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
-            self.v_cruise_cluster_kph = cluster_kph if math.isfinite(cluster_kph) and cluster_kph > 0 else stock_kph
+            if self._camera_manual_feedback_direction == 0:
+              self._camera_manual_feedback_direction = 1 if stock_kph > baseline else -1
+            self.accept_native_driver_speed(CS)
             self._camera_manual_feedback_pending = False
             self._camera_manual_changed_held |= self._camera_manual_gesture
             self._camera_manual_feedback_baseline = stock_kph
@@ -209,6 +254,7 @@ class VCruiseHelper(VCruiseHelperSP):
         self.camera_episode_active = False
         self.enabled_prev = False
         self._stock_set_pending = self._stock_set_held = self._stock_set_from_camera = False
+        self._native_camera_origin_buttons.clear()
 
   def _update_v_cruise_non_pcm(self, CS, enabled, is_metric):
     # handle button presses. TODO: this should be in state_control, but a decelCruise press

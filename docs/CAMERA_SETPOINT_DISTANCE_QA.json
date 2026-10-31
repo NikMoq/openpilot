@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-31",
+  "base_commit": "3fa770aab911c6b0893745c78d1d68040a9229d8",
+  "status": "OFFLINE_SETPOINT_UI_AND_DISTANCE_VALIDATED",
+  "observed_photo": {
+    "stock_feedback_kph": 110,
+    "virtual_display_kph": 38,
+    "camera_limit_kph": 90,
+    "offset_kph": 0,
+    "distance_m": 408
+  },
+  "confirmed_reproduction": "Initialize native/virtual38; active outside-camera RES changes native feedback to110 but old helper retains38. Camera90 activates SLA90 while min arbitration selects cruise38. Green was tied to assist.active instead of selected source.",
+  "fixes": [
+    "Attribute supported physical SET/RES and ordinary +/- native feedback outside camera zone to remembered driver goal; preserve configured custom virtual increments",
+    "Protect pre-camera goal from in-zone gestures and camera-origin releases after passage; preserve pedal priority",
+    "During fresh active camera present selected LP.vTarget in lower UI digit; green only for selected camera/SLA; preserve actual native feedback above",
+    "Use validated SpeedCameraReactionDistance50..1000 step50/default300 for both warning selection and reaction/countdown; ignore old separate warning key",
+    "Include new native distance tests in maintained runtime builder runner"
+  ],
+  "verified_scenario": "38 -> physical native110 -> remembered110 -> camera90 offset0 selects90 and ICBM decrease request; pedal pauses requests; confirmed pass selects110 and ICBM increase request.",
+  "distance_findings": [
+    "Valid900 is preserved through native Params, producer, resolver, plan and countdown",
+    "First valid camera distance408 displays408; no invented reset to900",
+    "300 is still a warning-only color threshold, not a visibility gate",
+    "Late actual GPS/route acquisition on user route remains unverified"
+  ],
+  "tests": {
+    "focused_actual_driver_memory_wire_icbm": "58 passed",
+    "offline_camera_suite": "1066 passed, 9 skipped in43.01s",
+    "native_params_ipc_core_override_and_reaction": "97 passed in28.51s",
+    "reaction_boundary_cases": "50,300,900,1000 with actual native Params+IPC; configured900 versus old key100/5000; 16 warning/control combinations and7 invalid cases",
+    "native_qt": "PASS actual target90 green, legitimate base38 white, SCC70 white, pass restores110, invalid/stale/base bounds, mph, all distance steps, settings and stock trips",
+    "ui_source_header_inputs_verified": 285,
+    "paired_signed_release_preflight": "PASS"
+  },
+  "arm_ui_sha256": "232936080c98f9d62821b04cd883bbffe349bff8ff3a6851270ad671fcab6044",
+  "limits": [
+    "No vehicle/CAN/Panda actuation during tests",
+    "The logical stale38 bug does not establish the actual on-device reason for no transmitted ACC correction",
+    "Real setpoint execution still depends on existing freshness, readiness and paired firmware gates; these were not bypassed or relaxed",
+    "No on-device or road validation claimed"
+  ]
+}

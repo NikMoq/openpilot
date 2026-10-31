@@ -179,7 +179,7 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
 
   speed_camera_reaction_distance = new OptionControlSP(
     "SpeedCameraReactionDistance", tr("Camera Reaction Distance"),
-    tr("Begin reacting at this distance before the camera. This is not a guarantee of reaching the target speed before it."), "",
+    tr("Show camera warnings and begin reacting at this distance before the camera. This is not a guarantee of reaching the target speed before it."), "",
     {50, 1000}, 50);
   cameraButtonSymbols(speed_camera_reaction_distance);
   connect(speed_camera_reaction_distance, &OptionControlSP::updateLabels, this, [this]() {

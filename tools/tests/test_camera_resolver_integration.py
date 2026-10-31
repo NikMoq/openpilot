@@ -214,7 +214,8 @@ def camera_wire_cycle(c, monkeypatch):
     cc.enabled = c.sm['carControl'].enabled = enabled
     c.planner.camera.observe_car_state(cs, automatic_target=c.planner.output_v_target)
     helper.update_v_cruise(cs, enabled, True)
-    cs.vCruise = cs.vCruiseCluster = helper.v_cruise_kph
+    cs.vCruise = float(helper.v_cruise_kph)
+    cs.vCruiseCluster = float(helper.v_cruise_cluster_kph)
     update(c)
     plan = runtime.publish()
     runtime.icbm.run(cs, cc, plan, True)
@@ -392,6 +393,133 @@ def test_scc_feedback_after_camera_button_release_cannot_rewrite_pre_camera_base
   c.lmd.speedCameraControlPassProven = True
   assert frame(auto_goal).vTarget == pytest.approx(100/3.6)
   assert runtime.helper.v_cruise_kph == 100
+
+
+def outside_camera_wire_cycle(c, monkeypatch, driver=38, stock=38, requested=True):
+  monkeypatch.setitem(Params.values, 'SpeedCameraControlEnabled', '1' if requested else '0')
+  if not requested:
+    monkeypatch.setitem(Params.values, 'SpeedLimitMode', 0)
+  c.lmd.speedCameraControlValid = False
+  c.lmd.speedCameraControlEventId = ''
+  c.lmd.speedCameraControlState = 'IDLE'
+  runtime, frame = camera_wire_cycle(c, monkeypatch)
+  runtime.helper.v_cruise_kph = runtime.helper.v_cruise_cluster_kph = driver
+  runtime.cs.vCruise = runtime.cs.vCruiseCluster = driver
+  frame(stock)
+  assert runtime.helper.v_cruise_kph == driver  # Native changes alone have no ownership.
+  return runtime, frame
+
+
+@pytest.mark.parametrize('button,before,press,held,final', [
+  ('resumeCruise', 38, 38, (60, 90, 110), 110),
+  ('setCruise', 38, 110, (), 110), ('setCruise', 110, 109, (), 109),
+  ('accelCruise', 38, 40, (), 40), ('decelCruise', 40, 40, (30,), 30),
+])
+def test_outside_camera_physical_native_gesture_owns_actual_feedback(control, monkeypatch, button, before, press, held, final):
+  runtime, frame = outside_camera_wire_cycle(control, monkeypatch, stock=before)
+  frame(press, [dict(type=button, pressed=True)])
+  assert runtime.helper.v_cruise_kph == pytest.approx(press)
+  for stock in held:
+    frame(stock)
+    assert runtime.helper.v_cruise_kph == pytest.approx(stock)
+  plan = frame(final, [dict(type=button, pressed=False)])
+  assert runtime.helper.v_cruise_kph == pytest.approx(final)
+  assert plan.vTarget == pytest.approx(final/3.6)
+  assert runtime.icbm.cruise_button == runtime.icbm_mod.SendButtonState.none
+
+
+@pytest.mark.parametrize('button', ['resumeCruise', 'setCruise'])
+@pytest.mark.parametrize('requested', [False, True])
+def test_outside_camera_native_gesture_accepts_delayed_ack_without_camera_dependency(control, monkeypatch, button, requested):
+  runtime, frame = outside_camera_wire_cycle(control, monkeypatch, requested=requested)
+  frame(38, [dict(type=button, pressed=True)])
+  frame(38, [dict(type=button, pressed=False)])
+  for _ in range(30):
+    frame(38)
+  plan = frame(110)
+  assert runtime.helper.v_cruise_kph == pytest.approx(110)
+  assert plan.vTarget == pytest.approx(110/3.6)
+
+
+def test_reengaging_set_accepts_later_native_feedback(control, monkeypatch):
+  runtime, frame = outside_camera_wire_cycle(control, monkeypatch, requested=False)
+  frame(38, enabled=False, acc=False)
+  frame(38, [dict(type='setCruise', pressed=True)], enabled=False, acc=False)
+  frame(38, [dict(type='setCruise', pressed=False)])
+  plan = frame(110)
+  assert runtime.helper.v_cruise_kph == pytest.approx(110)
+  assert plan.vTarget == pytest.approx(110/3.6)
+
+
+def test_custom_virtual_increment_stays_distinct_from_native_feedback(control, monkeypatch):
+  runtime, frame = outside_camera_wire_cycle(control, monkeypatch, driver=40, stock=40)
+  runtime.helper.custom_acc_enabled = True
+  runtime.helper.short_increment, runtime.helper.long_increment = 5, 10
+  frame(40, [dict(type='accelCruise', pressed=True)])
+  plan = frame(41, [dict(type='accelCruise', pressed=False)])
+  assert runtime.helper.v_cruise_kph == 45  # Configured +5, not native +1.
+  assert plan.vTarget == pytest.approx(45/3.6)
+  frame(44)  # Automatic stock changes do not replace the custom target.
+  assert runtime.helper.v_cruise_kph == 45
+  frame(44, [dict(type='resumeCruise', pressed=True)])
+  frame(46, [dict(type='resumeCruise', pressed=False)])
+  assert runtime.helper.v_cruise_kph == pytest.approx(46)  # Native RES remains native.
+
+
+def test_scc_stock_movement_does_not_replace_native_driver_memory(control, monkeypatch):
+  c = control
+  runtime, frame = outside_camera_wire_cycle(c, monkeypatch, driver=110, stock=110)
+  # An explicit SET may establish its direction from either positive or
+  # negative native feedback; an automatic goal must close residual follow.
+  frame(110, [dict(type='setCruise', pressed=True)])
+  frame(100, [dict(type='setCruise', pressed=False)])
+  assert runtime.helper.v_cruise_kph == pytest.approx(100)
+  c.planner.scc.map.output_v_target = 70/3.6
+  frame(100)
+  frame(70)
+  assert runtime.helper.v_cruise_kph == pytest.approx(100)
+  c.planner.scc.map.output_v_target = 255
+  plan = frame(90)
+  assert runtime.helper.v_cruise_kph == pytest.approx(100)
+  assert plan.vTarget == pytest.approx(100/3.6)
+
+
+def test_native110_camera90_then_pass_restores110_and_pedals_keep_priority(control, monkeypatch):
+  c = control
+  runtime, frame = outside_camera_wire_cycle(c, monkeypatch)
+  frame(38, [dict(type='resumeCruise', pressed=True)])
+  frame(110)
+  frame(110, [dict(type='resumeCruise', pressed=False)])
+  assert runtime.helper.v_cruise_kph == pytest.approx(110)
+  monkeypatch.setitem(Params.values, 'SpeedCameraReactionDistance', '500')
+  monkeypatch.setitem(Params.values, 'SpeedLimitValueOffset', 0)
+  c.resolver.frame = 0
+  c.lmd.speedCameraControlValid = True
+  c.lmd.speedCameraControlEventId = 'photo-camera90'
+  c.lmd.speedCameraControlState = 'ACTIVE'
+  c.lmd.speedCameraControlSpeedLimit = 90/3.6
+  c.lmd.speedCameraControlDistance = 408.
+  for _ in range(60):
+    plan = frame(110)
+  assert plan.vTarget == pytest.approx(90/3.6)
+  assert plan.speedCameraControl.driverSetSpeed == pytest.approx(110/3.6)
+  assert runtime.icbm.cruise_button == runtime.icbm_mod.SendButtonState.decrease
+  frame(90)
+  assert runtime.helper.v_cruise_kph == pytest.approx(110)
+  frame(90, gas=True)
+  assert runtime.icbm.cruise_button == runtime.icbm_mod.SendButtonState.none
+  frame(90, brake=True, enabled=False, acc=False)
+  assert runtime.helper.v_cruise_kph == pytest.approx(110)
+  assert runtime.icbm.cruise_button == runtime.icbm_mod.SendButtonState.none
+  frame(90, [dict(type='resumeCruise', pressed=True)])
+  frame(90, [dict(type='resumeCruise', pressed=False)])
+  c.lmd.speedCameraControlState = 'PASSED'
+  c.lmd.speedCameraControlPassProven = True
+  for _ in range(60):
+    plan = frame(90)
+  assert runtime.helper.v_cruise_kph == pytest.approx(110)
+  assert plan.vTarget == pytest.approx(110/3.6)
+  assert runtime.icbm.cruise_button == runtime.icbm_mod.SendButtonState.increase
 
 
 def test_unrequested_camera_preserves_ordinary_sla_confirmation(control, monkeypatch):

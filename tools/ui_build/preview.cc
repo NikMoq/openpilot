@@ -15,6 +15,7 @@
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 #include <cassert>
+#include <limits>
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/sunnypilot/qt/onroad/hud.h"
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h"
@@ -200,6 +201,106 @@ public:
     assert(hud.cameraStatusText() == QStringLiteral("Ошибка формата карт\nНиже минимума ACC"));
     prefs.remove("LanguageSetting");
   }
+  static void verifySharedCameraDistance() {
+    Params prefs;
+    HudRendererSP hud;
+    prefs.put("SpeedCameraAlertDistanceMeters", "1000");
+    for (int distance = 50; distance <= 1000; distance += 50) {
+      prefs.put("SpeedCameraReactionDistance", std::to_string(distance));
+      assert(hud.cameraReactionDistance() == distance);
+    }
+    prefs.put("SpeedCameraAlertDistanceMeters", "5000");
+    prefs.put("SpeedCameraReactionDistance", "900");
+    assert(hud.cameraReactionDistance() == 900);  // Legacy independent warning setting cannot win.
+    for (const char *invalid : {"", "0", "49", "1050", "900x", "nan", "950.0", "-50", "3000"}) {
+      prefs.put("SpeedCameraReactionDistance", invalid);
+      assert(hud.cameraReactionDistance() == 300);
+    }
+    prefs.put("SpeedCameraReactionDistance", "300");
+    prefs.put("SpeedCameraAlertDistanceMeters", "1000");
+  }
+  static void verifyCameraCruisePresentation(const QString &output) {
+    HudRendererSP hud;
+    hud.is_metric = true;
+    hud.is_cruise_set = hud.is_cruise_available = true;
+    hud.pcmCruiseSpeed = false;
+    hud.carControlEnabled = true;
+    hud.longOverride = false;
+    hud.speedCluster = 110;
+    hud.speedLimitAssistActive = true;
+    capnp::MallocMessageBuilder message;
+    auto plan = message.initRoot<cereal::LongitudinalPlanSP>();
+    auto camera = plan.initSpeedCameraControl();
+    camera.setEnabled(true); camera.setActive(true); camera.setEventId("camera90");
+    camera.setState("active"); camera.setRawLimit(90 / 3.6f); camera.setAppliedOffset(0);
+    camera.setReactionDistance(900); camera.setDistance(408); camera.setCountdownValid(true);
+    plan.initSpeedLimit().initAssist().setActive(true);
+    using Source = cereal::LongitudinalPlanSP::LongitudinalPlanSource;
+    auto display = [&](float base, float target, Source source, bool fresh = true, float conversion = 3.6f,
+                       std::optional<float> driver_base_kph = std::nullopt) {
+      hud.set_speed = base;
+      plan.setVTarget(target / conversion); plan.setLongitudinalPlanSource(source);
+      hud.updateCameraPresentation(camera.asReader(), true, fresh, conversion);
+      hud.updateCameraCruisePresentation(plan.asReader(), fresh, conversion, driver_base_kph.value_or(base / conversion * 3.6f));
+      // Presentation must leave the requested plan/camera data untouched.
+      assert(std::abs(plan.getVTarget() * conversion - target) < .001f || !std::isfinite(target));
+      assert(std::abs(camera.getRawLimit() * 3.6f - 90) < .001f);
+    };
+    auto has_green_digits = [&](const char *name) {
+      QImage image(600, 300, QImage::Format_ARGB32);
+      image.fill(Qt::black);
+      QPainter painter(&image); hud.drawSetSpeedSP(painter, image.rect()); painter.end();
+      assert(image.save(output + "/" + name + ".png"));
+      for (int y = 120; y < 250; ++y) for (int x = 60; x < 260; ++x) {
+        const auto color = image.pixelColor(x,y);
+        if (color.red() < 15 && color.green() > 240 && color.blue() < 15) return true;
+      }
+      return false;
+    };
+    display(110, 90, Source::SPEED_LIMIT_ASSIST);
+    assert(std::abs(hud.set_speed - 90) < .001f && hud.cameraSpeedLimitSelected);
+    assert(has_green_digits("camera-target90"));
+    display(38, 38, Source::CRUISE);
+    assert(std::abs(hud.set_speed - 38) < .001f && !hud.cameraSpeedLimitSelected);
+    assert(!has_green_digits("camera-driver38-not-selected"));
+    display(110, 70, Source::SCC_MAP);
+    assert(std::abs(hud.set_speed - 70) < .001f && !hud.cameraSpeedLimitSelected);
+    assert(!has_green_digits("camera-scc70-selected"));
+    display(110, 70, Source::SCC_VISION);
+    assert(std::abs(hud.set_speed - 70) < .001f && !hud.cameraSpeedLimitSelected);
+    display(110, 90, Source::SPEED_LIMIT_ASSIST, false);
+    assert(hud.set_speed == 110 && !hud.cameraSpeedLimitSelected);
+    for (float invalid : {0.f, -1.f, 111.f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()}) {
+      display(110, invalid, Source::SPEED_LIMIT_ASSIST);
+      assert(hud.set_speed == 110 && !hud.cameraSpeedLimitSelected);
+    }
+    // A plausible display value cannot validate an invalid actual driver base.
+    for (float invalid_base : {0.f, -1.f, 146.f, 255.f, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity()}) {
+      display(110, 90, Source::SPEED_LIMIT_ASSIST, true, 3.6f, invalid_base);
+      assert(hud.set_speed == 110 && !hud.cameraSpeedLimitSelected);
+    }
+    display(110, 90, Source::SPEED_LIMIT_ASSIST, true, 3.6f, 38);
+    assert(hud.set_speed == 110 && !hud.cameraSpeedLimitSelected);
+    // Invalid base must not be replaced by an apparently valid request.
+    hud.is_cruise_set = false;
+    display(255, 90, Source::SPEED_LIMIT_ASSIST);
+    assert(hud.set_speed == 255 && !hud.cameraSpeedLimitSelected);
+    hud.is_cruise_set = true;
+    camera.setActive(false); camera.setState("passed");
+    display(110, 110, Source::CRUISE);
+    assert(hud.set_speed == 110 && !hud.cameraSpeedLimitSelected);
+    assert(!has_green_digits("camera-passed-base110"));
+    camera.setActive(true); camera.setState("active");
+    // Display conversion is shared with the existing base HUD, including mph.
+    const float mph = 2.2369363f;
+    display(110 / 3.6f * mph, 90 / 3.6f * mph, Source::SPEED_LIMIT_ASSIST, true, mph);
+    assert(std::abs(hud.set_speed - 90 / 3.6f * mph) < .001f);
+    // Ordinary road mode retains its native display and coloring behavior.
+    hud.set_speed = 110;
+    hud.updateCameraPresentation(camera.asReader(), false, true, 3.6f);
+    hud.updateCameraCruisePresentation(plan.asReader(), true, 3.6f, 110);
+    assert(hud.set_speed == 110 && !hud.cameraSpeedLimitSelected);
+  }
   static void capture(const QString &path, double distance, int threshold, const char *state,
                       bool countdown, bool fresh, float raw = 20 / 3.6f, const char *reason = "", float offset = 15 / 3.6f) {
     HudRendererSP hud;
@@ -277,6 +378,8 @@ int main(int argc, char **argv) {
   CameraUiFixture::verifyTransitions();
   CameraUiFixture::verifyPlaceholder();
   CameraUiFixture::verifyFailureStatuses();
+  CameraUiFixture::verifyCameraCruisePresentation(output);
+  CameraUiFixture::verifySharedCameraDistance();
   Params placeholder_params;
   placeholder_params.put("SpeedLimitOffsetType", "1");
   placeholder_params.put("SpeedLimitValueOffset", "15");

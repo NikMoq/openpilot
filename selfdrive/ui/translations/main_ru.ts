@@ -4013,6 +4013,10 @@ Data</source><translation>Авто +
 
 <context>
     <name>SpeedLimitSettings</name>
+    <message>
+        <source>Show camera warnings and begin reacting at this distance before the camera. This is not a guarantee of reaching the target speed before it.</source>
+        <translation>Показывать предупреждения о камерах и начинать корректировку скорости с этого расстояния. Достижение целевой скорости до камеры не гарантируется.</translation>
+    </message>
     <message><source>None</source><translation>Нет</translation></message>
     <message><source>Fixed</source><translation>Фиксированный</translation></message>
     <message><source>Percent</source><translation>Процент</translation></message>

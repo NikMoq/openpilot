@@ -70,7 +70,8 @@ def map_pipeline(monkeypatch, tmp_path):
   module = load('offline_osm_camera_test', 'sunnypilot/mapd/live_map_data/osm_map_data.py')
   instance = module.OsmMapData.__new__(module.OsmMapData)
   cache = tmp_path / 'cameras.json'
-  config = {'SpeedCameraDatabasePath': str(cache), 'SpeedCameraControlEnabled': '1', 'SpeedCameraEnabled': '1'}
+  config = {'SpeedCameraDatabasePath': str(cache), 'SpeedCameraControlEnabled': '1', 'SpeedCameraEnabled': '1',
+            'SpeedCameraReactionDistance': '1000'}
   instance.camera_params = NS(get=config.get, put=lambda key, value: config.__setitem__(key, value))
   instance.params = NS(get_bool=lambda _key: True)
   instance.mem_params = NS(get=lambda _key: None)
@@ -200,6 +201,48 @@ def test_warning_and_control_toggles_are_independent(map_pipeline, warnings, con
   assert lmd.speedCameraControlValid is control_valid
   if control_valid:
     assert lmd.speedCameraControlEventId and lmd.speedCameraControlState == 'ACTIVE'
+
+
+@pytest.mark.parametrize('distance',[50,300,900,1000])
+@pytest.mark.parametrize('warnings,control',[(False,False),(False,True),(True,False),(True,True)])
+def test_shared_reaction_zone_bounds_warnings_without_shortening_control_lookahead(
+    map_pipeline,monkeypatch,distance,warnings,control):
+  instance,config,publish = map_pipeline
+  config.update(SpeedCameraReactionDistance=str(distance),SpeedCameraAlertDistanceMeters='100',
+                SpeedCameraEnabled=str(int(warnings)),SpeedCameraControlEnabled=str(int(control)))
+  module = sys.modules[instance.__class__.__module__]
+  epoch = time.time()
+  monkeypatch.setattr(module,'time',NS(time=lambda: epoch))
+  rows = bkm_row(18059,distance+5)
+  outside,_ = publish(rows)
+  assert instance.camera_alert_distance_m == distance
+  assert not outside.speedCameraAheadValid
+  assert outside.speedCameraControlValid is control
+  if control:
+    assert outside.speedCameraControlState == 'APPROACHING'
+  gps = instance.sm[instance.camera_gps_service]
+  gps.latitude = instance.last_position.latitude = latitude(10)
+  gps.unixTimestampMillis += 1000
+  epoch += 1
+  inside,_ = publish(rows)
+  assert inside.speedCameraAheadValid is warnings
+  assert inside.speedCameraControlValid is control
+  if warnings:
+    assert inside.speedCameraAheadDistance == pytest.approx(distance-5,abs=.01)
+  if control:
+    assert inside.speedCameraControlState == 'ACTIVE'
+    assert inside.speedCameraControlDistance == pytest.approx(distance-5,abs=.01)
+
+
+@pytest.mark.parametrize('stored',[None,'','invalid','49','125','1050','900.0'])
+def test_invalid_or_missing_reaction_setting_uses300_not_legacy_warning_distance(map_pipeline,stored):
+  instance,config,publish = map_pipeline
+  config['SpeedCameraReactionDistance'] = stored
+  config['SpeedCameraAlertDistanceMeters'] = '1000'
+  config['SpeedCameraControlEnabled'] = '0'
+  message,_ = publish(bkm_row(18059,305))
+  assert instance.camera_alert_distance_m == 300
+  assert not message.speedCameraAheadValid and not message.speedCameraControlValid
 
 
 @pytest.mark.parametrize('metric', [True, False])

@@ -4,6 +4,7 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+import math
 import numpy as np
 
 from cereal import car, custom
@@ -82,6 +83,18 @@ class VCruiseHelperSP:
     self._stock_set_pending = False
     self._stock_set_held = False
     self._stock_set_from_camera = False
+    self._native_driver_last_speed_kph = None
+    self._native_camera_origin_buttons = set()
+
+  def accept_native_driver_speed(self, CS: car.CarState) -> bool:
+    """Record supported native feedback only inside an attributed gesture."""
+    stock_kph = CS.cruiseState.speed * CV.MS_TO_KPH
+    if not math.isfinite(stock_kph) or not 0 < stock_kph <= V_CRUISE_MAX:
+      return False
+    self.v_cruise_kph = self.driver_set_speed_kph = stock_kph
+    cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
+    self.v_cruise_cluster_kph = cluster_kph if math.isfinite(cluster_kph) and cluster_kph > 0 else stock_kph
+    return True
 
   @property
   def remember_stock_cruise(self) -> bool:
@@ -152,18 +165,16 @@ class VCruiseHelperSP:
   def update_speed_limit_assist(self, is_metric, LP_SP: custom.LongitudinalPlanSP) -> None:
     camera = LP_SP.speedCameraControl
     self.camera_mode = camera.enabled
-    if not self.camera_mode:
-      self._camera_manual_feedback_pending = False
-      self._camera_manual_feedback_baseline = None
-      self._camera_manual_gesture = False
-      self._camera_manual_follow = False
-      self._camera_speed_buttons_held.clear()
-      self._camera_release_seen.clear()
+    # Native physical gestures outside a camera zone remain meaningful while
+    # camera control is off or no camera is selected. Camera-zone ownership is
+    # still handled separately by camera_episode_active below.
     self.camera_manual_takeover = camera.manualTakeover
     if self._camera_manual_follow and not self._camera_manual_gesture and not self._camera_manual_feedback_pending:
       baseline = self._camera_manual_feedback_baseline
       goal = LP_SP.vTarget * CV.MS_TO_KPH
-      if baseline is not None and (goal - baseline) * self._camera_manual_feedback_direction > .036:
+      explained = (abs(goal - baseline) > .036 if baseline is not None and self._camera_manual_feedback_direction == 0 else
+                   baseline is not None and (goal - baseline) * self._camera_manual_feedback_direction > .036)
+      if explained:
         # This published goal can explain later same-direction stock motion;
         # it is no longer evidence of a delayed physical gesture response.
         self._camera_manual_follow = False

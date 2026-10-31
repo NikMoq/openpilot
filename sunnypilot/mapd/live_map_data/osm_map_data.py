@@ -41,7 +41,7 @@ class OsmMapData(BaseMapData):
     self.camera_osm_bridge = OfflineOsmBridge(Paths.mapd_root())
     self.camera_enabled = True
     self.camera_warning_enabled = True
-    self.camera_alert_distance_m = 1_000.0
+    self.camera_alert_distance_m = 300
 
   def _refresh_camera_config(self) -> None:
     configured_path = self.camera_params.get("SpeedCameraDatabasePath")
@@ -55,10 +55,10 @@ class OsmMapData(BaseMapData):
     self.camera_warning_enabled = enabled not in ("0", "false", "no", "off")
     self.camera_enabled = self.camera_warning_enabled or self.camera_params.get("SpeedCameraControlEnabled") == "1"
     try:
-      distance = float(self.camera_params.get("SpeedCameraAlertDistanceMeters") or 1_000)
-      self.camera_alert_distance_m = min(max(distance, 100.0), 5_000.0) if math.isfinite(distance) else 1_000.0
+      distance = int(self.camera_params.get("SpeedCameraReactionDistance") or 300)
     except (TypeError, ValueError):
-      self.camera_alert_distance_m = 1_000.0
+      distance = 300
+    self.camera_alert_distance_m = distance if distance in range(50,1001,50) else 300
 
   def _load_camera_database(self) -> None:
     self._refresh_camera_config()
@@ -92,9 +92,9 @@ class OsmMapData(BaseMapData):
         self.last_position.latitude,
         self.last_position.longitude,
         heading_deg=self.last_bearing,
-        # Warning distance is a display preference, not the control lookahead.
-        max_distance_m=max(self.camera_alert_distance_m,
-                           5_000.0 if self.camera_params.get("SpeedCameraControlEnabled") == "1" else 0.0),
+        # Warning visibility shares the configured reaction zone; the separate
+        # control source retains its independent5km lookahead.
+        max_distance_m=self.camera_alert_distance_m,
       ) if self.camera_warning_enabled else None
     if self.camera_params.get("SpeedCameraControlEnabled") == "1":
       # Selection consumes only the local database and measured GPS trajectory.
@@ -113,10 +113,7 @@ class OsmMapData(BaseMapData):
       self.camera_graph_status = status
 
   def _update_camera_source(self, database_reason='camera_database_missing'):
-    try:
-      reaction = int(self.camera_params.get('SpeedCameraReactionDistance') or 300)
-    except (TypeError, ValueError):
-      reaction = 300
+    reaction = self.camera_alert_distance_m
     gps = self.sm[self.camera_gps_service]
     now = time.time()
     raw_stream_valid = bool(self.sm.valid[self.camera_gps_service] and self.sm.alive[self.camera_gps_service])

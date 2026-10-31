@@ -26,6 +26,10 @@ private:
   friend class CameraUiFixture;
   void updateCameraPresentation(cereal::LongitudinalPlanSP::SpeedCameraControl::Reader camera,
                                 bool camera_mode, bool fresh, float conversion);
+  void updateCameraCruisePresentation(cereal::LongitudinalPlanSP::Reader plan, bool fresh, float conversion,
+                                      float driver_base_kph);
+  bool cameraSpeedLimitSelected = false;
+  int cameraReactionDistance();
   void drawCameraCountdown(QPainter &p, const QRect &sign_rect, const QRect &offset_rect);
   QString cameraStatusText() const;
   void drawCameraStatus(QPainter &p, const QRect &sign_rect);

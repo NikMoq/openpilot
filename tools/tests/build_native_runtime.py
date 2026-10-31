@@ -110,7 +110,8 @@ def main():
     '"-p","no:cacheprovider","-p","core_speed_limit_compat",'
     f'{str(ROOT / "sunnypilot/selfdrive/controls/lib/speed_limit/tests")!r},'
     f'{str(ROOT / "tools/tests/test_camera_runtime_integration.py")!r},'
-    f'{str(ROOT / "tools/tests/test_camera_override_runtime.py")!r},"-q","--tb=short"]))\n')
+    f'{str(ROOT / "tools/tests/test_camera_override_runtime.py")!r},'
+    f'{str(ROOT / "tools/tests/test_camera_reaction_runtime.py")!r},"-q","--tb=short"]))\n')
   binaries = [common / 'params_pyx.so', *msgq.glob('*.so'), *transforms.glob('*.so')]
   report = {str(path.relative_to(output)): hashlib.sha256(path.read_bytes()).hexdigest() for path in binaries}
   (output / 'native-modules.json').write_text(json.dumps(report, indent=2) + '\n')

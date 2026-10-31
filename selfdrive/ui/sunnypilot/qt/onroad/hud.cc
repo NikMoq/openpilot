@@ -32,8 +32,7 @@ void HudRendererSP::updateState(const UIState &s) {
   speedLimitMode = static_cast<SpeedLimitMode>(s.scene.speed_limit_mode);
   speedUnit = is_metric ? tr("km/h") : tr("mph");
   speedCameraEnabled = params.get("SpeedCameraEnabled").empty() || params.getBool("SpeedCameraEnabled");
-  speedCameraAlertDistance = std::atoi(params.get("SpeedCameraAlertDistanceMeters").c_str());
-  if (speedCameraAlertDistance <= 0) speedCameraAlertDistance = 1000.0f;
+  speedCameraAlertDistance = cameraReactionDistance();
   standstillTimer = s.scene.standstill_timer;
 
   const SubMaster &sm = *(s.sm);
@@ -120,6 +119,9 @@ void HudRendererSP::updateState(const UIState &s) {
   const bool effective_camera = requested_camera;
   updateCameraPresentation(lp_sp.getSpeedCameraControl(), effective_camera,
                            fresh_plan, speedConv);
+  const bool fresh_cruise = sm.alive("carState") && sm.valid("carState") &&
+                            nanos_since_boot() - sm.rcv_time("carState") < 2500000000ULL;
+  updateCameraCruisePresentation(lp_sp, fresh_plan && fresh_cruise, speedConv, car_state.getVCruise());
 
   // liveMapDataSP has coordinates/type but no stable camera ID. No camera
   // identity is latched: each fresh selection must meet the user's distance.
@@ -375,6 +377,10 @@ void HudRendererSP::drawSpeedCameraWarning(QPainter &p, const QRect &surface_rec
                     speedCameraAheadDistance, speedCameraSpeedLimit, is_metric, control, cameraPositionLost);
 }
 
+int HudRendererSP::cameraReactionDistance() {
+  return camera_ui::reactionDistance(QString::fromStdString(params.get("SpeedCameraReactionDistance")).toInt());
+}
+
 void HudRendererSP::updateCameraPresentation(cereal::LongitudinalPlanSP::SpeedCameraControl::Reader camera,
                                              bool camera_mode, bool fresh, float conversion) {
   if (!camera_mode) {
@@ -409,6 +415,28 @@ void HudRendererSP::updateCameraPresentation(cereal::LongitudinalPlanSP::SpeedCa
   cameraRemaining = cameraCountdown.update(cameraEventId, cameraSignVisible ? cameraEventId : "",
                                            camera.getDistance(), camera.getReactionDistance(),
                                            camera.getCountdownValid(), fresh, speedCameraControlState == "passed");
+}
+
+void HudRendererSP::updateCameraCruisePresentation(cereal::LongitudinalPlanSP::Reader plan,
+                                                   bool fresh, float conversion, float driver_base_kph) {
+  cameraSpeedLimitSelected = false;
+  const auto camera = plan.getSpeedCameraControl();
+  // HudRenderer::updateState has just loaded the driver's virtual setpoint in
+  // display units. Present the selected request during an active camera only;
+  // do not mutate carState, the remembered base or any control input.
+  if (!cameraMode || !fresh || !cameraSignVisible || !camera.getEnabled() || !camera.getActive() ||
+      !is_cruise_set || !is_cruise_available || !std::isfinite(set_speed) || set_speed <= 0 ||
+      !std::isfinite(driver_base_kph) || driver_base_kph <= 0 || driver_base_kph > 145) return;
+  // Match ICBM's existing target contract against the actual km/h driver base,
+  // not only vCruiseCluster, which may be inconsistent or differently rounded.
+  const float target_mps = plan.getVTarget();
+  if (!std::isfinite(target_mps) || target_mps <= 0 || target_mps > driver_base_kph / 3.6f + 1e-5f) return;
+  const float target = target_mps * conversion;
+  if (!std::isfinite(target) || target <= 0 || target > set_speed + .01f) return;
+  set_speed = target;
+  cameraSpeedLimitSelected = plan.getLongitudinalPlanSource() ==
+                            cereal::LongitudinalPlanSP::LongitudinalPlanSource::SPEED_LIMIT_ASSIST &&
+                            plan.getSpeedLimit().getAssist().getActive();
 }
 
 QString HudRendererSP::cameraStatusText() const {
@@ -962,7 +990,7 @@ void HudRendererSP::drawSetSpeedSP(QPainter &p, const QRect &surface_rect) {
   QColor set_speed_color = QColor(0x72, 0x72, 0x72, 0xff);
   if (is_cruise_set) {
     set_speed_color = QColor(255, 255, 255);
-    if (speedLimitAssistActive) {
+    if (speedLimitAssistActive && (!cameraMode || cameraSpeedLimitSelected)) {
       set_speed_color = longOverride ? QColor(0x91, 0x9b, 0x95, 0xff) : QColor(0, 0xff, 0, 0xff);
       max_color = longOverride ? QColor(0x91, 0x9b, 0x95, 0xff) : QColor(0x80, 0xd8, 0xa6, 0xff);
     } else {

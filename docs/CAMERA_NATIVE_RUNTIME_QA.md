@@ -56,3 +56,8 @@ speed without rewriting the remembered manual target.
 The core compatibility plugin also selects camera OFF for the original road-only
 suite and restores the preceding disposable-container value afterward. This
 prevents retained camera Params from changing which authority that suite tests.
+
+The maintained native runner also includes test_camera_reaction_runtime.py:
+real Params and IPC verify50/300/900/1000-m outside/inside boundaries, the shared
+warning/reaction threshold, the published value and measured countdown. The old
+SpeedCameraAlertDistanceMeters key no longer overrides this user setting.
