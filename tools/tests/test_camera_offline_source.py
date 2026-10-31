@@ -220,6 +220,7 @@ def test_publisher_uses_reported_uncertainty_in_actual_packed_graph(map_pipeline
   instance,_,publish = map_pipeline
   gps = instance.sm[instance.camera_gps_service]
   gps.latitude,gps.longitude = point(0,25)
+  instance.last_position.latitude,instance.last_position.longitude = gps.latitude,gps.longitude
   gps.bearingDeg,gps.horizontalAccuracy,gps.bearingAccuracyDeg = 40.,30.,45.
   graph = instance.camera_osm_bridge.snapshot
   assert graph.associate((gps.latitude,gps.longitude),gps.bearingDeg) is None

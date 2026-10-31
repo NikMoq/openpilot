@@ -121,11 +121,11 @@ def map_pipeline(monkeypatch, tmp_path):
     # This is trajectory input, not a mocked selection or forced valid flag.
     if not instance.camera_selection.camera_id:
       gps = instance.sm[instance.camera_gps_service]
-      lat, timestamp = gps.latitude, gps.unixTimestampMillis
-      gps.latitude = lat - math.degrees(5 / 6_371_000)
+      lat, timestamp = instance.last_position.latitude, gps.unixTimestampMillis
+      instance.last_position.latitude = lat - math.degrees(5 / 6_371_000)
       gps.unixTimestampMillis = timestamp - 1000
       instance.publish()
-      gps.latitude, gps.unixTimestampMillis = lat, timestamp
+      instance.last_position.latitude, gps.unixTimestampMillis = lat, timestamp
     instance.publish()
     assert sent[-1][0] == 'liveMapDataSP' and sent[-1][1].valid
     return sent[-1][1].liveMapDataSP, cameras
@@ -355,7 +355,7 @@ def test_real_publisher_wire_pass_requires_two_distinct_raw_fixes(map_pipeline, 
   gps = instance.sm[instance.camera_gps_service]
   def fix(north, seconds):
     clock[0] = epoch + seconds
-    gps.latitude = latitude(north)
+    gps.latitude = instance.last_position.latitude = latitude(north)
     gps.unixTimestampMillis = int(clock[0] * 1000)
     return publish(bkm_row(18059, 400))[0]
   selected = fix(380, 0)
@@ -523,3 +523,38 @@ def test_local_maps_veto_directionally_compatible_wrong_road_camera(map_pipeline
   message, _ = publish(row)
   assert message.speedCameraAheadValid  # provider coordinate/direction alone finds it
   assert not message.speedCameraControlValid  # local road topology authoritatively vetoes it
+
+
+@pytest.mark.parametrize('raw_lat,raw_lon', [(54., 36.), (float('nan'), float('nan')), (91., 181.)])
+def test_camera_geometry_uses_llk_coordinates_without_raw_coordinate_veto(map_pipeline, raw_lat, raw_lon):
+  instance, _, publish = map_pipeline
+  gps = instance.sm[instance.camera_gps_service]
+  gps.latitude, gps.longitude = raw_lat, raw_lon
+  message, _ = publish(bkm_row(18059, 700))
+  assert message.speedCameraControlValid and message.speedCameraAheadValid
+  assert message.speedCameraControlDistance == pytest.approx(700, abs=.1)
+  assert message.speedCameraAheadDistance == pytest.approx(700, abs=.1)
+
+
+def test_predicted_llk_motion_cannot_confirm_approach_or_refresh_gps_fix(map_pipeline, monkeypatch):
+  instance, _, publish = map_pipeline
+  module = sys.modules[type(instance).__module__]
+  clock = [time.time()]
+  monkeypatch.setattr(module.time, 'time', lambda: clock[0])
+  gps = instance.sm[instance.camera_gps_service]
+  gps.unixTimestampMillis = int(clock[0] * 1000)
+  # Keep automatic fixture priming from supplying a second measured fix.
+  instance.camera_selection = NS(camera_id='fixture-no-prime')
+  first, _ = publish(bkm_row(18059, 700))
+  assert not first.speedCameraControlValid
+  instance.last_position.latitude = latitude(10)
+  clock[0] += 1
+  predicted, _ = publish(bkm_row(18059, 700))
+  assert not predicted.speedCameraControlValid
+  assert not predicted.speedCameraControlPassProven
+  clock[0] += 2.1
+  instance.last_position.latitude = latitude(20)
+  stale, _ = publish(bkm_row(18059, 700))
+  assert not stale.speedCameraControlValid and not stale.speedCameraControlPassProven
+  assert stale.speedCameraControlReason == 'gps_unreliable'
+  assert not stale.speedCameraAheadValid

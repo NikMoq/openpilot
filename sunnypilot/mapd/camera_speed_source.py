@@ -55,11 +55,10 @@ def camera_identity(camera):
 
 
 def camera_gps_reliable(gps, now_s):
-  """Raw GPS contract uses documented meters/degrees/Unix units, not LLK std."""
-  values = (gps.latitude, gps.longitude, gps.bearingDeg, gps.horizontalAccuracy,
+  """Raw course/quality/fix-clock contract; coordinates come from LLK."""
+  values = (gps.bearingDeg, gps.horizontalAccuracy,
             gps.bearingAccuracyDeg, gps.speed, gps.unixTimestampMillis, now_s)
   return bool(all(isinstance(v, (int, float)) and math.isfinite(v) for v in values) and gps.hasFix and
-              -90 <= gps.latitude <= 90 and -180 <= gps.longitude <= 180 and
               0 <= gps.bearingDeg <= 360 and camera_accuracy_acceptable(gps) and gps.speed >= MIN_MOVING_SPEED_MPS and
               0 <= now_s - gps.unixTimestampMillis * .001 <= MAX_FIX_AGE_S)
 

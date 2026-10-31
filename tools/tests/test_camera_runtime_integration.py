@@ -20,7 +20,7 @@ import pytest
 if sys.platform != 'linux' or os.getenv('PQ35_RUNTIME_SMOKE') != '1':
   pytest.skip('requires explicit disposable Linux runtime opt-in', allow_module_level=True)
 
-from cereal import car, custom, messaging
+from cereal import car, custom, log, messaging
 import msgq.ipc_pyx
 from openpilot.common import params_pyx
 from openpilot.common.params import Params
@@ -357,3 +357,33 @@ def test_longitudinal_native_offset_preserves_raw_and_driver(pipeline,longitudin
   assert published.speedCameraControl.rawLimit==pytest.approx(raw_kph/3.6)
   assert published.speedCameraControl.appliedOffset==pytest.approx(15/3.6)
   assert published.speedCameraControl.driverSetSpeed==pytest.approx(cruise)
+
+
+@pytest.mark.parametrize('coordinates,valid', [
+  ([], False), ([55.], False), ([float('nan'), 37., 0.], False),
+  ([55., float('inf'), 0.], False), ([90.01, 37., 0.], False),
+  ([55., -180.01, 0.], False), ([55., 37., 0.], True),
+])
+def test_llk_coordinate_validation_with_native_capnp_lists(coordinates, valid):
+  from types import SimpleNamespace as NS
+  location = log.LiveLocationKalman.new_message()
+  location.status = 'valid'
+  location.positionGeodetic.valid = True
+  location.positionGeodetic.value = coordinates
+  location.calibratedOrientationNED.valid = True
+  location.calibratedOrientationNED.value = [0., 0., 0.]
+  class Inputs(dict):
+    valid = {'liveLocationKalman': True}
+    alive = {'liveLocationKalman': True}
+  map_data = OsmMapData.__new__(OsmMapData)
+  map_data.sm = Inputs(liveLocationKalman=location.as_reader())
+  map_data.last_position = None
+  map_data.last_bearing = None
+  map_data.mem_params = NS(put=lambda *_: None)
+  map_data.update_location()
+  assert bool(map_data.localizer_valid) is valid
+  if valid:
+    assert map_data.last_position.latitude == 55.
+    assert map_data.last_position.longitude == 37.
+  else:
+    assert map_data.last_position is None

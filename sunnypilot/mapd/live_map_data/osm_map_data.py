@@ -99,7 +99,7 @@ class OsmMapData(BaseMapData):
         max_distance_m=self.camera_alert_distance_m,
       ) if self.camera_warning_enabled else None
     if self.camera_params.get("SpeedCameraControlEnabled") == "1":
-      # Selection consumes only the local database and measured GPS trajectory.
+      # Selection consumes the local database and localized trajectory.
       self._update_camera_source(database_reason='camera_database_stale' if expired else 'camera_database_missing')
     else:
       self.camera_speed_source = CameraSpeedSource()
@@ -173,18 +173,24 @@ class OsmMapData(BaseMapData):
     raw_gps_valid = raw_stream_valid and camera_gps_reliable(gps, now)
     # A strong stationary position is not a weak-GPS signal, but motion is
     # needed to confirm a camera approach and passage from measured trajectory.
-    position_values = (gps.latitude, gps.longitude, gps.horizontalAccuracy, gps.unixTimestampMillis)
-    position_valid = bool(raw_stream_valid and gps.hasFix and all(math.isfinite(value) for value in position_values) and
-                          -90 <= gps.latitude <= 90 and -180 <= gps.longitude <= 180 and
+    # LLK publication time is not a new satellite fix. Retain the raw fix
+    # clock for age/deduplication, and raw course/quality with documented units.
+    # Never interpret positionGeodetic.std as metres.
+    position = self.last_position
+    latitude = position.latitude if position is not None else math.nan
+    longitude = position.longitude if position is not None else math.nan
+    position_values = (latitude, longitude, gps.horizontalAccuracy, gps.unixTimestampMillis)
+    position_valid = bool(self.localizer_valid and raw_stream_valid and gps.hasFix and all(math.isfinite(value) for value in position_values) and
+                          -90 <= latitude <= 90 and -180 <= longitude <= 180 and
                           0 < gps.horizontalAccuracy <= MAX_HORIZONTAL_ACCURACY_M and 0 <= now - gps.unixTimestampMillis * .001 <= MAX_FIX_AGE_S)
-    gps_valid = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK and raw_gps_valid)
+    gps_valid = bool(position_valid and self.sm['liveLocationKalman'].gpsOK and raw_gps_valid)
     if getattr(self, 'camera_osm_bridge', None) is None:
       self.camera_osm_bridge = OfflineOsmBridge(Paths.mapd_root())
     if position_valid:
-      self.camera_osm_bridge.tick(gps.latitude, gps.longitude)
+      self.camera_osm_bridge.tick(latitude, longitude)
     roads = self.camera_osm_bridge.snapshot
     self.camera_selection = self.camera_speed_source.update(
-      self.camera_index or (), gps.latitude, gps.longitude, gps.bearingDeg,
+      self.camera_index or (), latitude, longitude, gps.bearingDeg,
       gps_valid=gps_valid and self.camera_database is not None and roads is not None,
       fix_time_s=gps.unixTimestampMillis * .001, now_s=now,
       reaction_distance_m=reaction, road_graph=roads,
@@ -223,7 +229,10 @@ class OsmMapData(BaseMapData):
   def update_location(self) -> None:
     location = self.sm['liveLocationKalman']
     self.localizer_valid = ((location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid
-                            and location.calibratedOrientationNED.valid)
+                            and location.calibratedOrientationNED.valid and len(location.positionGeodetic.value) >= 2
+                            and all(math.isfinite(location.positionGeodetic.value[i]) for i in (0, 1))
+                            and -90 <= location.positionGeodetic.value[0] <= 90
+                            and -180 <= location.positionGeodetic.value[1] <= 180)
     self.localizer_valid = self.localizer_valid and self.sm.valid['liveLocationKalman'] and self.sm.alive['liveLocationKalman']
 
     if self.localizer_valid:

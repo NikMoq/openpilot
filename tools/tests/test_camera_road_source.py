@@ -129,7 +129,7 @@ def test_identity_does_not_depend_on_limit_or_user_offset():
 
 @pytest.mark.parametrize('changes', [dict(horizontalAccuracy=31), dict(horizontalAccuracy=0),
   dict(bearingAccuracyDeg=61), dict(speed=.499), dict(unixTimestampMillis=996999),
-  dict(unixTimestampMillis=1001000), dict(latitude=91), dict(longitude=float('nan')), dict(hasFix=False)])
+  dict(unixTimestampMillis=1001000), dict(hasFix=False)])
 def test_raw_gps_quality_is_camera_specific(changes):
   gps = dict(latitude=55., longitude=37., bearingDeg=0., horizontalAccuracy=5.,
              bearingAccuracyDeg=5., speed=10., unixTimestampMillis=1000000, hasFix=True)
