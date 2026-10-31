@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass
 
 from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, EARTH_RADIUS_M
-from openpilot.sunnypilot.mapd.camera_gps_quality import camera_accuracy_acceptable
+from openpilot.sunnypilot.mapd.camera_gps_quality import camera_accuracy_acceptable, MAX_FIX_AGE_S, MIN_MOVING_SPEED_MPS
 from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry
 
 LATERAL_CORRIDOR_M = 25.0
@@ -60,8 +60,8 @@ def camera_gps_reliable(gps, now_s):
             gps.bearingAccuracyDeg, gps.speed, gps.unixTimestampMillis, now_s)
   return bool(all(isinstance(v, (int, float)) and math.isfinite(v) for v in values) and gps.hasFix and
               -90 <= gps.latitude <= 90 and -180 <= gps.longitude <= 180 and
-              0 <= gps.bearingDeg <= 360 and camera_accuracy_acceptable(gps) and gps.speed >= 1 and
-              0 <= now_s - gps.unixTimestampMillis * .001 <= 2)
+              0 <= gps.bearingDeg <= 360 and camera_accuracy_acceptable(gps) and gps.speed >= MIN_MOVING_SPEED_MPS and
+              0 <= now_s - gps.unixTimestampMillis * .001 <= MAX_FIX_AGE_S)
 
 
 def travel_directions(camera, heading, *, filter_heading=True):
@@ -155,7 +155,7 @@ class CameraSpeedSource:
     point = (latitude, longitude)
     reliable = (gps_valid and all(isinstance(v, (float, int)) and math.isfinite(v) for v in (*point, heading, fix_time_s, now_s))
                 and -90 <= latitude <= 90 and -180 <= longitude <= 180 and 0 <= heading <= 360 and
-                0 <= now_s - fix_time_s <= 2)
+                0 <= now_s - fix_time_s <= MAX_FIX_AGE_S)
     if reliable and self._fix_time is not None and fix_time_s < self._fix_time:
       reliable = False
     if not reliable:

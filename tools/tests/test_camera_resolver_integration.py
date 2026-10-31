@@ -664,10 +664,10 @@ def test_published_camera_failure_reason_preserves_existing_authority(control, m
 
 @pytest.mark.parametrize('acquired', [False, True])
 @pytest.mark.parametrize('horizontal,bearing,fix,alive,age,accepted', [
-  (25., 35., True, True, 0., True), (30., 45., True, True, 0., True),
-  (30.01, 35., True, True, 0., False), (25., 45.01, True, True, 0., False),
+  (25., 35., True, True, 0., True), (30., 60., True, True, 3., True),
+  (30.01, 35., True, True, 0., False), (25., 60.01, True, True, 0., False),
   (25., 35., False, True, 0., False), (25., 35., True, False, 0., False),
-  (25., 35., True, True, 3., False),
+  (25., 35., True, True, 3.001, False),
 ])
 def test_shared_gps_accuracy_gate_preserves_fix_freshness_and_hold(
     control, monkeypatch, acquired, horizontal, bearing, fix, alive, age, accepted):
@@ -677,6 +677,12 @@ def test_shared_gps_accuracy_gate_preserves_fix_freshness_and_hold(
     assert update(c) == pytest.approx(75/3.6)
   gps = c.sm['gps']
   gps.horizontalAccuracy, gps.bearingAccuracyDeg, gps.hasFix = horizontal, bearing, fix
+  # Exact age boundaries need a fixed Unix observation; real test execution
+  # otherwise adds a few milliseconds and turns age3 into age>3.
+  resolver_module = sys.modules[type(c.resolver).__module__]
+  clock = resolver_module.time
+  monkeypatch.setattr(resolver_module,'time',NS(time=lambda: gps.unixTimestampMillis*.001+age,
+                                              monotonic=clock.monotonic))
   gps.unixTimestampMillis -= age * 1000
   c.sm.alive['gps'] = alive
   held = acquired or accepted

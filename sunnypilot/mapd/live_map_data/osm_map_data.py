@@ -18,7 +18,7 @@ from openpilot.sunnypilot.mapd.camera_database import load_database
 from openpilot.sunnypilot.mapd.camera_osm_bridge import OfflineOsmBridge
 from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_gps_reliable, camera_identity
 from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry, car_speed_sample
-from openpilot.sunnypilot.mapd.camera_gps_quality import MAX_HORIZONTAL_ACCURACY_M
+from openpilot.sunnypilot.mapd.camera_gps_quality import MAX_HORIZONTAL_ACCURACY_M, MAX_FIX_AGE_S, MIN_MOVING_SPEED_MPS
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
 from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera
@@ -176,7 +176,7 @@ class OsmMapData(BaseMapData):
     position_values = (gps.latitude, gps.longitude, gps.horizontalAccuracy, gps.unixTimestampMillis)
     position_valid = bool(raw_stream_valid and gps.hasFix and all(math.isfinite(value) for value in position_values) and
                           -90 <= gps.latitude <= 90 and -180 <= gps.longitude <= 180 and
-                          0 < gps.horizontalAccuracy <= MAX_HORIZONTAL_ACCURACY_M and 0 <= now - gps.unixTimestampMillis * .001 <= 2)
+                          0 < gps.horizontalAccuracy <= MAX_HORIZONTAL_ACCURACY_M and 0 <= now - gps.unixTimestampMillis * .001 <= MAX_FIX_AGE_S)
     gps_valid = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK and raw_gps_valid)
     if getattr(self, 'camera_osm_bridge', None) is None:
       self.camera_osm_bridge = OfflineOsmBridge(Paths.mapd_root())
@@ -195,7 +195,7 @@ class OsmMapData(BaseMapData):
       if not gps_valid:
         # Stationary course is undefined, not a weak-GPS signal.
         localizer_ok = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK)
-        stationary_position = bool(position_valid and math.isfinite(gps.speed) and 0 <= gps.speed < 1)
+        stationary_position = bool(position_valid and math.isfinite(gps.speed) and 0 <= gps.speed < MIN_MOVING_SPEED_MPS)
         if not localizer_ok and (raw_gps_valid or stationary_position):
           reason = 'localizer_unreliable'
         else:

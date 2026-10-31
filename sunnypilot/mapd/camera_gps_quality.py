@@ -2,7 +2,9 @@
 import math
 
 MAX_HORIZONTAL_ACCURACY_M = 30.
-MAX_BEARING_ACCURACY_DEG = 45.
+MAX_BEARING_ACCURACY_DEG = 60.
+MAX_FIX_AGE_S = 3.
+MIN_MOVING_SPEED_MPS = .5
 
 
 def camera_accuracy_acceptable(gps):

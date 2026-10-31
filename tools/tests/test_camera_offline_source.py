@@ -202,15 +202,17 @@ def test_gps_contract_uses_fresh_raw_accuracy_course_and_speed():
   gps = SimpleNamespace(latitude=55., longitude=37., bearingDeg=0., horizontalAccuracy=3.,
                         bearingAccuracyDeg=2., speed=20., unixTimestampMillis=NOW*1000, hasFix=True)
   assert camera_gps_reliable(gps, NOW)
-  for name, value in [('horizontalAccuracy', 30.01), ('horizontalAccuracy', 120), ('bearingAccuracyDeg', 45.01), ('speed', 0), ('hasFix', False)]:
+  for name, value in [('horizontalAccuracy', 30.01), ('horizontalAccuracy', 120), ('bearingAccuracyDeg', 60.01), ('speed', .499), ('hasFix', False)]:
     changed = SimpleNamespace(**vars(gps))
     setattr(changed, name, value)
     assert not camera_gps_reliable(changed, NOW)
-  assert not camera_gps_reliable(gps, NOW+3)
+  assert camera_gps_reliable(gps, NOW+3)
+  assert not camera_gps_reliable(gps, NOW+3.001)
   assert not camera_gps_reliable(gps, NOW-1)
-  for accuracy, bearing in [(25.,35.),(30.,45.)]:
+  for accuracy, bearing in [(25.,35.),(30.,60.)]:
     changed = SimpleNamespace(**vars(gps))
     changed.horizontalAccuracy, changed.bearingAccuracyDeg = accuracy,bearing
+    changed.speed = .5
     assert camera_gps_reliable(changed,NOW)
 
 

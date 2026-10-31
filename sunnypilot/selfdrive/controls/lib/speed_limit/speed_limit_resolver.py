@@ -18,7 +18,7 @@ from openpilot.sunnypilot import PARAMS_UPDATE_PERIOD, get_sanitize_int_param
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit import LIMIT_MAX_MAP_DATA_AGE, LIMIT_ADAPT_ACC
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Policy, OffsetType
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
-from openpilot.sunnypilot.mapd.camera_gps_quality import camera_accuracy_acceptable
+from openpilot.sunnypilot.mapd.camera_gps_quality import camera_accuracy_acceptable, MAX_FIX_AGE_S
 from openpilot.sunnypilot.mapd.camera_odometry import car_speed_sample, MAX_SAMPLE_AGE_S
 from openpilot.sunnypilot.selfdrive.controls.lib.camera_speed_adapter import CameraSpeedAdapter
 from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.helpers import get_minimum_set_speed
@@ -221,7 +221,7 @@ class SpeedLimitResolver:
       unix_age = time.time() - gps.unixTimestampMillis * 1e-3  # noqa: TID251
       map_age = time.monotonic() - sm.recv_time['liveMapDataSP']
       gps_reliable = bool(sm.valid[self._gps_location_service] and sm.alive[self._gps_location_service] and gps.hasFix and
-                          0 <= unix_age <= 2.5 and camera_accuracy_acceptable(gps))
+                          0 <= unix_age <= MAX_FIX_AGE_S and camera_accuracy_acceptable(gps))
       lmd_transport_reliable = bool(sm.alive['liveMapDataSP'] and 0 <= map_age <= 2.5)
       lmd_reliable = bool(sm.valid['liveMapDataSP'] and lmd_transport_reliable and lmd.locationValid)
       cs = sm['carState']

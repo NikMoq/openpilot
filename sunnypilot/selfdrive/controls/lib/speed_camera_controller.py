@@ -91,7 +91,7 @@ class CameraControlOutput:
 
 @dataclass(frozen=True, kw_only=True)
 class CameraControlConfig:
-  gps_max_age_s: float = 2.5
+  gps_max_age_s: float = 3.0
   lmd_max_age_s: float = 2.5
   corridor_half_width_m: float = 20.0
   heading_tolerance_deg: float = 30.0

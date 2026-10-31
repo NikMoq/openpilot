@@ -61,6 +61,15 @@ def test_approach_ceiling_follows_kinematics_and_holds_until_geometric_pass():
   assert not update(controller, sample(north_m=60, time_s=6)).restore_allowed
 
 
+@pytest.mark.parametrize('age,accepted',[(3.,True),(3.001,False)])
+def test_legacy_gps_age_boundary_keeps_lmd_age_limit_independent(age,accepted):
+  controller = SpeedCameraController()
+  result = update(controller,sample(gps_fix_time_s=EPOCH-age))
+  assert (result.speed_cap_mps is not None) is accepted
+  stale_lmd = update(SpeedCameraController(),sample(gps_fix_time_s=EPOCH-3.,lmd_time_s=EPOCH-2.501))
+  assert stale_lmd.speed_cap_mps is None
+
+
 @pytest.mark.parametrize("action", ["manual_button", "override"])
 def test_manual_cancel_removes_authority_without_restoring_or_rearming_same_camera(action):
   controller = SpeedCameraController()
@@ -84,7 +93,7 @@ def test_disable_or_acc_disengage_cancels_current_episode(flag):
 
 @pytest.mark.parametrize("overrides", [
   {"gps_valid": False}, {"gps_alive": False}, {"lmd_valid": False}, {"lmd_alive": False},
-  {"gps_fix_time_s": EPOCH - 3}, {"lmd_time_s": EPOCH - 3},
+  {"gps_fix_time_s": EPOCH - 3.001}, {"lmd_time_s": EPOCH - 3},
   {"gps_fix_time_s": EPOCH + 1}, {"lmd_time_s": EPOCH + 1},
   {"gps_fix_time_s": None}, {"lmd_time_s": None},
   {"latitude": float("nan")}, {"longitude": 181}, {"heading_deg": None},
