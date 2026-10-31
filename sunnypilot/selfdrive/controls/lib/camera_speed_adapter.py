@@ -53,7 +53,7 @@ class CameraSpeedAdapter:
     self._raw_limit = self._distance = 0.0
     self._active = False
 
-  def update(self, lmd, *, enabled, reliable, engaged, reaction_distance):
+  def update(self, lmd, *, enabled, reliable, engaged, reaction_distance, unreliable_reason="unreliable_hold"):
     if not enabled:
       self._clear_event()
       self.output = CameraLimit(reason="disabled")
@@ -61,6 +61,8 @@ class CameraSpeedAdapter:
 
     event_id = str(getattr(lmd, "speedCameraControlEventId", ""))
     version_ok = getattr(lmd, "speedCameraControlVersion", 0) == 1
+    source_reason = str(getattr(lmd, "speedCameraControlReason", "no_camera") or "no_camera")
+    diagnostic = (unreliable_reason if not reliable else "camera_contract_invalid" if not version_ok else source_reason)
     source_state = str(getattr(lmd, "speedCameraControlState", ""))
     distance = float(getattr(lmd, "speedCameraControlDistance", 0.0))
     raw = float(getattr(lmd, "speedCameraControlSpeedLimit", 0.0))
@@ -90,7 +92,7 @@ class CameraSpeedAdapter:
                                   raw_limit=raw, distance=distance)
         return self.output
     elif not self._active:
-      self.output = CameraLimit(reason=getattr(lmd, "speedCameraControlReason", "no_camera") or "no_camera")
+      self.output = CameraLimit(reason=diagnostic)
       return self.output
 
     # An uncertain fix or a different candidate is not proof of passage. Keep
@@ -100,6 +102,7 @@ class CameraSpeedAdapter:
       self._distance = min(self._distance, distance)
       self._raw_limit = min(self._raw_limit, raw)
     countdown = bool(same and valid and self._distance <= reaction_distance)
-    self.output = CameraLimit(self._event_id, "ACTIVE", "camera_limit" if same and valid else "unreliable_hold",
+    hold_reason = diagnostic if diagnostic not in ("no_camera", "matched", "offline_approach", "route_associated") else "unreliable_hold"
+    self.output = CameraLimit(self._event_id, "ACTIVE", "camera_limit" if same and valid else hold_reason,
                               self._raw_limit, self._distance, countdown, automatic=True)
     return self.output

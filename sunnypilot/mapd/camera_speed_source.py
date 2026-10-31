@@ -224,7 +224,9 @@ class CameraSpeedSource:
           candidates.append((measured[0], identity, camera, direction, measured))
     if not candidates:
       self._pending = None
-      self.selection = CameraSelection(reason='no_camera')
+      associate = getattr(road_graph, 'associate', None)
+      reason = 'road_not_matched' if callable(associate) and associate(point, heading) is None else 'no_camera'
+      self.selection = CameraSelection(reason=reason)
       return self.selection
     distance, identity, camera, direction, measured = min(candidates, key=lambda item: (item[0], item[1]))
     pending = self._pending

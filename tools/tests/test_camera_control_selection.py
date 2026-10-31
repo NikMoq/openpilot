@@ -438,6 +438,7 @@ def test_missing_installed_offline_maps_does_not_authorize_from_metadata_alone(m
   if worker is not None:
     worker.join(5)
   assert not message.speedCameraControlValid
+  instance.get_speed_camera()  # Observe completed failure rather than the earlier loading publication.
   assert instance.camera_selection.reason == 'offline_maps_unavailable'
 
 

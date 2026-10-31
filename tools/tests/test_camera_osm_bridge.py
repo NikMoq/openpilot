@@ -119,6 +119,57 @@ def test_missing_maps_remains_unavailable_without_creating_or_fetching_files(tmp
   assert not list(tmp_path.iterdir())
 
 
+def test_corrupt_packed_tile_reports_decode_failure_without_payload(tmp_path):
+  path = tile(tmp_path,[[point(-100),point(1500)]])
+  path.write_bytes(b'\x00')
+  bridge = load(tmp_path)
+  assert bridge.snapshot is None and bridge.status == 'offline_map_decode_error'
+
+
+@pytest.mark.parametrize('budget,reason',[
+  ('MAX_TILE_BYTES','offline_map_size_budget'), ('MAX_NEARBY_TILES','offline_map_tile_budget'),
+  ('MAX_DIRECTORY_ENTRIES','offline_map_directory_budget'), ('MAX_LOCAL_EDGES','offline_map_edge_budget'),
+  ('MAX_INDEX_REFERENCES','offline_map_index_budget')])
+def test_worker_preserves_categorized_budget_failure(tmp_path,monkeypatch,budget,reason):
+  import openpilot.sunnypilot.mapd.camera_osm_bridge as module
+  tile(tmp_path,[[point(-100),point(1500)]])
+  monkeypatch.setattr(module,budget,0)
+  bridge = load(tmp_path)
+  assert bridge.snapshot is None and bridge.status == reason
+
+
+def test_worker_preserves_bounds_mismatch(tmp_path):
+  path = tile(tmp_path,[[point(-100),point(1500)]])
+  message = SCHEMA.Offline.from_bytes_packed(path.read_bytes()).as_builder()
+  message.minLat -= .01
+  path.write_bytes(message.to_bytes_packed())
+  bridge = load(tmp_path)
+  assert bridge.snapshot is None and bridge.status == 'offline_map_bounds_mismatch'
+
+
+@pytest.mark.parametrize('error,reason',[
+  (PermissionError('private path and payload'), 'offline_map_permission_denied'),
+  (OSError('private path and payload'), 'offline_map_io_error'),
+  (RuntimeError('private path and payload'), 'offline_map_load_error')])
+def test_worker_never_exposes_unrecognized_exception_text(tmp_path,monkeypatch,error,reason):
+  bridge = OfflineOsmBridge(tmp_path)
+  def fail(*args):
+    raise error
+  monkeypatch.setattr(bridge,'_paths',fail)
+  assert bridge.tick(*point())
+  bridge._worker.join(5)
+  assert not bridge._worker.is_alive()
+  assert bridge.snapshot is None and bridge.status == reason
+
+
+def test_worker_schema_failure_is_distinct_from_missing_maps(tmp_path,monkeypatch):
+  def fail(*args):
+    raise RuntimeError('private schema path and payload')
+  monkeypatch.setattr(capnp,'load',fail)
+  bridge = load(tmp_path)
+  assert bridge.snapshot is None and bridge.status == 'offline_map_schema_error'
+
+
 def test_adaptive_small_tile_filename_and_actual_bounds_are_supported(tmp_path):
   tile(tmp_path,[[point(-100),point(900)]],bounds=(54.99,36.99,55.01,37.01))
   bridge = load(tmp_path)

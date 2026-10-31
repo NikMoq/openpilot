@@ -6,6 +6,7 @@ See the LICENSE.md file in the root directory for more details.
 """
 import math
 import time
+from dataclasses import replace
 
 import cereal.messaging as messaging
 from cereal import custom
@@ -214,15 +215,18 @@ class SpeedLimitResolver:
       lmd = sm['liveMapDataSP']
       unix_age = time.time() - gps.unixTimestampMillis * 1e-3  # noqa: TID251
       map_age = time.monotonic() - sm.recv_time['liveMapDataSP']
-      reliable = bool(sm.valid[self._gps_location_service] and sm.alive[self._gps_location_service] and gps.hasFix and
-                      sm.valid['liveMapDataSP'] and sm.alive['liveMapDataSP'] and lmd.locationValid and
-                      0 <= unix_age <= 2.5 and 0 <= map_age <= 2.5 and
-                      math.isfinite(gps.horizontalAccuracy) and 0 < gps.horizontalAccuracy <= 20 and
-                      math.isfinite(gps.bearingAccuracyDeg) and 0 <= gps.bearingAccuracyDeg <= 30)
+      gps_reliable = bool(sm.valid[self._gps_location_service] and sm.alive[self._gps_location_service] and gps.hasFix and
+                          0 <= unix_age <= 2.5 and math.isfinite(gps.horizontalAccuracy) and 0 < gps.horizontalAccuracy <= 20 and
+                          math.isfinite(gps.bearingAccuracyDeg) and 0 <= gps.bearingAccuracyDeg <= 30)
+      lmd_transport_reliable = bool(sm.alive['liveMapDataSP'] and 0 <= map_age <= 2.5)
+      lmd_reliable = bool(sm.valid['liveMapDataSP'] and lmd_transport_reliable and lmd.locationValid)
+      unreliable_reason = ("gps_unreliable" if not gps_reliable else "localizer_unreliable"
+                           if lmd_transport_reliable and not lmd.locationValid else "lmd_unreliable")
       self.camera.observe_car_state(sm['carState'])
-      output = self.camera.update(lmd, enabled=True, reliable=reliable,
+      output = self.camera.update(lmd, enabled=True, reliable=gps_reliable and lmd_reliable,
                                   engaged=sm['carControl'].enabled and sm['carState'].cruiseState.enabled,
-                                  reaction_distance=self.camera_reaction_distance)
+                                  reaction_distance=self.camera_reaction_distance,
+                                  unreliable_reason=unreliable_reason)
       self.camera_display_raw_limit = output.raw_limit if output.event_id else 0.0
       self.camera_display_offset = (self._get_speed_limit_offset(self.camera_display_raw_limit)
                                     if self.camera_display_raw_limit > 0 else 0.0)
@@ -255,6 +259,7 @@ class SpeedLimitResolver:
     self.camera_target_below_minimum = False
 
     if self._camera_requested:
+      self.camera.output = replace(self.camera.output, reason="camera_control_unavailable")
       # Camera-only authority was requested but is unavailable for these
       # CarParams. Do not silently substitute road limits or cached road data.
       self.speed_limit = self.speed_limit_last = 0.0

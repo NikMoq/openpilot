@@ -15,8 +15,59 @@ for name, relative in [('openpilot', '.'), ('openpilot.sunnypilot', 'sunnypilot'
 
 from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_identity, camera_gps_reliable
 from openpilot.sunnypilot.mapd.speed_cameras import SpeedCamera, CameraSpatialIndex
+from test_camera_control_selection import map_pipeline as map_pipeline, bkm_row
 
 NOW = 1_800_000_000.
+
+
+@pytest.mark.parametrize('reason',[
+  'offline_maps_loading', 'offline_map_schema_error', 'offline_map_decode_error',
+  'offline_map_permission_denied', 'offline_map_size_budget', 'offline_maps_unavailable'])
+def test_publisher_forwards_specific_offline_bridge_failure(map_pipeline,monkeypatch,reason):
+  instance,config,publish = map_pipeline
+  bridge = instance.camera_osm_bridge
+  bridge.snapshot = None
+  bridge.status = reason
+  monkeypatch.setattr(bridge,'tick',lambda *args: False)
+  message,_ = publish(bkm_row(18059,700))
+  assert not message.speedCameraControlValid and not message.speedCameraControlPassProven
+  assert message.speedCameraControlReason == reason
+  assert config['SpeedCameraRoadGraphStatus'] == 'offline_osm:' + reason + ':' + reason
+
+
+def test_ready_graph_without_vehicle_association_reports_road_not_matched():
+  class UnmatchedRoads:
+    def camera_distance(self,*args):
+      return None
+    def associate(self,*args):
+      return None
+  source = CameraSpeedSource()
+  result = source.update([camera()],*point(),0,gps_valid=True,fix_time_s=NOW,now_s=NOW,road_graph=UnmatchedRoads())
+  assert not result.valid and result.state == 'IDLE' and result.reason == 'road_not_matched'
+
+
+def test_ready_matched_graph_without_camera_keeps_honest_no_camera_reason():
+  class MatchedRoads:
+    def associate(self,*args):
+      return object()
+  result = CameraSpeedSource().update([],*point(),0,gps_valid=True,fix_time_s=NOW,now_s=NOW,road_graph=MatchedRoads())
+  assert not result.valid and result.reason == 'no_camera'
+
+
+@pytest.mark.parametrize('localizer_ok,llk_gps_ok,accuracy,expected',[
+  (False,True,3.,'localizer_unreliable'), (True,False,3.,'localizer_unreliable'),
+  (False,True,30.,'gps_unreliable')])
+def test_good_raw_gps_distinguishes_localizer_failure(map_pipeline,localizer_ok,llk_gps_ok,accuracy,expected):
+  instance,_,publish = map_pipeline
+  publish(bkm_row(18059,700))
+  identity = instance.camera_selection.camera_id
+  instance.localizer_valid = localizer_ok
+  instance.sm['liveLocationKalman'].gpsOK = llk_gps_ok
+  instance.sm[instance.camera_gps_service].horizontalAccuracy = accuracy
+  instance.get_speed_camera()
+  assert instance.camera_selection.reason == expected
+  assert instance.camera_selection.camera_id == identity
+  assert not instance.camera_selection.valid and not instance.camera_selection.pass_proven
 
 
 def point(north=0., east=0.):

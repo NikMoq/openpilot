@@ -196,7 +196,7 @@ def test_gps_loss_missing_candidate_does_not_release_or_accept_pass(control):
   c.lmd.speedCameraControlState = 'PASSED'
   c.lmd.speedCameraControlValid = False
   assert update(c) == pytest.approx(75/3.6)
-  assert c.resolver.camera.output.reason == 'unreliable_hold'
+  assert c.resolver.camera.output.reason == 'gps_unreliable'
 
 
 def camera_wire_cycle(c, monkeypatch):
@@ -423,7 +423,7 @@ def test_incompatible_requested_camera_cannot_fall_back_to_road_or_cached_limit(
     assert c.sla.output_v_target == 255.
     assert not c.resolver.camera_mode
     assert not c.resolver.camera.output.automatic
-    assert c.resolver.camera.output.reason == 'disabled'
+    assert c.resolver.camera.output.reason == 'camera_control_unavailable'
     assert not c.resolver.speed_limit_valid and not c.resolver.speed_limit_last_valid
     assert c.resolver.speed_limit_final == c.resolver.speed_limit_final_last == 0.
     assert c.resolver.speed_limit_offset == c.resolver.distance == 0.
@@ -486,6 +486,65 @@ def test_real_cruise_driver_memory_ignores_camera_button_feedback_and_preserves_
   for _ in range(30):
     helper.update_v_cruise(c.cs, True, True)
   assert helper.v_cruise_kph == helper.driver_set_speed_kph == 100
+
+
+@pytest.mark.parametrize('acquired', [False, True])
+@pytest.mark.parametrize('failure,reason', [
+  ('gps_invalid', 'gps_unreliable'), ('gps_stale', 'gps_unreliable'), ('gps_accuracy', 'gps_unreliable'),
+  ('lmd_invalid', 'lmd_unreliable'), ('lmd_dead', 'lmd_unreliable'), ('lmd_stale', 'lmd_unreliable'),
+  ('lmd_location', 'localizer_unreliable'), ('localizer_envelope', 'localizer_unreliable'), ('contract', 'camera_contract_invalid'),
+  ('source', 'road_graph_unavailable'), ('incompatible', 'camera_control_unavailable'),
+])
+def test_published_camera_failure_reason_preserves_existing_authority(control, monkeypatch, acquired, failure, reason):
+  c = control
+  runtime = real_wire_controls(c, monkeypatch)
+  if acquired:
+    assert update(c) == pytest.approx(75/3.6)
+  if failure == 'gps_invalid':
+    c.sm.valid['gps'] = False
+  elif failure == 'gps_stale':
+    c.sm['gps'].unixTimestampMillis -= 10000
+  elif failure == 'gps_accuracy':
+    c.sm['gps'].horizontalAccuracy = 100.
+  elif failure == 'lmd_invalid':
+    c.sm.valid['liveMapDataSP'] = False
+  elif failure == 'lmd_dead':
+    c.sm.alive['liveMapDataSP'] = False
+  elif failure == 'lmd_stale':
+    c.sm.recv_time['liveMapDataSP'] -= 10.
+  elif failure == 'lmd_location':
+    c.lmd.locationValid = False
+  elif failure == 'localizer_envelope':
+    c.lmd.locationValid = False
+    c.sm.valid['liveMapDataSP'] = False
+  elif failure == 'contract':
+    c.lmd.speedCameraControlVersion = 9
+  elif failure == 'source':
+    c.lmd.speedCameraControlValid = False
+    c.lmd.speedCameraControlReason = reason
+  elif failure == 'incompatible':
+    c.planner.camera_compatible = False
+  held = acquired and failure != 'incompatible'
+  assert update(c) == pytest.approx((75 if held else 100)/3.6)
+  plan = runtime.publish()
+  assert plan.speedCameraControl.reason == reason
+  assert plan.speedCameraControl.active == held
+  assert not plan.speedCameraControl.countdownValid
+  assert plan.speedCameraControl.speedCap == pytest.approx(75/3.6 if held else 0.)
+  assert plan.speedCameraControl.enabled == (failure != 'incompatible')
+
+
+def test_healthy_no_camera_reason_is_not_a_failure(control, monkeypatch):
+  c = control
+  runtime = real_wire_controls(c, monkeypatch)
+  c.lmd.speedCameraControlValid = False
+  c.lmd.speedCameraControlEventId = ''
+  c.lmd.speedCameraControlState = 'IDLE'
+  c.lmd.speedCameraControlReason = 'no_camera'
+  assert update(c) == pytest.approx(100/3.6)
+  plan = runtime.publish()
+  assert plan.speedCameraControl.reason == 'no_camera'
+  assert not plan.speedCameraControl.active
 
 
 def test_version_state_pass_proof_and_applied_offset_hold(control, monkeypatch):

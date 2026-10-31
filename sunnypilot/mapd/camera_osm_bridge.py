@@ -26,6 +26,27 @@ MAX_INDEX_REFERENCES = 250_000
 MAX_DIRECTORY_ENTRIES = 20_000
 SEARCH_RADIUS_M = 1800.
 CROP_RADIUS_M = 2300.
+FAILURE_CODES = frozenset({
+  'offline_map_directory_budget', 'offline_map_tile_budget', 'offline_map_size_budget',
+  'offline_map_index_budget', 'offline_map_edge_budget', 'offline_map_long_segment',
+  'offline_map_bounds_mismatch', 'offline_map_invalid_coordinate', 'offline_map_changed_during_read',
+  'offline_maps_unavailable',
+})
+
+
+def failure_code(error, phase):
+  """Expose only stable categories, never exception text, file paths or payload."""
+  if isinstance(error, ValueError) and error.args and isinstance(error.args[0], str) and error.args[0] in FAILURE_CODES:
+    return error.args[0]
+  if isinstance(error, PermissionError):
+    return 'offline_map_permission_denied'
+  if phase == 'schema':
+    return 'offline_map_schema_error'
+  if isinstance(error, OSError):
+    return 'offline_map_io_error'
+  if phase == 'decode':
+    return 'offline_map_decode_error'
+  return 'offline_map_load_error'
 
 
 def bounding_box(point, radius):
@@ -293,10 +314,12 @@ class OfflineOsmBridge:
       self.status = 'offline_map_worker_priority_error'
       self._next_check = self.monotonic()+30
       return
+    phase = 'schema'
     try:
       if self._schema is None:
         import capnp
         self._schema = capnp.load(str(Path(__file__).with_suffix('.capnp')))
+      phase = 'discover'
       paths = self._paths(point)
       signature = tuple((str(path),path.stat().st_mtime_ns,path.stat().st_size) for path,_ in paths)
       if (self.snapshot is not None and signature == self._signature and
@@ -307,6 +330,7 @@ class OfflineOsmBridge:
       edges,bounds = {},[]
       crop = bounding_box(point,CROP_RADIUS_M)
       for path,expected in paths:
+        phase = 'decode'
         reader = self._schema.Offline.from_bytes_packed(self._bytes(path),traversal_limit_in_words=16*1024*1024)
         actual = (reader.minLat,reader.minLon,reader.maxLat,reader.maxLon)
         if any(abs(a-b)>1e-6 for a,b in zip(expected,actual)):
@@ -334,6 +358,7 @@ class OfflineOsmBridge:
               edges[key] = RoadEdge(key,identity,a,b,length)
             if len(edges)>MAX_LOCAL_EDGES:
               raise ValueError('offline_map_edge_budget')
+      phase = 'index'
       snapshot = OfflineRoadSnapshot(edges.values(),bounds,point)
       if not paths or not snapshot.inside(point):
         raise ValueError('offline_maps_unavailable')
@@ -344,7 +369,7 @@ class OfflineOsmBridge:
       self._signature = signature
       self.status = 'ready'
       self._next_check = self.monotonic()+30
-    except Exception:
+    except Exception as error:
       self.snapshot = None
-      self.status = 'offline_maps_unavailable'
+      self.status = failure_code(error,phase)
       self._next_check = self.monotonic()+30

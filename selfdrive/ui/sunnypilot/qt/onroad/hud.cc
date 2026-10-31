@@ -414,18 +414,76 @@ void HudRendererSP::updateCameraPresentation(cereal::LongitudinalPlanSP::SpeedCa
 QString HudRendererSP::cameraStatusText() const {
   if (!cameraMode) return {};
   const bool russian = Params().get("LanguageSetting") == "main_ru";
-  if (cameraGpsWeak || (cameraPlanFresh && speedCameraControlReason == "gps_unreliable")) {
-    return russian ? QStringLiteral("Слабый GPS") : tr("Weak GPS");
+  auto text = [russian](const char *english, const char *ru) {
+    return QString::fromUtf8(russian ? ru : english);
+  };
+  // Freshness outranks the last event/reason: old camera data cannot establish
+  // that the current road is clear. An existing sign must not hide a failure.
+  if (!cameraPlanFresh) return text("No planner data", "Нет плана камеры");
+  const QString reason = speedCameraControlReason.section(':', 0, 0);
+  if (cameraGpsWeak || reason == "gps_unreliable") return text("Weak GPS", "Слабый GPS");
+  struct Status { const char *reason; const char *english; const char *ru; };
+  static const Status statuses[] = {
+    {"lmd_unreliable", "No camera data", "Нет данных камер"},
+    {"localizer_unreliable", "No localization", "Нет локализации"},
+    {"camera_control_unavailable", "Control unavailable", "Управление недоступно"},
+    {"camera_contract_invalid", "Invalid camera data", "Ошибка данных камер"},
+    {"offline_maps_loading", "Reading maps", "Чтение карт"},
+    {"offline_maps_unavailable", "No offline maps", "Нет офлайн-карт"},
+    {"camera_database_missing", "No camera database", "Нет базы камер"},
+    {"camera_database_stale", "Camera database old", "База камер устарела"},
+    {"confirming_approach", "Confirming camera", "Проверка камеры"},
+    {"waiting_for_motion", "Motion required", "Нужно движение"},
+    {"approach_corridor_lost", "Road uncertain", "Дорога не определена"},
+    {"road_not_matched", "Road not matched", "Дорога не выбрана"},
+    {"position_jump", "GPS position jump", "Скачок GPS"},
+    {"awaiting_second_pass_fix", "Confirming passage", "Проверка проезда"},
+    {"awaiting_pass_distance", "Confirming passage", "Проверка проезда"},
+    {"unreliable_hold", "Camera limit held", "Лимит удержан"},
+    {"uncertain_hold", "Camera limit held", "Лимит удержан"},
+    {"outside_reaction_zone", "Outside camera zone", "До зоны камеры"},
+  };
+  QString status;
+  for (const auto &entry : statuses) {
+    if (reason == entry.reason) { status = text(entry.english, entry.ru); break; }
   }
-  if (!cameraSignVisible) return russian ? QStringLiteral("Камер нет") : tr("No cameras");
-  QStringList messages;
-  // Display the unchanged ICBM capability (helpers.py:30 km/h or20 mph).
-  // This does not alter the limit/offset or create a braking/control path.
-  if (speedCameraControlReason.contains("below_stock_acc_minimum") ||
-      speedLimitFinalLast < (is_metric ? 30.0f : 20.0f) - .001f) {
-    messages << tr("Below ACC minimum");
+  if (status.isEmpty() && reason.startsWith("offline_map_")) {
+    if (reason.endsWith("_budget") || reason == "offline_map_long_segment") {
+      status = text("Map data too large", "Превышен лимит карт");
+    } else if (reason == "offline_map_schema_error" || reason == "offline_map_decode_error" ||
+               reason == "offline_map_bounds_mismatch" || reason == "offline_map_invalid_coordinate") {
+      status = text("Invalid map data", "Ошибка формата карт");
+    } else if (reason == "offline_map_permission_denied" || reason == "offline_map_io_error") {
+      status = text("Map read error", "Ошибка чтения карт");
+    } else if (reason == "offline_map_changed_during_read") {
+      status = text("Maps changed", "Карты изменились");
+    } else {
+      status = text("Map error", "Ошибка карт");
+    }
   }
-  return messages.join("\n");
+  if (status.isEmpty() && reason.startsWith("camera_database_")) {
+    status = text("Camera database error", "Ошибка базы камер");
+  }
+  if (status.isEmpty()) {
+    if (reason == "no_camera" || reason == "route_pass_proven" || speedCameraControlState == "passed") {
+      status = reason == "no_camera" && cameraSignVisible ? text("Camera limit held", "Лимит удержан") : text("No cameras", "Камер нет");
+    } else if (reason.isEmpty() || reason == "idle" || reason == "camera_limit" ||
+               reason == "offline_approach" || reason == "matched") {
+      if (!cameraSignVisible) status = text("Waiting for camera", "Ожидание камеры");
+    } else if (reason != "camera_limit" && reason != "offline_approach" && reason != "matched" &&
+               reason != "awaiting_driver_feedback" && reason != "button_event" &&
+               reason != "manual_button" && reason != "button_override") {
+      status = text("Camera error", "Ошибка камер");
+    }
+  }
+  // Display the unchanged stock ACC minimum alongside a source failure if both
+  // apply. Neither this status nor the reason mapping changes control authority.
+  if (cameraSignVisible && (speedCameraControlReason.contains("below_stock_acc_minimum") ||
+      speedLimitFinalLast < (is_metric ? 30.0f : 20.0f) - .001f)) {
+    if (!status.isEmpty()) status += "\n";
+    status += text("Below ACC minimum", "Ниже минимума ACC");
+  }
+  return status;
 }
 
 void HudRendererSP::drawCameraStatus(QPainter &p, const QRect &sign_rect) {

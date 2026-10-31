@@ -91,6 +91,7 @@ public:
     auto camera = message.initRoot<cereal::LongitudinalPlanSP::SpeedCameraControl>();
     camera.setEnabled(true);
     camera.setState("inactive");
+    camera.setReason("no_camera");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
     assert(hud.speedLimitSignVisible() && !hud.cameraSignVisible && !hud.cameraRemaining);
     assert(!hud.speedLimitLastValid && hud.speedLimitLast == 0);
@@ -102,7 +103,7 @@ public:
     assert(hud.cameraStatusText() == QStringLiteral("Слабый GPS"));
     camera.setReason("road_graph_downloading");
     hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
-    assert(hud.cameraStatusText() == QStringLiteral("Камер нет"));
+    assert(hud.cameraStatusText() == QStringLiteral("Ошибка камер"));
     prefs.remove("LanguageSetting");
     prefs.put("SpeedLimitOffsetType", "2");
     assert(hud.speedLimitOffsetText() == "15%");
@@ -115,6 +116,89 @@ public:
     prefs.put("SpeedLimitOffsetType", "0");
     assert(hud.speedLimitOffsetText().isEmpty());
     prefs.put("SpeedLimitOffsetType", "1");
+  }
+  static void verifyFailureStatuses() {
+    Params prefs;
+    HudRendererSP hud;
+    hud.is_metric = true;
+    capnp::MallocMessageBuilder message;
+    auto camera = message.initRoot<cereal::LongitudinalPlanSP::SpeedCameraControl>();
+    camera.setEnabled(true);
+    camera.setReactionDistance(300);
+    struct Expected { const char *reason; const char *english; const char *ru; };
+    const Expected cases[] = {
+      {"gps_unreliable", "Weak GPS", "Слабый GPS"},
+      {"lmd_unreliable", "No camera data", "Нет данных камер"},
+      {"localizer_unreliable", "No localization", "Нет локализации"},
+      {"camera_control_unavailable", "Control unavailable", "Управление недоступно"},
+      {"camera_contract_invalid", "Invalid camera data", "Ошибка данных камер"},
+      {"offline_maps_loading", "Reading maps", "Чтение карт"},
+      {"offline_maps_unavailable", "No offline maps", "Нет офлайн-карт"},
+      {"camera_database_missing", "No camera database", "Нет базы камер"},
+      {"camera_database_stale", "Camera database old", "База камер устарела"},
+      {"camera_database_invalid", "Camera database error", "Ошибка базы камер"},
+      {"confirming_approach", "Confirming camera", "Проверка камеры"},
+      {"waiting_for_motion", "Motion required", "Нужно движение"},
+      {"approach_corridor_lost", "Road uncertain", "Дорога не определена"},
+      {"road_not_matched", "Road not matched", "Дорога не выбрана"},
+      {"position_jump", "GPS position jump", "Скачок GPS"},
+      {"awaiting_second_pass_fix", "Confirming passage", "Проверка проезда"},
+      {"awaiting_pass_distance", "Confirming passage", "Проверка проезда"},
+      {"unreliable_hold", "Camera limit held", "Лимит удержан"},
+      {"uncertain_hold", "Camera limit held", "Лимит удержан"},
+      {"outside_reaction_zone", "Outside camera zone", "До зоны камеры"},
+      {"offline_map_tile_budget", "Map data too large", "Превышен лимит карт"},
+      {"offline_map_long_segment", "Map data too large", "Превышен лимит карт"},
+      {"offline_map_schema_error", "Invalid map data", "Ошибка формата карт"},
+      {"offline_map_decode_error", "Invalid map data", "Ошибка формата карт"},
+      {"offline_map_bounds_mismatch", "Invalid map data", "Ошибка формата карт"},
+      {"offline_map_invalid_coordinate", "Invalid map data", "Ошибка формата карт"},
+      {"offline_map_permission_denied", "Map read error", "Ошибка чтения карт"},
+      {"offline_map_io_error", "Map read error", "Ошибка чтения карт"},
+      {"offline_map_changed_during_read", "Maps changed", "Карты изменились"},
+      {"offline_map_load_error", "Map error", "Ошибка карт"},
+      {"offline_map_worker_priority_error", "Map error", "Ошибка карт"},
+      {"future_unknown_failure", "Camera error", "Ошибка камер"},
+    };
+    for (bool russian : {false, true}) {
+      if (russian) prefs.put("LanguageSetting", "main_ru"); else prefs.remove("LanguageSetting");
+      for (bool retained : {false, true}) {
+        camera.setState(retained ? "active" : "inactive");
+        camera.setEventId(retained ? "held-camera" : "");
+        camera.setRawLimit(retained ? 60 / 3.6f : 0);
+        camera.setAppliedOffset(15 / 3.6f);
+        for (const auto &entry : cases) {
+          camera.setReason(entry.reason);
+          hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+          const QString expected = QString::fromUtf8(russian ? entry.ru : entry.english);
+          assert(hud.cameraStatusText() == expected);
+          assert(QFontMetrics(InterFont(28, QFont::DemiBold)).horizontalAdvance(expected) <= 360);
+        }
+        // Old nonpersistent manual flags must not revive a driver override.
+        for (const char *reason : {"awaiting_driver_feedback", "button_event"}) {
+          camera.setReason(reason);
+          hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+          assert(hud.cameraStatusText().isEmpty());
+        }
+        camera.setReason("no_camera");
+        hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+        assert(hud.cameraStatusText() == QString::fromUtf8(retained ? (russian ? "Лимит удержан" : "Camera limit held") : (russian ? "Камер нет" : "No cameras")));
+        camera.setReason("matched");
+        hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+        assert(retained ? hud.cameraStatusText().isEmpty() : hud.cameraStatusText() == QString::fromUtf8(russian ? "Ожидание камеры" : "Waiting for camera"));
+        camera.setReason("camera_limit");
+        hud.updateCameraPresentation(camera.asReader(), true, false, 3.6f);
+        assert(hud.cameraStatusText() == QString::fromUtf8(russian ? "Нет плана камеры" : "No planner data"));
+      }
+    }
+    // A retained low limit may need both the real failure and stock minimum.
+    prefs.put("LanguageSetting", "main_ru");
+    camera.setRawLimit(20 / 3.6f); camera.setAppliedOffset(0);
+    camera.setEventId("held-low-camera"); camera.setState("active");
+    camera.setReason("offline_map_decode_error:below_stock_acc_minimum");
+    hud.updateCameraPresentation(camera.asReader(), true, true, 3.6f);
+    assert(hud.cameraStatusText() == QStringLiteral("Ошибка формата карт\nНиже минимума ACC"));
+    prefs.remove("LanguageSetting");
   }
   static void capture(const QString &path, double distance, int threshold, const char *state,
                       bool countdown, bool fresh, float raw = 20 / 3.6f, const char *reason = "", float offset = 15 / 3.6f) {
@@ -129,6 +213,7 @@ public:
     hud.speedLimitMode = SpeedLimitMode::OFF;  // Camera display must not depend on ordinary SLA mode.
     hud.reversing = hud.hideVEgoUI = hud.roadName = false;
     hud.smartCruiseControlVisionEnabled = hud.smartCruiseControlMapEnabled = false;
+    hud.smartCruiseControlVisionActive = hud.smartCruiseControlMapActive = false;
     hud.greenLightAlert = hud.leadDepartAlert = hud.standstillTimer = hud.isStandstill = false;
     hud.showTurnSignals = false;
     hud.devUiInfo = 0;
@@ -191,12 +276,17 @@ int main(int argc, char **argv) {
   }
   CameraUiFixture::verifyTransitions();
   CameraUiFixture::verifyPlaceholder();
+  CameraUiFixture::verifyFailureStatuses();
   Params placeholder_params;
   placeholder_params.put("SpeedLimitOffsetType", "1");
   placeholder_params.put("SpeedLimitValueOffset", "15");
   placeholder_params.put("LanguageSetting", "main_ru");
   CameraUiFixture::capture(output + "/placeholder-main-hud.png", 0, 300, "inactive", false, true, 0);
   CameraUiFixture::capture(output + "/weak-gps-main-hud.png", 0, 300, "inactive", false, true, 0, "gps_unreliable");
+  CameraUiFixture::capture(output + "/missing-maps-main-hud.png", 0, 300, "inactive", false, true, 0, "offline_maps_unavailable");
+  CameraUiFixture::capture(output + "/invalid-maps-main-hud.png", 0, 300, "inactive", false, true, 0, "offline_map_decode_error");
+  CameraUiFixture::capture(output + "/held-camera-map-error.png", 149, 300, "active", false, true, 60 / 3.6f, "offline_map_decode_error");
+  CameraUiFixture::capture(output + "/stale-camera-plan.png", 0, 300, "inactive", false, false, 0, "no_camera");
   placeholder_params.remove("LanguageSetting");
   CameraUiFixture::capture(output + "/active-main-hud.png", 300, 300, "active", true, true, 60 / 3.6f);
   placeholder_params.put("SpeedLimitOffsetType", "2");

@@ -141,13 +141,18 @@ class OsmMapData(BaseMapData):
     if not self.camera_selection.valid:
       if not gps_valid:
         # Stationary course is undefined, not a weak-GPS signal.
-        stationary = bool(position_valid and self.localizer_valid and self.sm['liveLocationKalman'].gpsOK and
-                          math.isfinite(gps.speed) and 0 <= gps.speed < 1)
-        reason = 'waiting_for_motion' if stationary else 'gps_unreliable'
+        localizer_ok = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK)
+        stationary_position = bool(position_valid and math.isfinite(gps.speed) and 0 <= gps.speed < 1)
+        if not localizer_ok and (raw_gps_valid or stationary_position):
+          reason = 'localizer_unreliable'
+        else:
+          reason = 'waiting_for_motion' if stationary_position and localizer_ok else 'gps_unreliable'
       elif self.camera_database is None:
         reason = database_reason
       elif roads is None:
-        reason = 'offline_maps_unavailable'
+        reason = self.camera_osm_bridge.status
+        if reason == 'ready':
+          reason = 'offline_maps_loading'  # Worker completed after this tick captured snapshot=None.
       else:
         reason = self.camera_selection.reason
       self.camera_selection = replace(self.camera_selection, reason=reason)
