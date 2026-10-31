@@ -13,7 +13,7 @@ for name, relative in [('openpilot', '.'), ('openpilot.sunnypilot', 'sunnypilot'
     module.__path__ = [str(ROOT / relative)]
     sys.modules[name] = module
 
-from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_identity, camera_gps_reliable
+from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_identity
 from openpilot.sunnypilot.mapd.speed_cameras import SpeedCamera, CameraSpatialIndex
 from test_camera_control_selection import map_pipeline as map_pipeline, bkm_row
 
@@ -56,7 +56,7 @@ def test_ready_matched_graph_without_camera_keeps_honest_no_camera_reason():
 
 @pytest.mark.parametrize('localizer_ok,llk_gps_ok,accuracy,expected',[
   (False,True,3.,'localizer_unreliable'), (True,False,3.,'localizer_unreliable'),
-  (False,True,120.,'gps_unreliable')])
+  (False,True,120.,'localizer_unreliable')])
 def test_good_raw_gps_distinguishes_localizer_failure(map_pipeline,localizer_ok,llk_gps_ok,accuracy,expected):
   instance,_,publish = map_pipeline
   publish(bkm_row(18059,700))
@@ -198,35 +198,6 @@ def test_camera_identity_ignores_speed_and_preserves_distinct_same_limit_points(
   assert camera_identity(camera(north=900)) != camera_identity(camera(north=950))
 
 
-def test_gps_contract_uses_fresh_raw_accuracy_course_and_speed():
-  gps = SimpleNamespace(latitude=55., longitude=37., bearingDeg=0., horizontalAccuracy=3.,
-                        bearingAccuracyDeg=2., speed=20., unixTimestampMillis=NOW*1000, hasFix=True)
-  assert camera_gps_reliable(gps, NOW)
-  for name, value in [('horizontalAccuracy', 30.01), ('horizontalAccuracy', 120), ('bearingAccuracyDeg', 60.01), ('speed', .499), ('hasFix', False)]:
-    changed = SimpleNamespace(**vars(gps))
-    setattr(changed, name, value)
-    assert not camera_gps_reliable(changed, NOW)
-  assert camera_gps_reliable(gps, NOW+3)
-  assert not camera_gps_reliable(gps, NOW+3.001)
-  assert not camera_gps_reliable(gps, NOW-1)
-  for accuracy, bearing in [(25.,35.),(30.,60.)]:
-    changed = SimpleNamespace(**vars(gps))
-    changed.horizontalAccuracy, changed.bearingAccuracyDeg = accuracy,bearing
-    changed.speed = .5
-    assert camera_gps_reliable(changed,NOW)
-
-
-def test_publisher_uses_reported_uncertainty_in_actual_packed_graph(map_pipeline):
-  instance,_,publish = map_pipeline
-  gps = instance.sm[instance.camera_gps_service]
-  gps.latitude,gps.longitude = point(0,25)
-  instance.last_position.latitude,instance.last_position.longitude = gps.latitude,gps.longitude
-  gps.bearingDeg,gps.horizontalAccuracy,gps.bearingAccuracyDeg = 40.,30.,45.
-  graph = instance.camera_osm_bridge.snapshot
-  assert graph.associate((gps.latitude,gps.longitude),gps.bearingDeg) is None
-  message,_ = publish(bkm_row(18059,700))
-  assert message.speedCameraControlValid
-  assert message.speedCameraControlDistance == pytest.approx(700,abs=.2)
 
 
 @pytest.mark.parametrize('control_type',[18059,18952])
@@ -237,7 +208,7 @@ def test_publisher_retained_camera_uses_actual_can_distance_without_gps(map_pipe
   monkeypatch.setattr(module.time,'monotonic',lambda: clock[0])
   instance.sm['carState'] = SimpleNamespace(canValid=True,gearShifter='drive',vEgo=10.)
   instance.sm.valid['carState'] = instance.sm.alive['carState'] = True
-  instance.sm.logMonoTime = {'carState':int(clock[0]*1e9)}
+  instance.sm.logMonoTime = {'carState':int(clock[0]*1e9), 'liveLocationKalman':int(clock[0]*1e9)}
   initial,_ = publish(bkm_row(control_type,30))
   assert initial.speedCameraAheadValid
   assert initial.speedCameraControlValid is (control_type == 18059)
@@ -290,21 +261,14 @@ def test_can_distance_without_initial_gps_camera_cannot_acquire_or_pass():
 
 
 @pytest.mark.parametrize('camera_type',[18059,18952])
-def test_frozen_gps_fix_never_reanchors_can_remaining_distance(map_pipeline,monkeypatch,camera_type):
+def test_frozen_llk_sample_never_reanchors_can_remaining_distance(map_pipeline,monkeypatch,camera_type):
   instance,_,publish = map_pipeline
   module = sys.modules[type(instance).__module__]
-  gps = instance.sm[instance.camera_gps_service]
-  gps.unixTimestampMillis = 1_793_450_000_008  # /1000 rounds one ULP below *.001.
-  # Match the production Unix conversion exactly. Division can round one ULP
-  # below multiplication, making this nominally equal-time fixture future GPS.
-  unix = gps.unixTimestampMillis*.001
   clock = [500.]
   monkeypatch.setattr(module.time,'monotonic',lambda: clock[0])
-  monkeypatch.setattr(module.time,'time',lambda: unix+(clock[0]-500.))
-  assert camera_gps_reliable(gps,module.time.time())
   instance.sm['carState'] = SimpleNamespace(canValid=True,gearShifter='drive',vEgo=10.)
   instance.sm.valid['carState'] = instance.sm.alive['carState'] = True
-  instance.sm.logMonoTime = {'carState':int(clock[0]*1e9)}
+  instance.sm.logMonoTime = {'carState':int(clock[0]*1e9), 'liveLocationKalman':int(clock[0]*1e9)}
   first,_ = publish(bkm_row(camera_type,100))
   assert first.speedCameraAheadDistance == pytest.approx(100,abs=.1)
   sent = []
@@ -443,3 +407,63 @@ def test_recovered_behind_positions_still_need_reliable_unique_forward_road(fail
                          roads=local_road(parallel=True) if failure == 'ambiguous' else roads,
                          valid=failure != 'gps', heading=180 if failure == 'opposing' else 0)
     assert not state.pass_proven and not state.valid and state.camera_id == chosen.camera_id
+
+
+@pytest.mark.parametrize('camera_type', [18059, 18952])
+@pytest.mark.parametrize('can_speed', [0., 10.])
+def test_fresh_llk_envelopes_with_constant_position_do_not_reset_can_path(
+    map_pipeline, monkeypatch, camera_type, can_speed):
+  instance, _, publish = map_pipeline
+  module = sys.modules[type(instance).__module__]
+  clock = [500.]
+  monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+  instance.sm['carState'] = SimpleNamespace(canValid=True, gearShifter='drive', vEgo=can_speed)
+  instance.sm.valid['carState'] = instance.sm.alive['carState'] = True
+  instance.sm.logMonoTime = {'carState':500_000_000_000, 'liveLocationKalman':500_000_000_000}
+  initial, _ = publish(bkm_row(camera_type,150))
+  assert initial.speedCameraAheadValid
+  if camera_type == 18059:
+    assert initial.speedCameraControlValid
+  sent = []
+  instance.pm.send = lambda _service,msg: sent.append(msg)
+  for second in range(1,17):
+    clock[0] = 500.+second+.001
+    stamp = int(clock[0]*1e9)
+    instance.sm.logMonoTime.update(carState=stamp, liveLocationKalman=stamp)
+    instance.publish()
+    message = sent[-1].liveMapDataSP
+    assert message.speedCameraControlReason not in ('gps_unreliable', 'localizer_unreliable')
+    if can_speed == 0:
+      assert message.speedCameraAheadValid
+      assert message.speedCameraAheadDistance == pytest.approx(150.,abs=.1)
+      assert not message.speedCameraControlPassProven
+    elif second < 15:
+      assert message.speedCameraAheadValid
+      assert message.speedCameraAheadDistance == pytest.approx(150.-second*10.,abs=.1)
+      if camera_type == 18059:
+        assert message.speedCameraControlValid
+        assert message.speedCameraControlDistance == pytest.approx(150.-second*10.,abs=.1)
+    else:
+      assert not message.speedCameraAheadValid, (second, message.speedCameraAheadDistance)
+      if camera_type == 18059:
+        assert not message.speedCameraControlValid
+        if second == 15:
+          assert message.speedCameraControlPassProven
+
+
+def test_new_warning_camera_at_same_llk_position_gets_its_own_can_anchor(map_pipeline, monkeypatch):
+  instance, config, publish = map_pipeline
+  config['SpeedCameraControlEnabled'] = '0'
+  module = sys.modules[type(instance).__module__]
+  clock = [500.]
+  monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+  instance.sm['carState'] = SimpleNamespace(canValid=True, gearShifter='drive', vEgo=10.)
+  instance.sm.valid['carState'] = instance.sm.alive['carState'] = True
+  instance.sm.logMonoTime = {'carState':500_000_000_000, 'liveLocationKalman':500_000_000_000}
+  first, _ = publish(bkm_row(18952,100))
+  assert first.speedCameraAheadDistance == pytest.approx(100.,abs=.1)
+  clock[0] += 1
+  instance.sm.logMonoTime.update(carState=501_000_000_000, liveLocationKalman=501_000_000_000)
+  replacement, _ = publish(bkm_row(18952,200))
+  assert replacement.speedCameraEventId != first.speedCameraEventId
+  assert replacement.speedCameraAheadDistance == pytest.approx(200.,abs=.1)

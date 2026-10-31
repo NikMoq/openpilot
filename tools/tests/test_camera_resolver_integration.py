@@ -188,15 +188,15 @@ def test_threshold_pass_cache_and_identical_next_limit(control):
   assert update(c) == pytest.approx(75/3.6)  # same number, new independent event
 
 
-def test_gps_loss_missing_candidate_does_not_release_or_accept_pass(control):
+def test_llk_loss_missing_candidate_does_not_release_or_accept_pass(control):
   c = control
   assert update(c) == pytest.approx(75/3.6)
-  c.sm.valid['gps'] = False
+  c.lmd.locationValid = False
   c.lmd.speedCameraControlPassProven = True
   c.lmd.speedCameraControlState = 'PASSED'
   c.lmd.speedCameraControlValid = False
   assert update(c) == pytest.approx(75/3.6)
-  assert c.resolver.camera.output.reason == 'gps_unreliable'
+  assert c.resolver.camera.output.reason == 'localizer_unreliable'
 
 
 def camera_wire_cycle(c, monkeypatch):
@@ -618,7 +618,6 @@ def test_real_cruise_driver_memory_ignores_camera_button_feedback_and_preserves_
 
 @pytest.mark.parametrize('acquired', [False, True])
 @pytest.mark.parametrize('failure,reason', [
-  ('gps_invalid', 'gps_unreliable'), ('gps_stale', 'gps_unreliable'), ('gps_accuracy', 'gps_unreliable'),
   ('lmd_invalid', 'lmd_unreliable'), ('lmd_dead', 'lmd_unreliable'), ('lmd_stale', 'lmd_unreliable'),
   ('lmd_location', 'localizer_unreliable'), ('localizer_envelope', 'localizer_unreliable'), ('contract', 'camera_contract_invalid'),
   ('source', 'road_graph_unavailable'), ('incompatible', 'camera_control_unavailable'),
@@ -628,13 +627,7 @@ def test_published_camera_failure_reason_preserves_existing_authority(control, m
   runtime = real_wire_controls(c, monkeypatch)
   if acquired:
     assert update(c) == pytest.approx(75/3.6)
-  if failure == 'gps_invalid':
-    c.sm.valid['gps'] = False
-  elif failure == 'gps_stale':
-    c.sm['gps'].unixTimestampMillis -= 10000
-  elif failure == 'gps_accuracy':
-    c.sm['gps'].horizontalAccuracy = 100.
-  elif failure == 'lmd_invalid':
+  if failure == 'lmd_invalid':
     c.sm.valid['liveMapDataSP'] = False
   elif failure == 'lmd_dead':
     c.sm.alive['liveMapDataSP'] = False
@@ -662,36 +655,26 @@ def test_published_camera_failure_reason_preserves_existing_authority(control, m
   assert plan.speedCameraControl.enabled == (failure != 'incompatible')
 
 
-@pytest.mark.parametrize('acquired', [False, True])
-@pytest.mark.parametrize('horizontal,bearing,fix,alive,age,accepted', [
-  (25., 35., True, True, 0., True), (30., 60., True, True, 3., True),
-  (30.01, 35., True, True, 0., False), (25., 60.01, True, True, 0., False),
-  (25., 35., False, True, 0., False), (25., 35., True, False, 0., False),
-  (25., 35., True, True, 3.001, False),
-])
-def test_shared_gps_accuracy_gate_preserves_fix_freshness_and_hold(
-    control, monkeypatch, acquired, horizontal, bearing, fix, alive, age, accepted):
+@pytest.mark.parametrize('raw_case', ['missing', 'invalid', 'stale', 'poor', 'no_fix'])
+def test_raw_gps_cannot_veto_native_llk_map_camera(control, monkeypatch, raw_case):
   c = control
   runtime = real_wire_controls(c, monkeypatch)
-  if acquired:
-    assert update(c) == pytest.approx(75/3.6)
-  gps = c.sm['gps']
-  gps.horizontalAccuracy, gps.bearingAccuracyDeg, gps.hasFix = horizontal, bearing, fix
-  # Exact age boundaries need a fixed Unix observation; real test execution
-  # otherwise adds a few milliseconds and turns age3 into age>3.
-  resolver_module = sys.modules[type(c.resolver).__module__]
-  clock = resolver_module.time
-  monkeypatch.setattr(resolver_module,'time',NS(time=lambda: gps.unixTimestampMillis*.001+age,
-                                              monotonic=clock.monotonic))
-  gps.unixTimestampMillis -= age * 1000
-  c.sm.alive['gps'] = alive
-  held = acquired or accepted
-  assert update(c) == pytest.approx((75 if held else 100)/3.6)
+  if raw_case == 'missing':
+    del c.sm['gps']
+    c.sm.valid.pop('gps', None)
+    c.sm.alive.pop('gps', None)
+  elif raw_case == 'invalid':
+    c.sm.valid['gps'] = c.sm.alive['gps'] = False
+  elif raw_case == 'stale':
+    c.sm['gps'].unixTimestampMillis = 0
+  elif raw_case == 'poor':
+    c.sm['gps'].horizontalAccuracy = c.sm['gps'].bearingAccuracyDeg = float('nan')
+  else:
+    c.sm['gps'].hasFix = False
+  assert update(c) == pytest.approx(75/3.6)
   plan = runtime.publish()
-  assert plan.speedCameraControl.reason == ('camera_limit' if accepted else 'gps_unreliable')
-  assert plan.speedCameraControl.active == held
-  assert plan.speedCameraControl.countdownValid == accepted
-  assert plan.speedCameraControl.speedCap == pytest.approx(75/3.6 if held else 0.)
+  assert plan.speedCameraControl.reason == 'camera_limit'
+  assert plan.speedCameraControl.active and plan.speedCameraControl.countdownValid
 
 
 def odometry_wire_cycle(c, monkeypatch, acquire=True):

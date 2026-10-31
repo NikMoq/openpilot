@@ -53,7 +53,7 @@ def test_actual_source_can_distance_ends_warning_and_control_only_after_motion(m
   instance.sm['carState'] = c.cs
   for sm in (instance.sm, c.sm):
     sm.valid['carState'] = sm.alive['carState'] = True
-    sm.logMonoTime = {'carState': int(clock[0] * 1e9)}
+    sm.logMonoTime = {'carState': int(clock[0] * 1e9), 'liveLocationKalman':int(clock[0]*1e9)}
   c.sm.recv_time['carState'] = c.sm.recv_time['liveMapDataSP'] = clock[0]
   c.sm['gps'] = instance.sm[instance.camera_gps_service]
   initial, _ = publish(bkm_row(18059, 100))
@@ -98,8 +98,8 @@ def test_source_wire_controls_pass_and_new_equal_limit(map_pipeline, control, mo
   instance, _, publish = map_pipeline
   c = control
   runtime = real_wire_controls(c, monkeypatch)
-  clock = [time.time()]
-  monkeypatch.setattr(time, 'time', lambda: clock[0])
+  clock = [time.monotonic()]
+  monkeypatch.setattr(time, 'monotonic', lambda: clock[0])
   gps = instance.sm['gpsLocationExternal']
   # Simulated native map Params contains a real competing road limit; the
   # production publisher includes it, while camera mode must ignore it.
@@ -135,7 +135,7 @@ def test_source_wire_controls_pass_and_new_equal_limit(map_pipeline, control, mo
   for meters in (50, 100, 150, 200, 240, 280, 300):
     clock[0] += 1
     gps.latitude = latitude(meters)
-    gps.unixTimestampMillis = int(clock[0]*1000)
+    instance.sm.logMonoTime['liveLocationKalman'] = int(clock[0]*1e9)
     instance.last_position.latitude = gps.latitude
     lmd, _ = publish(bkm_row(18059, 250) + bkm_row(18059, 500))
     c.sm['liveMapDataSP'] = lmd
@@ -154,7 +154,7 @@ def test_source_wire_controls_pass_and_new_equal_limit(map_pipeline, control, mo
 
   clock[0] += 1
   gps.latitude = latitude(310)
-  gps.unixTimestampMillis = int(clock[0]*1000)
+  instance.sm.logMonoTime['liveLocationKalman'] = int(clock[0]*1e9)
   instance.last_position.latitude = gps.latitude
   lmd, _ = publish(bkm_row(18059, 250) + bkm_row(18059, 500))
   c.sm['liveMapDataSP'] = lmd
@@ -165,7 +165,7 @@ def test_source_wire_controls_pass_and_new_equal_limit(map_pipeline, control, mo
   # two-fix approach. Do not treat a single new fix as confirmed selection.
   clock[0] += 1
   gps.latitude = latitude(320)
-  gps.unixTimestampMillis = int(clock[0]*1000)
+  instance.sm.logMonoTime['liveLocationKalman'] = int(clock[0]*1e9)
   instance.last_position.latitude = gps.latitude
   lmd, _ = publish(bkm_row(18059, 250) + bkm_row(18059, 500))
   c.sm['liveMapDataSP'] = lmd

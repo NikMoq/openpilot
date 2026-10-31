@@ -1,4 +1,4 @@
-"""Offline per-camera events from provider metadata and measured GPS approach.
+"""Offline per-camera events from provider metadata and localized approach.
 
 No map or network is required. Direction and a narrow approach corridor reject
 opposing and laterally separated cameras; point records cannot prove which of
@@ -12,8 +12,10 @@ import math
 from dataclasses import dataclass
 
 from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, EARTH_RADIUS_M
-from openpilot.sunnypilot.mapd.camera_gps_quality import camera_accuracy_acceptable, MAX_FIX_AGE_S, MIN_MOVING_SPEED_MPS
 from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry
+
+# Maximum age of a localized position sample, not a satellite-fix timeout.
+MAX_POSITION_AGE_S = 3.
 
 LATERAL_CORRIDOR_M = 25.0
 HEADING_TOLERANCE_DEG = 45.0
@@ -52,15 +54,6 @@ class CameraSelection:
 def camera_identity(camera):
   value = f'{camera.camera_type}|{camera.source_id or ""}|{camera.latitude:.7f}|{camera.longitude:.7f}|{camera.direction_deg}|{camera.second_direction_deg}'
   return hashlib.sha256(value.encode('utf-8')).hexdigest()[:32]
-
-
-def camera_gps_reliable(gps, now_s):
-  """Raw course/quality/fix-clock contract; coordinates come from LLK."""
-  values = (gps.bearingDeg, gps.horizontalAccuracy,
-            gps.bearingAccuracyDeg, gps.speed, gps.unixTimestampMillis, now_s)
-  return bool(all(isinstance(v, (int, float)) and math.isfinite(v) for v in values) and gps.hasFix and
-              0 <= gps.bearingDeg <= 360 and camera_accuracy_acceptable(gps) and gps.speed >= MIN_MOVING_SPEED_MPS and
-              0 <= now_s - gps.unixTimestampMillis * .001 <= MAX_FIX_AGE_S)
 
 
 def travel_directions(camera, heading, *, filter_heading=True):
@@ -108,13 +101,18 @@ class CameraSpeedSource:
     self._crossed = False
     self.odometry = CameraOdometry()
     self._odometry_fix_time = None
+    self._odometry_position = None
 
   def update_odometry(self, sample, *, trusted_position, reaction_distance_m=300):
     selection = self.selection
-    same_anchor = self._odometry_fix_time is not None and self._odometry_fix_time == self._fix_time
+    # A new filter publication can repeat the same position. Keep spending
+    # measured CAN distance rather than resetting the anchor to that position.
+    same_anchor = self.odometry.identity == selection.camera_id and self._odometry_fix_time is not None and (
+      self._odometry_fix_time == self._fix_time or self._odometry_position == self._last_position)
     if trusted_position and selection.valid and selection.reason == 'offline_approach' and not same_anchor:
       self.odometry.anchor(selection.camera_id,selection.distance_m,sample)
       self._odometry_fix_time = self._fix_time
+      self._odometry_position = self._last_position
       return selection
     if trusted_position and not same_anchor and selection.reason not in ('approach_corridor_lost','road_not_matched'):
       return selection
@@ -143,6 +141,12 @@ class CameraSpeedSource:
   def update(self, cameras, latitude, longitude, heading, *, gps_valid,
              fix_time_s=None, now_s=None, reaction_distance_m=300, driver_override_id='', road_graph=None,
              vehicle_tolerance_m=12., vehicle_heading_tolerance_deg=35.):
+    """Consume one localized position sample.
+
+    The legacy gps_valid/fix_time_s argument names remain for replay callers;
+    mapd supplies native LLK validity and monotonic publication time. A sample
+    timestamp identifies a filter state, not a new satellite observation.
+    """
     vehicle_tolerance_m = min(30.,max(12.,vehicle_tolerance_m))
     vehicle_heading_tolerance_deg = min(45.,max(35.,vehicle_heading_tolerance_deg))
     road_options = ({'vehicle_tolerance_m':vehicle_tolerance_m,
@@ -154,12 +158,12 @@ class CameraSpeedSource:
     point = (latitude, longitude)
     reliable = (gps_valid and all(isinstance(v, (float, int)) and math.isfinite(v) for v in (*point, heading, fix_time_s, now_s))
                 and -90 <= latitude <= 90 and -180 <= longitude <= 180 and 0 <= heading <= 360 and
-                0 <= now_s - fix_time_s <= MAX_FIX_AGE_S)
+                0 <= now_s - fix_time_s <= MAX_POSITION_AGE_S)
     if reliable and self._fix_time is not None and fix_time_s < self._fix_time:
       reliable = False
     if not reliable:
       self._last_position = None
-      return self._uncertain('gps_unreliable')
+      return self._uncertain('localizer_unreliable')
     if self._fix_time == fix_time_s:
       return self.selection
     previous_time, previous_point = self._fix_time, self._last_position

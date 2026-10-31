@@ -102,8 +102,9 @@ def map_pipeline(monkeypatch, tmp_path):
   instance.last_position = NS(latitude=55, longitude=37)
   instance.last_bearing = 0
   class FakeSM(dict):
-    valid = {'gpsLocationExternal': True}
-    alive = {'gpsLocationExternal': True}
+    valid = {'gpsLocationExternal': True, 'liveLocationKalman': True}
+    alive = {'gpsLocationExternal': True, 'liveLocationKalman': True}
+    logMonoTime = {'liveLocationKalman': int(time.monotonic()*1e9)}
   instance.sm = FakeSM({'liveLocationKalman': NS(gpsOK=True), 'gpsLocationExternal': NS(
     hasFix=True, latitude=55., longitude=37., bearingDeg=0., speed=10.,
     horizontalAccuracy=3., bearingAccuracyDeg=2., unixTimestampMillis=int(time.time() * 1000))})
@@ -120,14 +121,13 @@ def map_pipeline(monkeypatch, tmp_path):
     # the previous point five metres behind, then publish the requested point.
     # This is trajectory input, not a mocked selection or forced valid flag.
     if not instance.camera_selection.camera_id:
-      gps = instance.sm[instance.camera_gps_service]
-      lat, timestamp = instance.last_position.latitude, gps.unixTimestampMillis
+      lat, timestamp = instance.last_position.latitude, instance.sm.logMonoTime['liveLocationKalman']
       instance.last_position.latitude = lat - math.degrees(5 / 6_371_000)
-      gps.unixTimestampMillis = timestamp - 1000
+      instance.sm.logMonoTime['liveLocationKalman'] = timestamp - 1_000_000_000
       instance.publish()
-      instance.last_position.latitude, gps.unixTimestampMillis = lat, timestamp
+      instance.last_position.latitude, instance.sm.logMonoTime['liveLocationKalman'] = lat, timestamp
     instance.publish()
-    assert sent[-1][0] == 'liveMapDataSP' and sent[-1][1].valid
+    assert sent[-1][0] == 'liveMapDataSP'
     return sent[-1][1].liveMapDataSP, cameras
 
   return instance, config, publish
@@ -182,7 +182,7 @@ def test_explicit_no_candidate_never_falls_back_to_warning(map_pipeline, mode):
     config['SpeedCameraControlEnabled'] = '0'
   elif mode == 'no-heading':
     instance.last_bearing = None
-    instance.sm[instance.camera_gps_service].bearingDeg = float('nan')
+    instance.localizer_valid = False
   lmd, cameras = publish(rows)
   assert len(cameras) >= 1
   assert lmd.speedCameraControlVersion == 1 and not lmd.speedCameraControlValid
@@ -211,8 +211,9 @@ def test_shared_reaction_zone_bounds_warnings_without_shortening_control_lookahe
   config.update(SpeedCameraReactionDistance=str(distance),SpeedCameraAlertDistanceMeters='100',
                 SpeedCameraEnabled=str(int(warnings)),SpeedCameraControlEnabled=str(int(control)))
   module = sys.modules[instance.__class__.__module__]
-  epoch = time.time()
-  monkeypatch.setattr(module,'time',NS(time=lambda: epoch,monotonic=time.monotonic))
+  epoch = time.monotonic()
+  monkeypatch.setattr(module,'time',NS(time=time.time,monotonic=lambda: epoch))
+  instance.sm.logMonoTime['liveLocationKalman'] = int(epoch*1e9)
   rows = bkm_row(18059,distance+5)
   outside,_ = publish(rows)
   assert instance.camera_alert_distance_m == distance
@@ -222,7 +223,7 @@ def test_shared_reaction_zone_bounds_warnings_without_shortening_control_lookahe
     assert outside.speedCameraControlState == 'APPROACHING'
   gps = instance.sm[instance.camera_gps_service]
   gps.latitude = instance.last_position.latitude = latitude(10)
-  gps.unixTimestampMillis += 1000
+  instance.sm.logMonoTime['liveLocationKalman'] += 1_000_000_000
   epoch += 1
   inside,_ = publish(rows)
   assert inside.speedCameraAheadValid is warnings
@@ -346,17 +347,17 @@ def test_index_does_not_survive_missing_invalid_expired_or_replaced_database(map
   assert instance.get_speed_camera_control() is None
 
 
-def test_real_publisher_wire_pass_requires_two_distinct_raw_fixes(map_pipeline, monkeypatch):
+def test_real_publisher_wire_pass_requires_two_distinct_llk_samples(map_pipeline, monkeypatch):
   instance, _, publish = map_pipeline
   module = sys.modules[instance.__class__.__module__]
-  epoch = time.time()
+  epoch = time.monotonic()
   clock = [epoch]
-  monkeypatch.setattr(module.time, 'time', lambda: clock[0])
+  monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
   gps = instance.sm[instance.camera_gps_service]
   def fix(north, seconds):
     clock[0] = epoch + seconds
     gps.latitude = instance.last_position.latitude = latitude(north)
-    gps.unixTimestampMillis = int(clock[0] * 1000)
+    instance.sm.logMonoTime['liveLocationKalman'] = int(clock[0] * 1e9)
     return publish(bkm_row(18059, 400))[0]
   selected = fix(380, 0)
   identity = selected.speedCameraControlEventId
@@ -371,17 +372,17 @@ def test_real_publisher_wire_pass_requires_two_distinct_raw_fixes(map_pipeline, 
   assert passed.speedCameraControlSpeedLimit == pytest.approx(60 / 3.6)
 
 
-def test_real_publisher_uncertain_gps_retains_id_without_pass(map_pipeline):
+def test_real_publisher_uncertain_llk_retains_id_without_pass(map_pipeline):
   instance, _, publish = map_pipeline
   selected, _ = publish(bkm_row(18059, 100))
   identity = selected.speedCameraControlEventId
   gps = instance.sm[instance.camera_gps_service]
-  gps.hasFix = False
+  instance.sm['liveLocationKalman'].gpsOK = False
   lost, _ = publish(bkm_row(18059, 100))
   assert lost.speedCameraControlEventId == identity
   assert not lost.speedCameraControlValid and not lost.speedCameraControlPassProven
   assert not lost.speedCameraAheadValid  # No fresh CAN sample to retain warning countdown.
-  assert lost.speedCameraControlReason == 'gps_unreliable'
+  assert lost.speedCameraControlReason == 'localizer_unreliable'
 
 
 def test_local_database_and_installed_maps_ignore_legacy_graph_and_never_use_network(map_pipeline, monkeypatch):
@@ -424,26 +425,23 @@ def test_offline_status_writes_only_when_changed(map_pipeline):
   instance.get_speed_camera()
   instance.get_speed_camera()
   assert not writes
-  instance.sm[instance.camera_gps_service].hasFix = False
+  instance.sm['liveLocationKalman'].gpsOK = False
   message, _ = publish(bkm_row(18059, 700))
-  assert not message.speedCameraControlValid and message.speedCameraControlReason == 'gps_unreliable'
+  assert not message.speedCameraControlValid and message.speedCameraControlReason == 'localizer_unreliable'
   assert len(writes) == 1 and writes[0][0] == 'SpeedCameraRoadGraphStatus'
-  assert writes[0][1].startswith('offline_osm:') and writes[0][1].endswith(':gps_unreliable')
+  assert writes[0][1].startswith('offline_osm:') and writes[0][1].endswith(':localizer_unreliable')
 
 
-def test_stationary_strong_fix_is_not_mislabeled_as_weak_gps(map_pipeline):
+def test_stationary_valid_llk_waits_for_approach_without_raw_speed_gate(map_pipeline):
   instance, _, publish = map_pipeline
-  gps = instance.sm[instance.camera_gps_service]
-  gps.speed = 0
-  gps.bearingAccuracyDeg = 180
-  gps.bearingDeg = float('nan')
-  message, _ = publish(bkm_row(18059, 700))
-  assert not message.speedCameraControlValid
-  assert message.speedCameraControlReason == 'waiting_for_motion'
-  gps.speed = 10
-  moving, _ = publish(bkm_row(18059, 700))
-  assert not moving.speedCameraControlValid
-  assert moving.speedCameraControlReason == 'gps_unreliable'
+  instance.sm.pop('gpsLocationExternal')
+  instance.camera_selection = NS(camera_id='fixture-no-prime')
+  first, _ = publish(bkm_row(18059, 700))
+  instance.sm.logMonoTime['liveLocationKalman'] += 1
+  second, _ = publish(bkm_row(18059, 700))
+  assert not first.speedCameraControlValid and not second.speedCameraControlValid
+  assert second.speedCameraControlReason not in ('gps_unreliable', 'localizer_unreliable')
+  assert second.speedCameraAheadValid
 
 
 @pytest.mark.parametrize('condition', ['missing', 'expired'])
@@ -536,25 +534,32 @@ def test_camera_geometry_uses_llk_coordinates_without_raw_coordinate_veto(map_pi
   assert message.speedCameraAheadDistance == pytest.approx(700, abs=.1)
 
 
-def test_predicted_llk_motion_cannot_confirm_approach_or_refresh_gps_fix(map_pipeline, monkeypatch):
+def test_frozen_llk_sample_cannot_confirm_approach_or_remain_fresh(map_pipeline, monkeypatch):
   instance, _, publish = map_pipeline
   module = sys.modules[type(instance).__module__]
-  clock = [time.time()]
-  monkeypatch.setattr(module.time, 'time', lambda: clock[0])
-  gps = instance.sm[instance.camera_gps_service]
-  gps.unixTimestampMillis = int(clock[0] * 1000)
-  # Keep automatic fixture priming from supplying a second measured fix.
+  clock = [time.monotonic()]
+  monkeypatch.setattr(module.time, 'monotonic', lambda: clock[0])
+  instance.sm.logMonoTime['liveLocationKalman'] = int(clock[0] * 1e9)
   instance.camera_selection = NS(camera_id='fixture-no-prime')
   first, _ = publish(bkm_row(18059, 700))
   assert not first.speedCameraControlValid
   instance.last_position.latitude = latitude(10)
   clock[0] += 1
-  predicted, _ = publish(bkm_row(18059, 700))
-  assert not predicted.speedCameraControlValid
-  assert not predicted.speedCameraControlPassProven
+  frozen, _ = publish(bkm_row(18059, 700))
+  assert not frozen.speedCameraControlValid and not frozen.speedCameraControlPassProven
   clock[0] += 2.1
   instance.last_position.latitude = latitude(20)
+  # Production tick refreshes localizer_valid via update_location before publish.
+  instance.localizer_valid = False
   stale, _ = publish(bkm_row(18059, 700))
   assert not stale.speedCameraControlValid and not stale.speedCameraControlPassProven
-  assert stale.speedCameraControlReason == 'gps_unreliable'
+  assert stale.speedCameraControlReason == 'localizer_unreliable'
   assert not stale.speedCameraAheadValid
+
+
+def test_camera_requires_no_raw_gps_subscription(map_pipeline):
+  instance, _, publish = map_pipeline
+  instance.sm.pop('gpsLocationExternal')
+  del instance.camera_gps_service
+  message, _ = publish(bkm_row(18059, 700))
+  assert message.speedCameraControlValid and message.speedCameraAheadValid

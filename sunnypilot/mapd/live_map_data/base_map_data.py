@@ -9,7 +9,6 @@ from abc import abstractmethod, ABC
 import cereal.messaging as messaging
 from openpilot.common.params import Params
 from openpilot.common.constants import CV
-from openpilot.common.gps import get_gps_location_service
 from openpilot.selfdrive.car.cruise import V_CRUISE_UNSET
 from openpilot.sunnypilot.navd.helpers import coordinate_from_param
 
@@ -20,8 +19,7 @@ class BaseMapData(ABC):
   def __init__(self):
     self.params = Params()
 
-    self.camera_gps_service = get_gps_location_service(self.params)
-    self.sm = messaging.SubMaster(['liveLocationKalman', self.camera_gps_service, 'carState'])
+    self.sm = messaging.SubMaster(['liveLocationKalman', 'carState'])
     self.pm = messaging.PubMaster(['liveMapDataSP'])
 
     self.localizer_valid = False

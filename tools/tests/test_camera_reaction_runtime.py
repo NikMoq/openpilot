@@ -22,14 +22,17 @@ def test_native_reaction_setting_reaches_source_adapter_and_wire_at_actual_bound
   import openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.speed_limit_resolver as resolver_module
 
   class Clock:
-    monotonic = staticmethod(time.monotonic)
+    mono = time.monotonic()
     now = time.time()
+    def monotonic(self):
+      return self.mono
     def time(self):
       return self.now
 
   clock = Clock()
   monkeypatch.setattr(source_module,'time',clock)
-  monkeypatch.setattr(resolver_module,'time',clock)
+  from types import SimpleNamespace
+  monkeypatch.setattr(resolver_module,'time',SimpleNamespace(time=clock.time,monotonic=time.monotonic))
   native_params.put('SpeedCameraReactionDistance',distance)
   native_params.put('SpeedCameraAlertDistanceMeters','100')
   assert native_params.get('SpeedCameraReactionDistance') == distance
@@ -49,6 +52,7 @@ def test_native_reaction_setting_reaches_source_adapter_and_wire_at_actual_bound
   assert outside_plan.vTarget == pytest.approx(30.)
 
   clock.now += 1
+  clock.mono += 1
   inside = publish_frame(pipeline,north_m=-(distance-5),gps_time_s=clock.now)
   _,inside_plan = run_longitudinal(planner,inside,plan_bus)
   camera = inside_plan.speedCameraControl
@@ -103,6 +107,7 @@ def test_native_ipc_can_odometry_retires_only_preselected_camera_after_gps_loss(
     gps.gpsLocation.bearingAccuracyDeg = 2.
     gps.gpsLocation.unixTimestampMillis = fix_ms
     location = messaging.new_message('liveLocationKalman',valid=True)
+    location.logMonoTime = clock.mono_ns
     llk = location.liveLocationKalman
     llk.status = 'valid'
     llk.gpsOK = gps_ok
@@ -112,7 +117,7 @@ def test_native_ipc_can_odometry_retires_only_preselected_camera_after_gps_loss(
     llk.calibratedOrientationNED.value = [0.,0.,0.]
     for service,message in [('carState',state),('gpsLocation',gps),('liveLocationKalman',location)]:
       publisher.send(service,message)
-    receive(map_data.sm,['carState','gpsLocation','liveLocationKalman'])
+    receive(map_data.sm,['carState','liveLocationKalman'])
     assert map_data.sm.logMonoTime['carState'] == clock.mono_ns
     assert map_data.sm['carState'].canValid and map_data.sm['carState'].vEgo == speed
     map_data.tick()
@@ -120,24 +125,31 @@ def test_native_ipc_can_odometry_retires_only_preselected_camera_after_gps_loss(
     return receiver['liveMapDataSP']
 
   fix_ms = int(clock.unix*1000)
-  frame(-105,True,fix_ms-1000)
-  initial = frame(-100,True,fix_ms)
+  clock.mono_ns -= 1_000_000_000
+  frame(-155,True,fix_ms-1000)
+  clock.mono_ns += 1_000_000_000
+  initial = frame(-150,True,fix_ms)
   identity = initial.speedCameraControlEventId
   assert identity and initial.speedCameraControlValid
-  assert initial.speedCameraControlDistance == pytest.approx(100.,abs=.01)
-  for step in range(1,12):
+  assert initial.speedCameraControlDistance == pytest.approx(150.,abs=.01)
+  for step in range(1,17):
     clock.mono_ns += 1_000_000_000
     clock.unix += 1.
-    message = frame(-100,False,fix_ms)
+    message = frame(-150,False,fix_ms)
     assert message.speedCameraControlEventId == identity
     assert not message.locationValid and receiver.valid['liveMapDataSP']
-    if step < 10:
+    if step < 15:
       assert message.speedCameraControlValid and message.speedCameraControlReason == 'odometry_tracking'
-      assert message.speedCameraControlDistance == pytest.approx(100-step*10,abs=.01)
+      assert message.speedCameraControlDistance == pytest.approx(150-step*10,abs=.01)
     if message.speedCameraControlPassProven:
       assert not message.speedCameraControlValid and not message.speedCameraAheadValid
       assert message.speedCameraControlAutoControlAllowed
       assert message.speedCameraControlState == 'PASSED' and message.speedCameraControlReason == 'odometry_passed'
+      for _ in range(3):
+        clock.mono_ns += 1_000_000_000
+        after = frame(-150,False,fix_ms)
+        assert not after.speedCameraControlValid and not after.speedCameraAheadValid
+        assert after.speedCameraControlEventId == identity
       break
   else:
     pytest.fail('Fresh actual CAN distance did not retire the selected camera')

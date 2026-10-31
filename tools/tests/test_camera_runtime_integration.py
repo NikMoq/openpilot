@@ -128,7 +128,7 @@ def receive(sm, services):
 
 def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, model_yaw_rate=0.001, user_cruise=USER_SPEED,
                   brake=False, buttons=(), cc_enabled=True, acc_enabled=True, cc_override=False, cc_cancel=False, cc_resume=False,
-                  north_m=-100, gps_time_s=None, cruise_helper=None, previous_plan=None):
+                  north_m=-100, gps_time_s=None, raw_gps_ok=None, cruise_helper=None, previous_plan=None):
   _, publisher, receiver, map_data = pipeline
   ego_lat = LAT + math.degrees(north_m / 6_371_000.0)
   fix_ms = int((time.time() if gps_time_s is None else gps_time_s) * 1000)  # noqa: TID251 - GPS Unix timestamp
@@ -141,6 +141,8 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
     # Each transmitted Cap'n Proto message owns a fresh builder. Reusing one
     # across the two real input samples triggers pycapnp's repeated-write guard.
     location = messaging.new_message('liveLocationKalman', valid=True)
+    # Distinct monotonic LLK samples, independent of raw GPS Unix timestamps.
+    location.logMonoTime = int(sys.modules[OsmMapData.__module__].time.monotonic()*1e9) + (sample_ms-fix_ms)*1_000_000
     llk = location.liveLocationKalman
     llk.status = 'valid'
     llk.gpsOK = gps_ok
@@ -150,7 +152,7 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
     llk.calibratedOrientationNED.value = [0.0, 0.0, 0.0]
     gps_msg = messaging.new_message('gpsLocation', valid=True)
     gps = gps_msg.gpsLocation
-    gps.hasFix = gps_ok
+    gps.hasFix = gps_ok if raw_gps_ok is None else raw_gps_ok
     gps.speed = USER_SPEED
     gps.horizontalAccuracy = 3.0
     gps.bearingAccuracyDeg = 2.0
@@ -158,7 +160,7 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
     gps.latitude, gps.longitude, gps.bearingDeg = sample_lat, LON, 0.0
     publisher.send('gpsLocation', gps_msg)
     publisher.send('liveLocationKalman', location)
-    receive(map_data.sm, ['liveLocationKalman', 'gpsLocation'])
+    receive(map_data.sm, ['liveLocationKalman'])
     map_data.tick()
 
   cs_msg = messaging.new_message('carState', valid=True)
@@ -375,6 +377,7 @@ def test_llk_coordinate_validation_with_native_capnp_lists(coordinates, valid):
   class Inputs(dict):
     valid = {'liveLocationKalman': True}
     alive = {'liveLocationKalman': True}
+    logMonoTime = {'liveLocationKalman':time.monotonic_ns()}
   map_data = OsmMapData.__new__(OsmMapData)
   map_data.sm = Inputs(liveLocationKalman=location.as_reader())
   map_data.last_position = None
@@ -387,3 +390,62 @@ def test_llk_coordinate_validation_with_native_capnp_lists(coordinates, valid):
     assert map_data.last_position.longitude == 37.
   else:
     assert map_data.last_position is None
+
+
+@pytest.mark.parametrize('age,valid', [(0., True), (2.9, True), (3.1, False), (-1., False)])
+def test_native_llk_transport_age_controls_location_validity(age, valid, monkeypatch):
+  from types import SimpleNamespace as NS
+  import openpilot.sunnypilot.mapd.live_map_data.osm_map_data as module
+  location = log.LiveLocationKalman.new_message()
+  location.status = 'valid'
+  location.gpsOK = True
+  location.positionGeodetic.valid = True
+  location.positionGeodetic.value = [55., 37., 0.]
+  location.calibratedOrientationNED.valid = True
+  location.calibratedOrientationNED.value = [0., 0., 0.]
+  class Inputs(dict):
+    valid = {'liveLocationKalman': True}
+    alive = {'liveLocationKalman': True}
+    logMonoTime = {'liveLocationKalman':10_000_000_000}
+  monkeypatch.setattr(module, 'time', NS(monotonic=lambda: 10.+age))
+  map_data = OsmMapData.__new__(OsmMapData)
+  map_data.sm = Inputs(liveLocationKalman=location.as_reader())
+  map_data.last_position = map_data.last_bearing = None
+  map_data.mem_params = NS(put=lambda *_: None)
+  map_data.update_location()
+  assert map_data.localizer_valid is valid
+
+
+def test_native_llk_camera_and_resolver_ignore_failed_raw_gps(pipeline):
+  write_camera(pipeline[0], '18059', True)
+  sm = publish_frame(pipeline, raw_gps_ok=False)
+  assert not sm['gpsLocation'].hasFix
+  assert sm['liveMapDataSP'].locationValid and sm['liveMapDataSP'].speedCameraControlValid
+  output = plan(SpeedLimitResolver(), sm)
+  assert output.automatic and output.countdown_valid
+  assert output.raw_limit == pytest.approx(LIMIT)
+
+
+@pytest.mark.parametrize('orientation,valid,bearing', [
+  ([0., 0., -math.pi/2], True, 270.), ([0., 0., math.pi/2], True, 90.),
+  ([], False, None), ([0., 0.], False, None), ([0., 0., float('nan')], False, None),
+])
+def test_native_llk_heading_validation_and_degree_normalization(orientation, valid, bearing):
+  from types import SimpleNamespace as NS
+  location = log.LiveLocationKalman.new_message()
+  location.status = 'valid'
+  location.positionGeodetic.valid = location.calibratedOrientationNED.valid = True
+  location.positionGeodetic.value = [55., 37., 0.]
+  location.calibratedOrientationNED.value = orientation
+  class Inputs(dict):
+    valid = {'liveLocationKalman': True}
+    alive = {'liveLocationKalman': True}
+    logMonoTime = {'liveLocationKalman':time.monotonic_ns()}
+  map_data = OsmMapData.__new__(OsmMapData)
+  map_data.sm = Inputs(liveLocationKalman=location.as_reader())
+  map_data.last_position = map_data.last_bearing = None
+  map_data.mem_params = NS(put=lambda *_: None)
+  map_data.update_location()
+  assert map_data.localizer_valid is valid
+  if valid:
+    assert map_data.last_bearing == pytest.approx(bearing)

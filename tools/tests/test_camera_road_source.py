@@ -6,7 +6,7 @@ Coordinates/direction alone do not prove which parallel road a vehicle occupies.
 import math
 import sys
 from pathlib import Path
-from types import ModuleType, SimpleNamespace
+from types import ModuleType
 
 import pytest
 
@@ -17,7 +17,7 @@ for name, relative in [('openpilot', '.'), ('openpilot.sunnypilot', 'sunnypilot'
     module.__path__ = [str(ROOT / relative)]
     sys.modules[name] = module
 
-from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_identity, camera_gps_reliable
+from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, camera_identity
 from openpilot.sunnypilot.mapd.speed_cameras import SpeedCamera
 
 
@@ -125,21 +125,3 @@ def test_identity_does_not_depend_on_limit_or_user_offset():
   other = camera(800, identity='same')
   assert camera_identity(first) == camera_identity(corrected)
   assert camera_identity(first) != camera_identity(other)
-
-
-@pytest.mark.parametrize('changes', [dict(horizontalAccuracy=31), dict(horizontalAccuracy=0),
-  dict(bearingAccuracyDeg=61), dict(speed=.499), dict(unixTimestampMillis=996999),
-  dict(unixTimestampMillis=1001000), dict(hasFix=False)])
-def test_raw_gps_quality_is_camera_specific(changes):
-  gps = dict(latitude=55., longitude=37., bearingDeg=0., horizontalAccuracy=5.,
-             bearingAccuracyDeg=5., speed=10., unixTimestampMillis=1000000, hasFix=True)
-  assert camera_gps_reliable(SimpleNamespace(**gps), 1000.)
-  gps.update(changes)
-  assert not camera_gps_reliable(SimpleNamespace(**gps), 1000.)
-
-
-@pytest.mark.parametrize('accuracy,bearing',[(25.,35.),(30.,60.)])
-def test_raw_gps_quality_accepts_supported_uncertainty_bounds(accuracy,bearing):
-  gps = SimpleNamespace(latitude=55.,longitude=37.,bearingDeg=0.,horizontalAccuracy=accuracy,
-                        bearingAccuracyDeg=bearing,speed=.5,unixTimestampMillis=997000,hasFix=True)
-  assert camera_gps_reliable(gps,1000.)

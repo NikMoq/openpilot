@@ -1,6 +1,6 @@
 """Opt-in Linux: real cruise helper -> native messages -> planner -> ICBM.
 
-Only the planner's wall-clock input is controlled. Native Params/msgq, Capnp,
+The synthetic LLK trajectory uses controlled monotonic time; IPC receipt uses real time. Native Params/msgq, Capnp,
 cruise helper, controller, planner and sender execute their actual implementations.
 As in the shared fixtures, DEC receives a supplied MPC crash counter, not a solver.
 """
@@ -28,17 +28,21 @@ SenderState = custom.IntelligentCruiseButtonManagement.IntelligentCruiseButtonMa
 
 
 class PlanningClock:
-  """Explicit caller-time boundary; message receipt still uses real monotonic time."""
-  monotonic = staticmethod(time.monotonic)
+  """Explicit trajectory-time boundary; message receipt uses a separate real clock."""
 
   def __init__(self):
+    self.mono_now = time.monotonic()
     self.now = time.time()  # noqa: TID251 - seed the controlled Unix GPS clock
 
   def time(self):
     return self.now
 
+  def monotonic(self):
+    return self.mono_now
+
   def advance(self, seconds):
     self.now += seconds
+    self.mono_now += seconds
 
 
 @pytest.fixture
@@ -144,9 +148,12 @@ def override_cycle(pipeline,longitudinal,plan_bus,native_cruise_pair,native_para
   native_params.put('SpeedLimitValueOffset',15)
   write_camera(pipeline[0],'18059',True)
   clock=PlanningClock()
-  # Explicit wall-clock boundary only. Params,msgq,SubMaster,source,Resolver,
+  # Explicit trajectory-clock boundary. Params,msgq,SubMaster,source,Resolver,
   # SLA,planner,helper,ICBM all execute their actual implementations.
-  for module in (producer_module,resolver_module): monkeypatch.setattr(module,'time',clock)
+  monkeypatch.setattr(producer_module,'time',clock)
+  # IPC receipt retains the real clock; only the synthetic LLK trajectory advances.
+  from types import SimpleNamespace
+  monkeypatch.setattr(resolver_module,'time',SimpleNamespace(time=clock.time,monotonic=time.monotonic))
   helper,sender=native_cruise_pair
   yield OverrideCycle(pipeline,longitudinal(pcm_cruise=True),plan_bus,helper,sender,clock)
 
