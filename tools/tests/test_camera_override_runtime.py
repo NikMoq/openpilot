@@ -18,7 +18,6 @@ if sys.platform != 'linux' or os.getenv('PQ35_RUNTIME_SMOKE') != '1':
 from cereal import car, custom
 from openpilot.selfdrive.car.cruise import VCruiseHelper
 from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.controller import IntelligentCruiseButtonManagement
-from openpilot.sunnypilot.selfdrive.controls.lib import longitudinal_planner as planner_module
 from test_camera_runtime_integration import (
   longitudinal as longitudinal, native_params as native_params, pipeline as pipeline, plan_bus as plan_bus,
   publish_frame, run_longitudinal, write_camera,
@@ -147,7 +146,7 @@ def override_cycle(pipeline,longitudinal,plan_bus,native_cruise_pair,native_para
   clock=PlanningClock()
   # Explicit wall-clock boundary only. Params,msgq,SubMaster,source,Resolver,
   # SLA,planner,helper,ICBM all execute their actual implementations.
-  for module in (producer_module,resolver_module,planner_module): monkeypatch.setattr(module,'time',clock)
+  for module in (producer_module,resolver_module): monkeypatch.setattr(module,'time',clock)
   helper,sender=native_cruise_pair
   yield OverrideCycle(pipeline,longitudinal(pcm_cruise=True),plan_bus,helper,sender,clock)
 

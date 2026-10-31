@@ -121,7 +121,7 @@ def control(monkeypatch):
   planner = planner_module.LongitudinalPlannerSP.__new__(planner_module.LongitudinalPlannerSP)
   planner.resolver, planner.sla, planner.camera = resolver, sla, resolver.camera
   planner.camera.maximum_driver_speed_mps = 145/3.6
-  planner.camera_compatible, planner.events_sp, planner._diagnostic_time = True, Events(), -float('inf')
+  planner.camera_compatible, planner.events_sp = True, Events()
   planner.scc = NS(vision=NS(output_v_target=255., output_a_target=0.), map=NS(output_v_target=255., output_a_target=0.),
                    update=lambda *args: None)
   now = resolver_module.time.time()
@@ -166,7 +166,7 @@ def test_native_offset_autoaccept_and_four_source_arbitration(control):
   c.planner.scc.map.output_v_target = 65/3.6
   assert update(c) == pytest.approx(65/3.6)
   assert c.planner.source == 'sccMap'
-  assert len(c.logs) == 1  # high-rate planner calls do not flood logs
+  assert not c.logs  # target arbitration does not emit unconditional diagnostic logs
 
 
 def test_threshold_pass_cache_and_identical_next_limit(control):

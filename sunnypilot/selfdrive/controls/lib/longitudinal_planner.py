@@ -5,14 +5,10 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 
-import json
-import math
-import time
 
 from cereal import messaging, custom
 from opendbc.car import structs
 from openpilot.common.constants import CV
-from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX
 from openpilot.sunnypilot.selfdrive.controls.lib.dec.dec import DynamicExperimentalController
 from openpilot.sunnypilot.selfdrive.controls.lib.e2e_alerts_helper import E2EAlertsHelper
@@ -43,7 +39,6 @@ class LongitudinalPlannerSP:
     self.camera.maximum_driver_speed_mps = V_CRUISE_MAX * CV.KPH_TO_MS
     self.camera_compatible = (CP_SP.intelligentCruiseButtonManagementAvailable and not CP_SP.pcmCruiseSpeed and
                               not CP.openpilotLongitudinalControl)
-    self._diagnostic_time = -math.inf
 
   @property
   def mlsim(self) -> bool:
@@ -84,39 +79,11 @@ class LongitudinalPlannerSP:
       LongitudinalPlanSource.speedLimitAssist: (self.sla.output_v_target, self.sla.output_a_target),
     }
 
-    self.diagnostic_candidates = {str(k): float(v[0]) for k, v in targets.items()}
     self.source = min(targets, key=lambda k: targets[k][0])
     self.output_v_target, self.output_a_target = targets[self.source]
     self.camera.set_automatic_target(self.output_v_target)
 
-    self.log_speed_diagnostics(sm)
     return self.output_v_target, self.output_a_target
-
-  def log_speed_diagnostics(self, sm):
-    now = time.monotonic()
-    if now - self._diagnostic_time < 1.0:
-      return
-    self._diagnostic_time = now
-    CS = sm['carState']
-    icbm = sm['selfdriveStateSP'].intelligentCruiseButtonManagement
-    record = dict(candidates=self.diagnostic_candidates, selected=str(self.source), vTarget=self.output_v_target,
-                  vCruise=CS.vCruise, vCruiseCluster=CS.vCruiseCluster, stockSpeedCluster=CS.cruiseState.speedCluster,
-                  resolver=dict(raw=self.resolver.speed_limit, last=self.resolver.speed_limit_last,
-                                final=self.resolver.speed_limit_final, finalLast=self.resolver.speed_limit_final_last,
-                                offset=self.resolver.speed_limit_offset, source=str(self.resolver.source)),
-                  sla=dict(state=str(self.sla.state), active=self.sla.is_active, target=self.sla.output_v_target),
-                  scc=dict(visionEnabled=bool(getattr(self.scc.vision, 'is_enabled', False)),
-                           visionActive=bool(getattr(self.scc.vision, 'is_active', False)),
-                           mapEnabled=bool(getattr(self.scc.map, 'is_enabled', False)),
-                           mapActive=bool(getattr(self.scc.map, 'is_active', False))),
-                  icbm=dict(valid=sm.valid['selfdriveStateSP'], alive=sm.alive['selfdriveStateSP'], state=str(icbm.state),
-                            command=str(icbm.sendButton), target=icbm.vTarget),
-                  camera=dict(state=str(self.camera.output.state), reason=self.camera.output.reason,
-                              requested=self.resolver._camera_requested, mode=self.resolver.camera_mode,
-                              compatible=self.camera_compatible,
-                              raw=self.camera.output.raw_limit, eventId=self.camera.output.event_id,
-                              belowStockMinimum=self.resolver.camera_target_below_minimum))
-    cloudlog.info('speed_target_diagnostic %s', json.dumps(record, sort_keys=True))
 
   def update(self, sm: messaging.SubMaster) -> None:
     self.events_sp.clear()

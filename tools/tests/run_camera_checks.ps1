@@ -15,7 +15,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Camera test dependency image build failed' }
 # Windows can materialize the original Git car.capnp symlink as link text.
 # Bind its original target into the test container without changing the checkout.
 $carSchema = Join-Path $taskRoot 'opendbc_repo/opendbc/car/car.capnp'
-$testCommand = 'python -m pytest -c tools/tests/camera_replay_pytest.ini -p no:cacheprovider tools/tests/test_camera*.py tools/tests/test_speed_camera*.py tools/tests/test_cityguide*.py -q --tb=short'
+$testCommand = 'python -m pytest -c tools/tests/camera_replay_pytest.ini -p no:cacheprovider tools/tests/test_camera*.py tools/tests/test_cityguide*.py -q --tb=short'
 & docker @dockerOptions run --rm `
   --mount "type=bind,source=$taskRoot,target=/cam,readonly" `
   --mount "type=bind,source=$carSchema,target=/cam/cereal/car.capnp,readonly" `

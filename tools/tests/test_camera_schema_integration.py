@@ -5,29 +5,22 @@ The isolated checkout must resolve cereal/car.capnp to opendbc's real schema.
 python -B -m pytest -c tools/tests/camera_replay_pytest.ini -p no:cacheprovider \
   tools/tests/test_camera_schema_integration.py -q
 
-No messaging/Params substitutes: this verifies schemas and SpeedCameraPlanner,
+No messaging/Params substitutes: this verifies schemas and CameraSpeedAdapter,
 not LongitudinalPlannerSP construction or its production publish path.
 """
 
 from contextlib import ExitStack
 from types import SimpleNamespace as NS
-import math
 
 import pytest
 
-from cereal import car, custom, log
-from openpilot.sunnypilot.selfdrive.controls.lib.speed_camera_planner import SpeedCameraPlanner
+from cereal import custom, log
 from openpilot.sunnypilot.selfdrive.controls.lib.camera_speed_adapter import CameraSpeedAdapter
 
 
-EPOCH = 1_800_000_000.0
 LAT, LON = 55.0, 37.0
 USER_SPEED = 30.0
 LIMIT = 60 / 3.6
-
-
-def latitude(north_m):
-  return LAT + math.degrees(north_m / 6_371_000.0)
 
 
 @pytest.fixture
@@ -82,63 +75,6 @@ def test_plan_control_roundtrip_in_event(wire, state, reason, cap, manual):
   assert (result.state, result.reason, result.manualTakeover) == (state, reason, manual)
 
 
-def frame(wire, *, north_m=-100, time_s=0, kind=1, location_valid=True,
-          gas=False, button=False, button_type='accelCruise', camera_valid=True, auto_allowed=None, control_values=None, **options):
-  now = EPOCH + time_s
-  cs = car.CarState.new_message(vEgo=USER_SPEED, gasPressed=gas)
-  cs.cruiseState.enabled = True
-  cs.cruiseState.speed = USER_SPEED
-  cs.cruiseState.speedCluster = USER_SPEED
-  if button:
-    event = cs.init('buttonEvents', 1)[0]
-    event.type = button_type
-    event.pressed = True
-  cc = car.CarControl.new_message(enabled=True)
-  gps = log.GpsLocationData.new_message(
-    hasFix=True, horizontalAccuracy=3.0, bearingAccuracyDeg=2.0,
-    unixTimestampMillis=int(now * 1000), latitude=latitude(north_m),
-    longitude=LON, bearingDeg=0.0)
-  lmd = custom.LiveMapDataSP.new_message(
-    locationValid=location_valid, speedCameraAheadValid=camera_valid,
-    speedCameraLatitude=LAT, speedCameraLongitude=LON,
-    speedCameraType=kind if isinstance(kind, str) else f'speedcamonline:{kind}', speedCameraSpeedLimit=LIMIT)
-  if auto_allowed is not None:
-    lmd.speedCameraAutoControlAllowed = auto_allowed
-  for key, value in (control_values or {}).items():
-    setattr(lmd, key, value)
-  kwargs = dict(enabled=True, gps_valid=True, gps_alive=True, lmd_valid=True,
-                lmd_alive=True, lmd_age_s=0.1, lmd_generation=time_s,
-                user_cruise_mps=USER_SPEED, minimum_speed_mps=30 / 3.6,
-                now_s=now, adapt_accel_mps2=-1.0)
-  kwargs.update(options)
-  messages = tuple(wire(schema, msg) for schema, msg in (
-    (car.CarState, cs), (car.CarControl, cc),
-    (log.GpsLocationData, gps), (custom.LiveMapDataSP, lmd)))
-  return messages, kwargs
-
-
-def update(planner, data):
-  messages, options = data
-  return planner.update(*messages, **options)
-
-
-@pytest.mark.parametrize('kind', [1, 2, 5])
-def test_decoded_point_camera_acquires_real_planner_ceiling(wire, kind):
-  data = frame(wire, kind=kind)
-  output = update(SpeedCameraPlanner(), data)
-  assert output.state.value == 'approach'
-  assert output.speed_cap_mps == pytest.approx(math.sqrt(LIMIT ** 2 + 200), abs=1e-5)
-  assert output.reason == 'kinematic_ceiling'
-  assert not output.manual_takeover and not output.restore_allowed
-  assert data[0][0].cruiseState.speed == USER_SPEED
-
-
-def test_decoded_invalid_location_prevents_acquisition(wire):
-  output = update(SpeedCameraPlanner(), frame(wire, location_valid=False))
-  assert output.speed_cap_mps is None
-  assert output.reason == 'lmd_unreliable'
-
-
 @pytest.mark.parametrize('allowed', [None, False, True])
 def test_auto_control_flag_wire_default_and_explicit_values(wire, allowed):
   message = custom.LiveMapDataSP.new_message()
@@ -146,30 +82,6 @@ def test_auto_control_flag_wire_default_and_explicit_values(wire, allowed):
     message.speedCameraAutoControlAllowed = allowed
   result = wire(custom.LiveMapDataSP, message)
   assert result.speedCameraAutoControlAllowed is (allowed is True)
-
-
-@pytest.mark.parametrize('kind', ['18059', '18950', '18958', '99999'])
-@pytest.mark.parametrize('allowed', [None, True])
-def test_cityguide_decoded_flag_and_known_type_are_both_required(wire, kind, allowed):
-  output = update(SpeedCameraPlanner(), frame(
-    wire, kind=f'speedcamonline-cg77:{kind}', auto_allowed=allowed))
-  if allowed and kind in ('18059', '18950', '18958'):
-    assert output.state.value == 'approach'
-    assert output.speed_cap_mps == pytest.approx(math.sqrt(LIMIT ** 2 + 200), abs=1e-5)
-  else:
-    assert output.state.value == 'inactive'
-    assert output.reason == 'camera_missing'
-    assert output.speed_cap_mps is None
-
-
-def test_decoded_loss_of_location_holds_existing_ceiling(wire):
-  planner = SpeedCameraPlanner()
-  initial = update(planner, frame(wire))
-  output = update(planner, frame(wire, time_s=1, location_valid=False))
-  assert output.state.value == 'hold'
-  assert output.speed_cap_mps == initial.speed_cap_mps
-  assert output.reason == 'lmd_unreliable'
-  assert not output.restore_allowed
 
 
 def camera_source_wire(wire, *, event='wire-camera', state='ACTIVE', passed=False):
@@ -223,52 +135,3 @@ def test_decoded_explicit_cancel_cannot_latch_manual_state_across_passage(wire):
   following = adapter_update(adapter, camera_source_wire(wire, event='next-wire-camera'))
   assert following.state == 'ACTIVE' and following.automatic and not following.manual
   assert following.event_id != initial.event_id
-
-
-def test_decoded_pass_requires_two_fixes_then_new_map_generation(wire):
-  planner = SpeedCameraPlanner()
-  update(planner, frame(wire))
-  first = update(planner, frame(wire, north_m=20, time_s=1, lmd_generation=0))
-  assert not first.restore_allowed
-  second = update(planner, frame(wire, north_m=25, time_s=2, lmd_generation=0))
-  assert second.reason == 'awaiting_map_update'
-  assert second.speed_cap_mps is not None and not second.restore_allowed
-  output = update(planner, frame(wire, north_m=30, time_s=3,
-                                camera_valid=False, lmd_generation=3))
-  assert output.state.value == 'passed'
-  assert output.reason == 'geometric_pass'
-  assert output.restore_allowed and output.speed_cap_mps is None
-
-
-@pytest.mark.parametrize('raw_kph,eligible', [(29, False), (30, True), (60, True)])
-def test_decoded_independent_control_candidate_raw_minimum_and_offset(wire, raw_kph, eligible):
-  values = dict(speedCameraControlVersion=1, speedCameraControlValid=True,
-                speedCameraControlAutoControlAllowed=True, speedCameraControlDistance=500,
-                speedCameraControlType='speedcamonline-cg77:18059',
-                speedCameraControlLatitude=latitude(400), speedCameraControlLongitude=LON,
-                speedCameraControlSpeedLimit=raw_kph / 3.6)
-  data = frame(wire, kind='speedcamonline-cg77:18952', control_values=values, camera_speed_offset_kph=19)
-  lmd = data[0][3]
-  assert lmd.speedCameraType == 'speedcamonline-cg77:18952'
-  assert lmd.speedCameraLatitude == LAT and lmd.speedCameraSpeedLimit == pytest.approx(LIMIT)
-  assert lmd.speedCameraControlVersion == 1 and lmd.speedCameraControlValid
-  assert lmd.speedCameraControlDistance == 500
-  assert lmd.speedCameraControlSpeedLimit == pytest.approx(raw_kph / 3.6)
-  output = update(SpeedCameraPlanner(), data)
-  assert (output.speed_cap_mps is not None) is eligible
-  if eligible:
-    assert output.camera_id == f'{latitude(400):.7f},{LON:.7f}:speedcamonline-cg77:18059'
-
-
-@pytest.mark.parametrize('version', [1, 2])
-def test_decoded_new_contract_without_candidate_cannot_fall_back_to_warning(wire, version):
-  data = frame(wire, control_values={'speedCameraControlVersion': version})
-  assert data[0][3].speedCameraAheadValid
-  assert update(SpeedCameraPlanner(), data).speed_cap_mps is None
-
-
-def test_decoded_old_contract_version_defaults_to_zero(wire):
-  data = frame(wire)
-  assert data[0][3].speedCameraControlVersion == 0
-  assert not data[0][3].speedCameraControlValid
-  assert update(SpeedCameraPlanner(), data).speed_cap_mps is not None
