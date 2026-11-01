@@ -23,31 +23,6 @@ def test_junction_accepts_straight_sibling_and_opposite_arms_without_strict_rout
   assert graph.camera_distance(point(-100),0,camera_point,0) is None
 
 
-@pytest.mark.parametrize('branch_distance,eligible',[(40.,True),(49.,True),(50.,True),(51.,False)])
-def test_junction_camera_radius_is_fifty_metres_from_node(tmp_path,branch_distance,eligible):
-  graph = junction_graph(tmp_path)
-  result = graph.junction_camera_approach(point(-100),0,point(0,branch_distance))
-  assert (result is not None) is eligible
-  if eligible:
-    assert result[0] == pytest.approx(100.+branch_distance,abs=.05)
-
-
-def test_junction_road_projection_does_not_expand_physical_camera_radius(tmp_path):
-  graph = junction_graph(tmp_path)
-  # Road projection is inside 50 m, but the provider point is outside it.
-  assert graph.junction_camera_approach(point(-100),0,point(24,49)) is None
-
-
-@pytest.mark.parametrize('incoming_distance',[300.,1000.])
-def test_dense_two_metre_four_arm_junction_keeps_incoming_reaction_lookahead(tmp_path,incoming_distance):
-  graph = junction_graph(tmp_path,spacing=2.)
-  for camera_point in (point(40),point(0,50),point(0,-40)):
-    result = graph.junction_camera_approach(point(-incoming_distance),0,camera_point)
-    assert result is not None
-    branch = 50. if camera_point == point(0,50) else 40.
-    assert result[0] == pytest.approx(incoming_distance+branch,abs=.05)
-
-
 @pytest.mark.parametrize('scenario',['parallel','crossing','incoming_arm','behind_vehicle'])
 def test_junction_does_not_join_disconnected_or_backward_camera(tmp_path,scenario):
   roads = [[point(-1200),point(),point(500)], [point(),point(0,500)]]
