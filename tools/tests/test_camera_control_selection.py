@@ -68,6 +68,9 @@ def map_pipeline(monkeypatch, tmp_path):
   stub('openpilot.system.hardware.hw', Paths=NS(mapd_root=lambda: str(tmp_path)))
   load('openpilot.sunnypilot.mapd.live_map_data.base_map_data', 'sunnypilot/mapd/live_map_data/base_map_data.py')
   module = load('offline_osm_camera_test', 'sunnypilot/mapd/live_map_data/osm_map_data.py')
+  # Pure fixtures provide their own shared synthetic clock; native IPC tests
+  # separately exercise Linux BOOTTIME for LLK and MONOTONIC for CAN.
+  monkeypatch.setattr(module, 'time', NS(time=lambda: time.time(), monotonic=lambda: time.monotonic()))
   instance = module.OsmMapData.__new__(module.OsmMapData)
   cache = tmp_path / 'cameras.json'
   config = {'SpeedCameraDatabasePath': str(cache), 'SpeedCameraControlEnabled': '1', 'SpeedCameraEnabled': '1',
@@ -563,3 +566,50 @@ def test_camera_requires_no_raw_gps_subscription(map_pipeline):
   del instance.camera_gps_service
   message, _ = publish(bkm_row(18059, 700))
   assert message.speedCameraControlValid and message.speedCameraAheadValid
+
+
+@pytest.mark.parametrize('age,valid', [(0., True), (2.9, True), (3.1, False), (-1., False)])
+def test_llk_age_uses_boottime_after_suspend(map_pipeline, monkeypatch, age, valid):
+  instance, _, _ = map_pipeline
+  module = sys.modules[type(instance).__module__]
+  # Native LLK includes 120 seconds of suspend; Python/CAN monotonic does not.
+  monkeypatch.setattr(module, 'time', NS(CLOCK_BOOTTIME=7,
+    clock_gettime=lambda clock_id: 620.+age, monotonic=lambda: 500.+age, time=time.time))
+  monkeypatch.setattr(module, 'log', NS(LiveLocationKalman=NS(Status=NS(valid='valid'))))
+  monkeypatch.setattr(module, 'Coordinate', lambda lat, lon: NS(latitude=lat, longitude=lon))
+  instance.mem_params.put = lambda *_: None
+  instance.sm['liveLocationKalman'] = NS(gpsOK=True, status='valid',
+    positionGeodetic=NS(valid=True, value=[55.,37.,0.]),
+    calibratedOrientationNED=NS(valid=True, value=[0.,0.,0.]))
+  instance.sm.logMonoTime['liveLocationKalman'] = 620_000_000_000
+  instance.update_location()
+  assert instance.localizer_valid is valid
+
+
+def test_fresh_boottime_llk_acquires_camera_and_keeps_can_in_monotonic_domain(map_pipeline, monkeypatch):
+  instance, _, publish = map_pipeline
+  module = sys.modules[type(instance).__module__]
+  clock = [500.]
+  monkeypatch.setattr(module, 'time', NS(CLOCK_BOOTTIME=7,
+    clock_gettime=lambda clock_id: clock[0]+120., monotonic=lambda: clock[0], time=time.time))
+  monkeypatch.setattr(module, 'log', NS(LiveLocationKalman=NS(Status=NS(valid='valid'))))
+  monkeypatch.setattr(module, 'Coordinate', lambda lat, lon: NS(latitude=lat, longitude=lon))
+  instance.mem_params.put = lambda *_: None
+  instance.sm['liveLocationKalman'] = NS(gpsOK=True, status='valid',
+    positionGeodetic=NS(valid=True, value=[55.,37.,0.]),
+    calibratedOrientationNED=NS(valid=True, value=[0.,0.,0.]))
+  instance.sm['carState'] = NS(canValid=True, gearShifter='drive', vEgo=10.)
+  instance.sm.valid['carState'] = instance.sm.alive['carState'] = True
+  instance.sm.logMonoTime = {'liveLocationKalman':620_000_000_000, 'carState':500_000_000_000}
+  instance.update_location()
+  selected, _ = publish(bkm_row(18059,150))
+  assert selected.locationValid and selected.speedCameraControlValid
+  assert selected.speedCameraControlDistance == pytest.approx(150.,abs=.1)
+  clock[0] += 1
+  instance.sm.logMonoTime['carState'] = 501_000_000_000
+  instance.sm['liveLocationKalman'].gpsOK = False
+  held, _ = publish(bkm_row(18059,150))
+  assert not held.locationValid and held.speedCameraControlValid
+  assert held.speedCameraControlReason == 'odometry_tracking'
+  assert held.speedCameraControlDistance == pytest.approx(140.,abs=.1)
+  assert held.speedCameraAheadDistance == pytest.approx(140.,abs=.1)

@@ -26,6 +26,9 @@ def test_native_reaction_setting_reaches_source_adapter_and_wire_at_actual_bound
     now = time.time()
     def monotonic(self):
       return self.mono
+    CLOCK_BOOTTIME = 7
+    def clock_gettime(self, clock_id):
+      return self.mono+120.
     def time(self):
       return self.now
 
@@ -66,8 +69,9 @@ def test_native_reaction_setting_reaches_source_adapter_and_wire_at_actual_bound
   assert pipeline[3].camera_alert_distance_m == distance
 
 
+@pytest.mark.parametrize('suspend_gap_s',[0.,120.])
 def test_native_ipc_can_odometry_retires_only_preselected_camera_after_gps_loss(
-    native_params,pipeline,monkeypatch):
+    native_params,pipeline,monkeypatch,suspend_gap_s):
   """Real PubMaster/SubMaster timestamps and CAN vEgo; no source/IO substitute."""
   import math
   from cereal import messaging
@@ -85,6 +89,9 @@ def test_native_ipc_can_odometry_retires_only_preselected_camera_after_gps_loss(
       return self.unix
     def monotonic(self):
       return self.mono_ns/1_000_000_000
+    CLOCK_BOOTTIME = 7
+    def clock_gettime(self, clock_id):
+      return self.monotonic()+suspend_gap_s
 
   clock = Clock()
   monkeypatch.setattr(source_module,'time',clock)
@@ -107,7 +114,7 @@ def test_native_ipc_can_odometry_retires_only_preselected_camera_after_gps_loss(
     gps.gpsLocation.bearingAccuracyDeg = 2.
     gps.gpsLocation.unixTimestampMillis = fix_ms
     location = messaging.new_message('liveLocationKalman',valid=True)
-    location.logMonoTime = clock.mono_ns
+    location.logMonoTime = clock.mono_ns+int(suspend_gap_s*1e9)
     llk = location.liveLocationKalman
     llk.status = 'valid'
     llk.gpsOK = gps_ok
@@ -119,6 +126,7 @@ def test_native_ipc_can_odometry_retires_only_preselected_camera_after_gps_loss(
       publisher.send(service,message)
     receive(map_data.sm,['carState','liveLocationKalman'])
     assert map_data.sm.logMonoTime['carState'] == clock.mono_ns
+    assert map_data.sm.logMonoTime['liveLocationKalman'] == clock.mono_ns+int(suspend_gap_s*1e9)
     assert map_data.sm['carState'].canValid and map_data.sm['carState'].vEgo == speed
     map_data.tick()
     receive(receiver,['liveMapDataSP'])

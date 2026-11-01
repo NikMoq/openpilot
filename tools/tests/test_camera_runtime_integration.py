@@ -141,8 +141,10 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
     # Each transmitted Cap'n Proto message owns a fresh builder. Reusing one
     # across the two real input samples triggers pycapnp's repeated-write guard.
     location = messaging.new_message('liveLocationKalman', valid=True)
-    # Distinct monotonic LLK samples, independent of raw GPS Unix timestamps.
-    location.logMonoTime = int(sys.modules[OsmMapData.__module__].time.monotonic()*1e9) + (sample_ms-fix_ms)*1_000_000
+    # Match native MessageBuilder BOOTTIME, including suspend time on Linux.
+    clock = sys.modules[OsmMapData.__module__].time
+    llk_now = clock.clock_gettime(clock.CLOCK_BOOTTIME) if hasattr(clock, "CLOCK_BOOTTIME") else clock.monotonic()
+    location.logMonoTime = int(llk_now*1e9) + (sample_ms-fix_ms)*1_000_000
     llk = location.liveLocationKalman
     llk.status = 'valid'
     llk.gpsOK = gps_ok
@@ -377,7 +379,7 @@ def test_llk_coordinate_validation_with_native_capnp_lists(coordinates, valid):
   class Inputs(dict):
     valid = {'liveLocationKalman': True}
     alive = {'liveLocationKalman': True}
-    logMonoTime = {'liveLocationKalman':time.monotonic_ns()}
+    logMonoTime = {'liveLocationKalman':time.clock_gettime_ns(time.CLOCK_BOOTTIME)}
   map_data = OsmMapData.__new__(OsmMapData)
   map_data.sm = Inputs(liveLocationKalman=location.as_reader())
   map_data.last_position = None
@@ -406,8 +408,9 @@ def test_native_llk_transport_age_controls_location_validity(age, valid, monkeyp
   class Inputs(dict):
     valid = {'liveLocationKalman': True}
     alive = {'liveLocationKalman': True}
-    logMonoTime = {'liveLocationKalman':10_000_000_000}
-  monkeypatch.setattr(module, 'time', NS(monotonic=lambda: 10.+age))
+    logMonoTime = {'liveLocationKalman':130_000_000_000}
+  monkeypatch.setattr(module, 'time', NS(CLOCK_BOOTTIME=7,
+    clock_gettime=lambda clock_id: 130.+age, monotonic=lambda: 10.+age))
   map_data = OsmMapData.__new__(OsmMapData)
   map_data.sm = Inputs(liveLocationKalman=location.as_reader())
   map_data.last_position = map_data.last_bearing = None
@@ -440,7 +443,7 @@ def test_native_llk_heading_validation_and_degree_normalization(orientation, val
   class Inputs(dict):
     valid = {'liveLocationKalman': True}
     alive = {'liveLocationKalman': True}
-    logMonoTime = {'liveLocationKalman':time.monotonic_ns()}
+    logMonoTime = {'liveLocationKalman':time.clock_gettime_ns(time.CLOCK_BOOTTIME)}
   map_data = OsmMapData.__new__(OsmMapData)
   map_data.sm = Inputs(liveLocationKalman=location.as_reader())
   map_data.last_position = map_data.last_bearing = None

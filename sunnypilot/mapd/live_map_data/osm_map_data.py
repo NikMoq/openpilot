@@ -24,6 +24,16 @@ from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nea
 from openpilot.sunnypilot.navd.helpers import Coordinate
 
 
+def _llk_now_s():
+  # Native MessageBuilder timestamps use nanos_since_boot(): CLOCK_BOOTTIME
+  # on Linux, CLOCK_MONOTONIC on Apple (common/timing.h). Unlike BOOTTIME,
+  # Python monotonic excludes Linux suspend time. Keep CAN's Python-produced
+  # timestamps and SubMaster receipt clocks in their own monotonic domain.
+  if hasattr(time, 'CLOCK_BOOTTIME'):
+    return time.clock_gettime(time.CLOCK_BOOTTIME)
+  return time.monotonic()
+
+
 class OsmMapData(BaseMapData):
   def __init__(self):
     super().__init__()
@@ -173,7 +183,7 @@ class OsmMapData(BaseMapData):
 
   def _update_camera_source(self, database_reason='camera_database_missing'):
     reaction = self.camera_alert_distance_m
-    now = time.monotonic()
+    now = _llk_now_s()
     # This clock identifies LLK state samples; it does not establish a new
     # satellite fix. Native localizer validity owns localization health.
     position_time = self.sm.logMonoTime['liveLocationKalman'] / 1_000_000_000
@@ -228,7 +238,7 @@ class OsmMapData(BaseMapData):
     self.localizer_valid = self.localizer_valid and self.sm.valid['liveLocationKalman'] and self.sm.alive['liveLocationKalman']
     position_time = self.sm.logMonoTime['liveLocationKalman'] / 1_000_000_000
     self.localizer_valid = bool(self.localizer_valid and position_time > 0 and
-                                0 <= time.monotonic() - position_time <= MAX_POSITION_AGE_S)
+                                0 <= _llk_now_s() - position_time <= MAX_POSITION_AGE_S)
 
     if self.localizer_valid:
       self.last_bearing = math.degrees(location.calibratedOrientationNED.value[2]) % 360

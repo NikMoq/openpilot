@@ -40,6 +40,11 @@ class PlanningClock:
   def monotonic(self):
     return self.mono_now
 
+  CLOCK_BOOTTIME = 7
+
+  def clock_gettime(self, clock_id):
+    return self.mono_now+120.
+
   def advance(self, seconds):
     self.now += seconds
     self.mono_now += seconds
