@@ -472,7 +472,7 @@ QString HudRendererSP::cameraRawStatusText() const {
   struct Status { const char *reason; const char *english; const char *ru; };
   static const Status statuses[] = {
     {"lmd_unreliable", "No camera data", "Нет данных камер"},
-    {"localizer_unreliable", "No localization", "Нет локализации"},
+    {"localizer_unreliable", "No GPS", "Нет GPS"},
     {"odometry_tracking", "Speed-based distance", "Путь по скорости"},
     {"odometry_unavailable", "No vehicle speed", "Нет скорости авто"},
     {"camera_control_unavailable", "Control unavailable", "Управление недоступно"},
