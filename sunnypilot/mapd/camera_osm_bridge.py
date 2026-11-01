@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 import hashlib
+import heapq
 import math
 import os
 from pathlib import Path
@@ -25,6 +26,11 @@ MAX_LOCAL_EDGES = 40_000
 MAX_INDEX_REFERENCES = 250_000
 MAX_DIRECTORY_ENTRIES = 20_000
 MAX_LOCAL_WAY_HOPS = 64
+MAX_JUNCTION_EDGES = 256
+MAX_JUNCTION_NODES = 128
+MAX_JUNCTION_DEGREE = 16
+MAX_JUNCTION_APPROACH_EDGES = 4096
+JUNCTION_CAMERA_DISTANCE_M = 50.
 SEARCH_RADIUS_M = 1800.
 CROP_RADIUS_M = 2300.
 FAILURE_CODES = frozenset({
@@ -89,6 +95,8 @@ class OfflineRoadSnapshot:
     self._association_cache = OrderedDict()
     self._route_key = None
     self._route_entries = {}
+    self._junction_context_key = None
+    self._junction_context_value = None
     index_references = 0
     for edge in self.edges:
       self.outgoing.setdefault(edge.start, []).append(edge)
@@ -146,6 +154,8 @@ class OfflineRoadSnapshot:
     candidates.sort(key=lambda item: (item[0],item[1]))
     distance,_,edge,along = candidates[0]
     local_positions = None
+    junction_nodes = None
+    junction_checked = False
     for rival_distance,_,rival,rival_along in candidates[1:]:
       same_road = rival.way == edge.way and bool({rival.start,rival.end}.intersection((edge.start,edge.end)))
       same_road = same_road or self._unique_continuation(edge,rival) or self._unique_continuation(rival,edge)
@@ -153,12 +163,23 @@ class OfflineRoadSnapshot:
         # Dense nodes can put several nonadjacent pieces of one local road
         # inside the search circle. Do not mistake those pieces for rivals.
         # Build this bounded neighborhood once, not a route per candidate.
-        if rival.way != edge.way:
-          return None
-        if local_positions is None:
+        if local_positions is None and rival.way == edge.way:
           local_positions = self._local_way_positions(edge, along, heading, tolerance)
-        offset = local_positions.get(rival.key)
-        if offset is None or abs(offset+rival_along) > 2*tolerance:
+        offset = local_positions.get(rival.key) if local_positions is not None else None
+        if offset is not None and abs(offset+rival_along) <= 2*tolerance:
+          continue
+        if not junction_checked:
+          projected = tuple(edge.start[i]+(edge.end[i]-edge.start[i])*along/edge.length for i in (0,1))
+          seeds = [(node,partial) for node,partial in ((edge.start,along),(edge.end,edge.length-along))
+                   if self.segment_covered(projected,node)]
+          junction_nodes = self._walk_local_nodes(seeds,2*tolerance)
+          junction_checked = True
+        rival_projection = tuple(rival.start[i]+(rival.end[i]-rival.start[i])*rival_along/rival.length for i in (0,1))
+        if junction_nodes is None or not any(
+            has_junction and distance_to_node+partial <= 2*tolerance
+            for node,partial in ((rival.start,rival_along),(rival.end,rival.length-rival_along))
+            for (reached,has_junction),distance_to_node in junction_nodes.items()
+            if reached == node and self.segment_covered(node,rival_projection)):
           return None
     return edge,along
 
@@ -201,6 +222,49 @@ class OfflineRoadSnapshot:
         edge = neighbor
     return positions
 
+  def _neighbors(self, node):
+    incoming,outgoing = self.incoming.get(node,()),self.outgoing.get(node,())
+    if len(incoming) > MAX_JUNCTION_DEGREE or len(outgoing) > MAX_JUNCTION_DEGREE:
+      return None
+    neighbors = {}
+    for edge in (*incoming,*outgoing):
+      other = edge.end if edge.start == node else edge.start
+      if other not in neighbors or edge.key < neighbors[other].key:
+        neighbors[other] = edge
+    return neighbors if len(neighbors) <= MAX_JUNCTION_DEGREE else None
+
+  def _walk_local_nodes(self, seeds, limit, blocked=None):
+    limit += 1e-6  # Coordinate conversion roundoff at the closed distance bound.
+    distances,seen_nodes,seen_edges,queue = {},set(),set(),[]
+    for node,distance in seeds:
+      heapq.heappush(queue,(distance,node,False))
+    while queue:
+      distance,node,has_junction = heapq.heappop(queue)
+      if distance > limit:
+        continue
+      neighbors = self._neighbors(node)
+      if neighbors is None:
+        return None
+      has_junction = has_junction or len(neighbors) >= 3
+      key = (node,has_junction)
+      if distance >= distances.get(key,math.inf):
+        continue
+      distances[key] = distance
+      seen_nodes.add(node)
+      if len(seen_nodes) > MAX_JUNCTION_NODES:
+        return None
+      for other,edge in neighbors.items():
+        pair = frozenset((node,other))
+        if pair == blocked or not self.segment_covered(node,other):
+          continue
+        seen_edges.add(pair)
+        if len(seen_edges) > MAX_JUNCTION_EDGES:
+          return None
+        following = distance+edge.length
+        if following <= limit and following < distances.get((other,has_junction),math.inf):
+          heapq.heappush(queue,(following,other,has_junction))
+    return distances
+
   def _heading_matches(self, edge, point, bearing, heading, tolerance, heading_tolerance=35.):
     if angle_difference(bearing,heading) <= heading_tolerance:
       return True
@@ -212,6 +276,18 @@ class OfflineRoadSnapshot:
         continue
       incoming = self.incoming.get(joint,())
       outgoing = self.outgoing.get(joint,())
+      neighbors_at_joint = self._neighbors(joint)
+      if neighbors_at_joint is not None and len(neighbors_at_joint) >= 3:
+        neighbors = incoming if before_side else outgoing
+        for neighbor in neighbors:
+          before,after = (neighbor,edge) if before_side else (edge,neighbor)
+          if before.start == after.end:
+            continue
+          ax,ay = xy(before.end,before.start)
+          bx,by = xy(after.end,after.start)
+          tx,ty = ax/before.length+bx/after.length,ay/before.length+by/after.length
+          if math.hypot(tx,ty) > 1e-9 and angle_difference(math.degrees(math.atan2(tx,ty))%360,heading) <= heading_tolerance:
+            return True
       # At most a continuation and its immediate reverse are admissible. This
       # bounds lookup work and refuses merges/forks rather than choosing one.
       if len(incoming) > 2 or len(outgoing) > 2:
@@ -276,6 +352,104 @@ class OfflineRoadSnapshot:
     return self._distance_between(self.associate(camera_point,camera_heading,tolerance=25.),
                                   self.associate(point,heading,tolerance=min(30.,max(12.,vehicle_tolerance_m)),
                                                  heading_tolerance=min(45.,max(35.,vehicle_heading_tolerance_deg))))
+
+  def _junction_context(self, point, heading, tolerance, heading_tolerance):
+    key = (tuple(point),heading,tolerance,heading_tolerance)
+    if key == self._junction_context_key:
+      return self._junction_context_value
+    self._junction_context_key,self._junction_context_value = key,None
+    origin = self.associate(point,heading,tolerance,heading_tolerance)
+    if origin is None:
+      return None
+    edge,along = origin
+    distance,visited = edge.length-along,set()
+    for _ in range(MAX_JUNCTION_APPROACH_EDGES):
+      if edge.key in visited or distance > 5000:
+        return None
+      visited.add(edge.key)
+      start = tuple(edge.start[i]+(edge.end[i]-edge.start[i])*along/edge.length for i in (0,1))
+      if not self.segment_covered(start,edge.end):
+        return None
+      neighbors = self._neighbors(edge.end)
+      if neighbors is None:
+        return None
+      if len(neighbors) >= 3:
+        junction = edge.end
+        blocked = frozenset((junction,edge.start))
+        local = self._walk_local_nodes(((junction,0.),),JUNCTION_CAMERA_DISTANCE_M,blocked)
+        if local is None:
+          return None
+        value = (distance,junction,blocked,local)
+        self._junction_context_value = value
+        return value
+      following = [item for item in self.outgoing.get(edge.end,()) if item.end != edge.start]
+      if len(following) != 1:
+        return None
+      edge,along = following[0],0.
+      distance += edge.length
+    return None
+
+  def junction_camera_approach(self, point, heading, camera_point, *, vehicle_tolerance_m=12., vehicle_heading_tolerance_deg=35.):
+    tolerance = min(30.,max(12.,vehicle_tolerance_m))
+    heading_tolerance = min(45.,max(35.,vehicle_heading_tolerance_deg))
+    if not self.inside(camera_point):
+      return None
+    vx,vy = xy(camera_point,point)
+    if vx*math.sin(math.radians(heading))+vy*math.cos(math.radians(heading)) < 0:
+      return None
+    context = self._junction_context(point,heading,tolerance,heading_tolerance)
+    if context is None:
+      return None
+    incoming_distance,junction,blocked,local = context
+    if math.hypot(*xy(camera_point,junction)) > JUNCTION_CAMERA_DISTANCE_M+1e-6:
+      return None
+    camera_tolerance = 25.
+    lat,lon = camera_point
+    dy = math.degrees(camera_tolerance/6371000)
+    dx = dy/max(.01,math.cos(math.radians(lat)))
+    edges = {}
+    for a in range(math.floor((lat-dy)/.002),math.floor((lat+dy)/.002)+1):
+      for b in range(math.floor((lon-dx)/.002),math.floor((lon+dx)/.002)+1):
+        edges.update((edge.key,edge) for edge in self.cells.get((a,b),()))
+    candidates = []
+    for edge in edges.values():
+      x,y = xy(camera_point,edge.start)
+      ex,ey = xy(edge.end,edge.start)
+      along = max(0.,min(edge.length,(x*ex+y*ey)/edge.length))
+      lateral = math.hypot(x-along*ex/edge.length,y-along*ey/edge.length)
+      if lateral > camera_tolerance:
+        continue
+      projected = tuple(edge.start[i]+(edge.end[i]-edge.start[i])*along/edge.length for i in (0,1))
+      distances = [reached+partial for node,partial in ((edge.start,along),(edge.end,edge.length-along))
+                   for (end,_),reached in local.items() if end == node and self.segment_covered(node,projected)]
+      route_distance = min(distances,default=math.inf)
+      incoming_arm = frozenset((edge.start,edge.end)) == blocked
+      if incoming_arm:
+        route_distance = math.inf
+      candidates.append((lateral,route_distance,incoming_arm,edge,along))
+    if not candidates:
+      return None
+    best = min(candidates,key=lambda item:(item[0],item[1]))
+    if best[1] > JUNCTION_CAMERA_DISTANCE_M+1e-6:
+      return None
+    camera_nodes = None
+    for lateral,route,incoming_arm,edge,along in candidates:
+      if incoming_arm or lateral > best[0]+8 or route <= JUNCTION_CAMERA_DISTANCE_M+1e-6:
+        continue
+      if camera_nodes is None:
+        origin,origin_along = best[3],best[4]
+        projected = tuple(origin.start[i]+(origin.end[i]-origin.start[i])*origin_along/origin.length for i in (0,1))
+        seeds = [(node,partial) for node,partial in ((origin.start,origin_along),(origin.end,origin.length-origin_along))
+                 if self.segment_covered(projected,node)]
+        camera_nodes = self._walk_local_nodes(seeds,2*camera_tolerance)
+      projected = tuple(edge.start[i]+(edge.end[i]-edge.start[i])*along/edge.length for i in (0,1))
+      if camera_nodes is None or not any(
+          distance_to_node+partial <= 2*camera_tolerance
+          for node,partial in ((edge.start,along),(edge.end,edge.length-along))
+          for (reached,_),distance_to_node in camera_nodes.items()
+          if reached == node and self.segment_covered(node,projected)):
+        return None
+    return incoming_distance+best[1],junction
 
   def _route(self, origin):
     edge,along = origin

@@ -155,10 +155,12 @@ def test_camera_on_unique_packed_corner_matches_local_course(tmp_path):
   assert snapshot.camera_distance(point(-50),0,point(),45) == pytest.approx(50,abs=.1)
 
 
-def test_corner_course_does_not_join_a_real_branch(tmp_path):
+def test_corner_course_can_associate_a_locally_connected_junction(tmp_path):
   tile(tmp_path,[[point(-100),point(0),point(0,100)],[point(0),point(100)]])
   snapshot = load(tmp_path).snapshot
-  assert snapshot.associate(point(-3,3),45) is None
+  assert snapshot.associate(point(-3,3),45) is not None
+  assert snapshot.camera_distance(point(-50),0,point(0,40),90) is None
+  assert snapshot.junction_camera_approach(point(-50),0,point(0,40))[0] == pytest.approx(90.,abs=.05)
 
 
 def test_corner_heading_does_not_match_interior_of_straight_segment(tmp_path):
@@ -267,10 +269,10 @@ def test_distinct_packed_ways_on_unique_continuation_associate_at_joint(tmp_path
   assert bridge.snapshot.camera_distance(point(vehicle),0,point(camera),0) == pytest.approx(camera-vehicle,abs=.01)
 
 
-def test_near_joint_branch_is_not_treated_as_unique_continuation(tmp_path):
+def test_near_joint_can_associate_without_inventing_strict_continuation(tmp_path):
   tile(tmp_path,[[point(-100),point(0)],[point(0),point(1500)],[point(0),point(1500,500)]])
   bridge = load(tmp_path)
-  assert bridge.snapshot.associate(point(-5),0) is None
+  assert bridge.snapshot.associate(point(-5),0) is not None
   assert bridge.snapshot.camera_distance(point(-50),0,point(5),0) is None
 
 
@@ -542,12 +544,14 @@ def test_dense_parallel_ways_remain_ambiguous(tmp_path):
 
 
 @pytest.mark.parametrize('junction',['fork','merge'])
-def test_dense_near_junction_does_not_hide_fork_or_merge(tmp_path,junction):
+def test_dense_near_junction_can_associate_connected_fork_or_merge(tmp_path,junction):
   main = dense_way([(-100.,0.),(0.,0.),(1000.,0.)],5.)
   branch = [(0.,0.),(1000.,20.)] if junction == 'fork' else [(-100.,20.),(0.,0.)]
   tile(tmp_path,[main,dense_way(branch,5.)])
   graph = load(tmp_path).snapshot
-  assert graph.associate(point(-7.5 if junction == 'fork' else 7.5),0) is None
+  assert graph.associate(point(-7.5 if junction == 'fork' else 7.5),0) is not None
+  strict = graph.camera_distance(point(-50),0,point(500),0)
+  assert (strict is None) is (junction == 'fork')
 
 
 def test_dense_disconnected_crossing_does_not_create_connectivity(tmp_path):

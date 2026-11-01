@@ -12,7 +12,7 @@ import math
 from dataclasses import dataclass
 
 from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, EARTH_RADIUS_M
-from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry
+from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry, MAX_PLAUSIBLE_SPEED_MPS
 
 # Maximum age of a localized position sample, not a satellite-fix timeout.
 MAX_POSITION_AGE_S = 3.
@@ -102,9 +102,38 @@ class CameraSpeedSource:
     self.odometry = CameraOdometry()
     self._odometry_fix_time = None
     self._odometry_position = None
+    self._junction_key = None
+    self._junction_distance = None
+    self._junction_anchored = False
 
   def update_odometry(self, sample, *, trusted_position, reaction_distance_m=300):
     selection = self.selection
+    if self._junction_key is not None:
+      if self._camera is None or selection.pass_proven or not self._confirmed_approach:
+        return selection
+      if not self._junction_anchored:
+        if not trusted_position or selection.reason in ('localizer_unreliable', 'position_jump'):
+          return selection
+        if sample is None or not all(math.isfinite(v) for v in sample) or not 0 <= sample[1] <= MAX_PLAUSIBLE_SPEED_MPS:
+          return self._uncertain('odometry_unavailable')
+        self.odometry.anchor(selection.camera_id, self._junction_distance, sample)
+        self._junction_anchored = True
+        remaining = self.odometry.remaining if self.odometry.previous is not None else None
+      else:
+        remaining = self.odometry.advance(selection.camera_id, sample)
+      if remaining is None:
+        return self._uncertain('odometry_unavailable')
+      if remaining <= 0:
+        self._completed.add(selection.camera_id)
+        self.selection = CameraSelection('PASSED', selection.camera_id, self._camera, 0., False, True, 'odometry_passed')
+        self._junction_key = self._junction_distance = None
+        self._junction_anchored = False
+      else:
+        state = 'ACTIVE' if selection.state == 'ACTIVE' or remaining <= reaction_distance_m else 'APPROACHING'
+        localized = trusted_position and selection.reason not in ('localizer_unreliable', 'position_jump')
+        reason = 'junction_approach' if localized else 'odometry_tracking'
+        self.selection = CameraSelection(state, selection.camera_id, self._camera, remaining, True, False, reason)
+      return self.selection
     # A new filter publication can repeat the same position. Keep spending
     # measured CAN distance rather than resetting the anchor to that position.
     same_anchor = self.odometry.identity == selection.camera_id and self._odometry_fix_time is not None and (
@@ -174,11 +203,34 @@ class CameraSpeedSource:
       return self._uncertain('position_jump')
     if self.selection.state == 'PASSED':
       self._camera = None
+      self._junction_key = self._junction_distance = None
+      self._junction_anchored = False
       self._pending = self._previous_projection = None
       self._crossed = False
       self._confirmed_approach = False
       self._behind_fixes = 0
       self._behind_anchor = None
+    if self._camera is not None and self._junction_key is not None:
+      if not self._junction_anchored:
+        # An unpublished event cannot survive a turn or an extended CAN gap
+        # and later acquire from an obsolete approach distance.
+        junction_approach = getattr(road_graph, 'junction_camera_approach', None)
+        approach = (junction_approach(point, heading, (self._camera.latitude, self._camera.longitude),
+                                      vehicle_tolerance_m=vehicle_tolerance_m,
+                                      vehicle_heading_tolerance_deg=vehicle_heading_tolerance_deg)
+                    if callable(junction_approach) else None)
+        if approach is None or approach[1] != self._junction_key or not 0 <= approach[0] <= LOOKAHEAD_M:
+          self._camera = None
+          self._junction_key = self._junction_distance = None
+          self._junction_anchored = False
+          self._confirmed_approach = False
+          self._travel_heading = None
+          self.selection = CameraSelection(reason='no_camera')
+          return self._uncertain('no_camera')
+        self._junction_distance = approach[0]
+      # Once anchored, only CAN spends the frozen distance. A connected
+      # branch or a new map position is never passage evidence.
+      return self._uncertain('odometry_unavailable')
     if self._camera is not None:
       camera = self._camera
       identity = camera_identity(camera)
@@ -249,14 +301,25 @@ class CameraSpeedSource:
       identity = camera_identity(camera)
       if identity in self._completed:
         continue
+      strict_available = False
       for direction in travel_directions(camera, heading, filter_heading=road_graph is None):
         if road_graph is None:
           measured = camera_projection(camera, point, heading, direction)
         else:
           distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), direction,**road_options)
           measured = None if distance is None else (distance, 0.)
+        strict_available |= measured is not None
         if measured is not None and 0 <= measured[0] <= LOOKAHEAD_M:
-          candidates.append((measured[0], identity, camera, direction, measured))
+          candidates.append((measured[0], identity, camera, direction, measured, None))
+      junction_approach = getattr(road_graph, 'junction_camera_approach', None)
+      if not strict_available and callable(junction_approach):
+        approximate = junction_approach(point, heading, (camera.latitude, camera.longitude),
+                                        vehicle_tolerance_m=vehicle_tolerance_m,
+                                        vehicle_heading_tolerance_deg=vehicle_heading_tolerance_deg)
+        if approximate is not None:
+          distance, junction_key = approximate
+          if 0 <= distance <= LOOKAHEAD_M:
+            candidates.append((distance, identity, camera, heading, (distance, 0.), junction_key))
     if not candidates:
       self._pending = None
       associate = getattr(road_graph, 'associate', None)
@@ -265,10 +328,10 @@ class CameraSpeedSource:
       reason = 'road_not_matched' if callable(associate) and associate(point, heading,**association_options) is None else 'no_camera'
       self.selection = CameraSelection(reason=reason)
       return self.selection
-    distance, identity, camera, direction, measured = min(candidates, key=lambda item: (item[0], item[1]))
+    distance, identity, camera, direction, measured, junction_key = min(candidates, key=lambda item: (item[0], item[1]))
     pending = self._pending
-    if pending is not None and pending[0] == identity and angle_difference(pending[1], direction) <= HEADING_TOLERANCE_DEG:
-      _, _, first_point, first_distance = pending
+    if pending is not None and pending[0] == identity and pending[4] == junction_key and angle_difference(pending[1], direction) <= HEADING_TOLERANCE_DEG:
+      _, _, first_point, first_distance, _ = pending
       displacement = xy(point, first_point)
       forward_motion, lateral_motion = projection(displacement, heading)
       if (math.hypot(*displacement) >= APPROACH_MOVEMENT_M and first_distance - distance >= APPROACH_PROGRESS_M and
@@ -279,10 +342,14 @@ class CameraSpeedSource:
         self._confirmed_approach = True
         self._behind_anchor = None
         self._previous_projection = measured
+        self._junction_key = junction_key
+        self._junction_distance = distance if junction_key is not None else None
+        self._junction_anchored = False
         self.selection = CameraSelection('ACTIVE' if distance <= reaction_distance_m else 'APPROACHING',
-                                         identity, camera, distance, True, False, 'offline_approach')
+                                         identity, camera, distance, junction_key is None, False,
+                                         'offline_approach' if junction_key is None else 'odometry_unavailable')
         return self.selection
-    if pending is None or pending[0] != identity or angle_difference(pending[1], direction) > HEADING_TOLERANCE_DEG or distance > pending[3] + 3:
-      self._pending = (identity, direction, point, distance)
+    if pending is None or pending[0] != identity or pending[4] != junction_key or angle_difference(pending[1], direction) > HEADING_TOLERANCE_DEG or distance > pending[3] + 3:
+      self._pending = (identity, direction, point, distance, junction_key)
     self.selection = CameraSelection(reason='confirming_approach')
     return self.selection

@@ -175,3 +175,55 @@ def test_source_wire_controls_pass_and_new_equal_limit(map_pipeline, control, mo
   plan = runtime.publish()
   assert plan.speedCameraControl.eventId == lmd.speedCameraControlEventId
   assert plan.speedCameraControl.countdownValid
+
+
+@pytest.mark.parametrize('llk_reliable',[True,False])
+def test_junction_source_wire_sla_applies_once_and_can_pass_restores_driver_goal(
+    map_pipeline,control,monkeypatch,llk_reliable):
+  from test_camera_junction import JunctionGraph, point
+  instance, _, publish = map_pipeline
+  c = control
+  runtime = real_wire_controls(c,monkeypatch)
+  clock = [500.]
+  monkeypatch.setattr(time,'monotonic',lambda: clock[0])
+  instance.camera_osm_bridge = NS(snapshot=JunctionGraph(),status='ready',tick=lambda *_: None)
+  c.cs.canValid,c.cs.gearShifter,c.cs.vEgo = True,'drive',10.
+  instance.sm['carState'] = c.cs
+  for sm in (instance.sm,c.sm):
+    sm.valid['carState'] = sm.alive['carState'] = True
+    sm.logMonoTime = {'carState':500_000_000_000,'liveLocationKalman':500_000_000_000}
+  c.sm.recv_time['carState'] = c.sm.recv_time['liveMapDataSP'] = clock[0]
+  # Side-arm camera: provider heading differs from the incoming vehicle.
+  row = bkm_row(18059,0,azimuth=270).replace('|37|',f'|{point(0,40)[1]}|')
+  first,_ = publish(row)
+  assert first.speedCameraControlValid and first.speedCameraControlReason == 'junction_approach'
+  c.sm['liveMapDataSP'] = first
+  assert update(c) == pytest.approx(75/3.6)
+  initial = runtime.publish()
+  runtime.helper.update_v_cruise(c.cs,True,True)
+  assert initial.speedCameraControl.rawLimit == pytest.approx(60/3.6)
+  assert initial.speedCameraControl.appliedOffset == pytest.approx(15/3.6)
+  assert initial.speedCameraControl.driverSetSpeed == pytest.approx(100/3.6)
+  identity = first.speedCameraControlEventId
+  for second in range(1,16):
+    clock[0] = 500.+second+(.001 if second == 15 else 0.)
+    for sm in (instance.sm,c.sm):
+      sm.logMonoTime['carState'] = int(clock[0]*1e9)
+    instance.sm.logMonoTime['liveLocationKalman'] = int(clock[0]*1e9)
+    instance.last_position.latitude = latitude(second*10)
+    instance.sm['liveLocationKalman'].gpsOK = llk_reliable
+    c.sm.recv_time['carState'] = c.sm.recv_time['liveMapDataSP'] = clock[0]
+    message,_ = publish(row)
+    c.sm['liveMapDataSP'] = message
+    assert message.speedCameraControlEventId == identity
+    assert update(c) == pytest.approx((100 if second == 15 else 75)/3.6)
+    plan = runtime.publish()
+    if second < 15:
+      assert message.speedCameraControlReason == ('junction_approach' if llk_reliable else 'odometry_tracking')
+      assert plan.speedCameraControl.active and plan.speedCameraControl.countdownValid
+    else:
+      assert message.speedCameraControlPassProven
+      assert plan.speedCameraControl.reason == 'odometry_passed'
+      assert not plan.speedLimit.resolver.speedLimitLastValid
+      assert plan.vTarget == pytest.approx(100/3.6)
+    assert runtime.helper.v_cruise_kph == runtime.helper.driver_set_speed_kph == 100
