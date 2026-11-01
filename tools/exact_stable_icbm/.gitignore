@@ -1,0 +1,9 @@
+/build*/
+*.bin
+*.signed
+*.elf
+*.o
+*.map
+*.su
+__pycache__/
+*.pyc

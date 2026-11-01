@@ -106,6 +106,9 @@ class IntelligentCruiseButtonManagement:
     default_factory=lambda: IntelligentCruiseButtonManagement.SendButtonState.none
   )
   vTarget: float = auto_field()
+  speedUnit: 'IntelligentCruiseButtonManagement.SpeedUnit' = field(
+    default_factory=lambda: IntelligentCruiseButtonManagement.SpeedUnit.unknown
+  )
 
   class IntelligentCruiseButtonManagementState(StrEnum):
     inactive = auto()
@@ -118,6 +121,15 @@ class IntelligentCruiseButtonManagement:
     none = auto()
     increase = auto()
     decrease = auto()
+
+  class SpeedUnit(StrEnum):
+    unknown = auto()
+    kph = auto()
+    mph = auto()
+
+    @classmethod
+    def from_metric(cls, is_metric: bool):
+      return cls.kph if is_metric else cls.mph
 
 
 @auto_dataclass
@@ -148,6 +160,19 @@ class CarControlSP:
   leadOne: 'LeadData' = field(default_factory=lambda: LeadData())
   leadTwo: 'LeadData' = field(default_factory=lambda: LeadData())
   intelligentCruiseButtonManagement: 'IntelligentCruiseButtonManagement' = field(default_factory=lambda: IntelligentCruiseButtonManagement())
+  # Runtime-only ICBM observations injected by card.py; not planner settings.
+  icbm_input_timestamp_ns: int = 0
+  icbm_input_valid: bool = False
+  icbm_status_valid: bool = False
+  icbm_signature_matched: bool = False
+  icbm_protocol_valid: bool = False
+  icbm_panda_count: int = 0
+  icbm_firmware_state: int = 0
+  icbm_firmware_button: int = 0
+  icbm_firmware_reason: int = 0
+  icbm_firmware_request_id: int = 0
+  icbm_firmware_tx_counter: int = 0
+  icbm_firmware_status_mono_time_ns: int = 0
 
   @auto_dataclass
   class Param:

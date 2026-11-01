@@ -8,6 +8,7 @@ import subprocess
 
 from panda import Panda, PandaDFU, PandaProtocolMismatch, FW_PATH
 from openpilot.common.basedir import BASEDIR
+from openpilot.selfdrive.pandad.pq_icbm_release import release_preflight
 from openpilot.common.params import Params
 from openpilot.system.hardware import HARDWARE
 from openpilot.common.swaglog import cloudlog
@@ -80,6 +81,15 @@ def main() -> None:
   no_internal_panda_count = 0
 
   while not do_exit:
+    try:
+      # Optional ICBM identity must be validated/revoked before discovery,
+      # recovery, DFU or flash paths can touch a Panda on this attempt.
+      release_preflight(BASEDIR, params)
+    except Exception:
+      cloudlog.exception("pandad.icbm_release_preflight_failed")
+      time.sleep(1)
+      continue
+
     try:
       count += 1
       cloudlog.event("pandad.flash_and_connect", count=count)

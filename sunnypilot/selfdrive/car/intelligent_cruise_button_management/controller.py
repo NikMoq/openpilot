@@ -4,6 +4,8 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+import math
+
 from cereal import car, custom
 from opendbc.car import structs, apply_hysteresis
 from openpilot.common.constants import CV
@@ -42,22 +44,36 @@ class IntelligentCruiseButtonManagement:
     self.is_ready_prev = False
     self.v_target_ms_last = 0.0
     self.is_metric = False
+    self.native_feedback_valid = False
 
-    self.cruise_button_timers = CRUISE_BUTTON_TIMER
+    self.cruise_button_timers = CRUISE_BUTTON_TIMER.copy()
 
   @property
   def v_cruise_equal(self) -> bool:
     return self.v_target == self.v_cruise_cluster
 
+  @staticmethod
+  def target_is_valid(CS: car.CarState, LP_SP: custom.LongitudinalPlanSP) -> bool:
+    # The planner selects a minimum including the driver's virtual cruise
+    # speed; camera control only lowers it. An unset base (255) or a plan
+    # above the current base must not become an acceleration request.
+    # The small m/s allowance covers Float32 wire conversion only.
+    return 0 < CS.vCruise <= 145 and 0 <= LP_SP.vTarget <= CS.vCruise * CV.KPH_TO_MS + 1e-5
+
   def update_calculations(self, CS: car.CarState, LP_SP: custom.LongitudinalPlanSP) -> None:
     speed_conv = CV.MS_TO_KPH if self.is_metric else CV.MS_TO_MPH
     ms_conv = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
 
-    self.v_target_ms_last = apply_hysteresis(LP_SP.vTarget, self.v_target_ms_last, HYST_GAP * ms_conv)
+    target = LP_SP.vTarget if self.target_is_valid(CS, LP_SP) else 0.0
+    self.v_target_ms_last = apply_hysteresis(target, self.v_target_ms_last, HYST_GAP * ms_conv)
 
     self.v_target = round(self.v_target_ms_last * speed_conv)
     self.v_cruise_min = get_minimum_set_speed(self.is_metric)
-    self.v_cruise_cluster = round(CS.cruiseState.speedCluster * speed_conv)
+    stock_speed = CS.cruiseState.speedCluster
+    self.native_feedback_valid = math.isfinite(stock_speed) and stock_speed > 0
+    # Missing/invalid stock feedback is not an ACC setpoint of zero. Avoid
+    # round(NaN/Inf), then inhibit transmission until valid feedback returns.
+    self.v_cruise_cluster = round(stock_speed * speed_conv) if self.native_feedback_valid else 0
 
   def update_state_machine(self) -> custom.IntelligentCruiseButtonManagement.SendButtonState:
     self.pre_active_timer = max(0, self.pre_active_timer - 1)
@@ -105,13 +121,23 @@ class IntelligentCruiseButtonManagement:
 
     return send_button
 
-  def update_readiness(self, CS: car.CarState, CC: car.CarControl) -> None:
+  def update_readiness(self, CS: car.CarState, CC: car.CarControl, LP_SP: custom.LongitudinalPlanSP) -> None:
     update_manual_button_timers(CS, self.cruise_button_timers)
 
-    ready = CC.enabled and not CC.cruiseControl.override and not CC.cruiseControl.cancel and not CC.cruiseControl.resume
+    # Observe the physical pedals/ACC directly as well as carControl: its
+    # override flag can arrive a control frame later. Driver priority only
+    # suspends button transmission; it must not erase the requested setpoint.
+    ready = (CC.enabled and CS.cruiseState.enabled and not CS.gasPressed and not CS.brakePressed and
+             not CC.cruiseControl.override and not CC.cruiseControl.cancel and not CC.cruiseControl.resume)
     button_pressed = any(self.cruise_button_timers[k] > 0 for k in self.cruise_button_timers)
+    camera = LP_SP.speedCameraControl
+    # A temporary native correction owns the buttons until this episode ends.
+    # The planner can still publish a lower constraint, but ICBM must not fight
+    # the driver's correction, including one above the remembered base speed.
+    camera_manual = camera.state == "manual" and camera.manualTakeover
 
-    self.is_ready = ready and not button_pressed
+    self.is_ready = (ready and self.native_feedback_valid and not button_pressed and not camera_manual and
+                     self.target_is_valid(CS, LP_SP))
 
   def run(self, CS: car.CarState, CC: car.CarControl, LP_SP: custom.LongitudinalPlanSP, is_metric: bool) -> None:
     if self.CP_SP.pcmCruiseSpeed:
@@ -120,7 +146,7 @@ class IntelligentCruiseButtonManagement:
     self.is_metric = is_metric
 
     self.update_calculations(CS, LP_SP)
-    self.update_readiness(CS, CC)
+    self.update_readiness(CS, CC, LP_SP)
 
     self.cruise_button = self.update_state_machine()
 

@@ -727,14 +727,6 @@ This is the time after which settings UI closes automatically if user is not int
         <source>Miles</source>
         <translation>Мили</translation>
     </message>
-    <message>
-        <source>Recorded on this device</source>
-        <translation>По сохранённым данным устройства</translation>
-    </message>
-    <message>
-        <source>No trip data yet</source>
-        <translation>Данных о поездках пока нет</translation>
-    </message>
 </context>
 <context>
     <name>DriverViewWindow</name>
@@ -4021,6 +4013,10 @@ Data</source><translation>Авто +
 
 <context>
     <name>SpeedLimitSettings</name>
+    <message>
+        <source>Show camera warnings and begin reacting at this distance before the camera. This is not a guarantee of reaching the target speed before it.</source>
+        <translation>Показывать предупреждения о камерах и начинать корректировку скорости с этого расстояния. Достижение целевой скорости до камеры не гарантируется.</translation>
+    </message>
     <message><source>None</source><translation>Нет</translation></message>
     <message><source>Fixed</source><translation>Фиксированный</translation></message>
     <message><source>Percent</source><translation>Процент</translation></message>

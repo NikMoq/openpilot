@@ -9,6 +9,17 @@ class CarInterface(CarInterfaceBase):
   CarState = CarState
   CarController = CarController
 
+  def update(self, can_packets):
+    if self.CP.flags & VolkswagenFlags.PQ:
+      coordinator = getattr(self.CC, "icbm_coordinator", None)
+      if coordinator is not None:
+        for timestamp, records in can_packets:
+          for address, data, src in records:
+            coordinator.observe(timestamp, address, data, src)
+        self.CS.icbm_echo_snapshot = coordinator.snapshot()
+
+    return super().update(can_packets)
+
   @staticmethod
   def _get_params(ret: structs.CarParams, candidate: CAR, fingerprint, car_fw, alpha_long, is_release, docs) -> structs.CarParams:
     ret.brand = "volkswagen"

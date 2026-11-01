@@ -97,6 +97,8 @@ static std::map<std::string, service> services = {
   { "customReservedRawData0", {"customReservedRawData0", true, 0.000000, -1}},
   { "customReservedRawData1", {"customReservedRawData1", true, 0.000000, -1}},
   { "customReservedRawData2", {"customReservedRawData2", true, 0.000000, -1}},
+  { "customReserved10", {"customReserved10", false, 100.000000, -1}},
+  { "customReserved11", {"customReserved11", true, 10.000000, 1}},
 };
 #endif
 

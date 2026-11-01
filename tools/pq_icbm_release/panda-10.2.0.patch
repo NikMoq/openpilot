@@ -1,0 +1,351 @@
+diff --git a/board/drivers/bxcan.h b/board/drivers/bxcan.h
+index 75bd05d5..333d97d5 100644
+--- a/board/drivers/bxcan.h
++++ b/board/drivers/bxcan.h
+@@ -1,3 +1,9 @@
++#ifndef GRA_REFERENCE_CAPABILITY
++#define GRA_REFERENCE_CAPABILITY 0
++#endif
++#if GRA_REFERENCE_CAPABILITY
++#include "../gra_reference_adapter.h"
++#endif
+ #include "bxcan_declarations.h"
+ 
+ // IRQs: CAN1_TX, CAN1_RX0, CAN1_SCE
+@@ -99,6 +105,9 @@ void process_can(uint8_t can_number) {
+           WORD_TO_BYTE_ARRAY(&to_push.data[0], CANx->sTxMailBox[0].TDLR);
+           WORD_TO_BYTE_ARRAY(&to_push.data[4], CANx->sTxMailBox[0].TDHR);
+           can_set_checksum(&to_push);
++#if GRA_REFERENCE_CAPABILITY
++          gra_adapter_tx_return(&to_push);
++#endif
+ 
+           rx_buffer_overflow += can_push(&can_rx_q, &to_push) ? 0U : 1U;
+         }
+@@ -143,7 +152,11 @@ void can_rx(uint8_t can_number) {
+     pending_can_live = 1;
+ 
+     // add to my fifo
++#if GRA_REFERENCE_CAPABILITY
++    CANPacket_t to_push = {0};
++#else
+     CANPacket_t to_push;
++#endif
+ 
+     to_push.fd = 0U;
+     to_push.returned = 0U;
+@@ -154,12 +167,32 @@ void can_rx(uint8_t can_number) {
+     to_push.bus = bus_number;
+     WORD_TO_BYTE_ARRAY(&to_push.data[0], CANx->sFIFOMailBox[0].RDLR);
+     WORD_TO_BYTE_ARRAY(&to_push.data[4], CANx->sFIFOMailBox[0].RDHR);
++#if GRA_REFERENCE_CAPABILITY
++    if (gra_adapter_enabled_for(&to_push) && (dlc_to_len[to_push.data_len_code] > sizeof(to_push.data))) {
++      safety_rx_invalid += 1U;
++      gra_adapter_reset();
++      CANx->RF0R |= CAN_RF0R_RFOM0;
++      continue;
++    }
++#endif
+     can_set_checksum(&to_push);
++#if GRA_REFERENCE_CAPABILITY
++    bool gra_rx_checked = gra_adapter_enabled_for(&to_push);
++    bool gra_rx_valid = false;
++    if (gra_rx_checked) {
++      gra_rx_valid = gra_adapter_validate_once(&to_push);
++      safety_rx_invalid += gra_rx_valid ? 0U : 1U;
++    }
++#endif
+ 
+     // forwarding (panda only)
+     int bus_fwd_num = safety_fwd_hook(bus_number, to_push.addr);
+     if (bus_fwd_num != -1) {
++#if GRA_REFERENCE_CAPABILITY
++      CANPacket_t to_send = {0};
++#else
+       CANPacket_t to_send;
++#endif
+ 
+       to_send.fd = 0U;
+       to_send.returned = 0U;
+@@ -171,11 +204,20 @@ void can_rx(uint8_t can_number) {
+       (void)memcpy(to_send.data, to_push.data, dlc_to_len[to_push.data_len_code]);
+       can_set_checksum(&to_send);
+ 
++#if GRA_REFERENCE_CAPABILITY
++      if (gra_rx_checked) gra_adapter_forward(&to_send, bus_fwd_num, gra_rx_valid);
++      else can_send(&to_send, bus_fwd_num, true);
++#else
+       can_send(&to_send, bus_fwd_num, true);
++#endif
+       can_health[can_number].total_fwd_cnt += 1U;
+     }
+ 
++#if GRA_REFERENCE_CAPABILITY
++    if (!gra_rx_checked) safety_rx_invalid += safety_rx_hook(&to_push) ? 0U : 1U;
++#else
+     safety_rx_invalid += safety_rx_hook(&to_push) ? 0U : 1U;
++#endif
+     ignition_can_hook(&to_push);
+ 
+     led_set(LED_BLUE, true);
+diff --git a/board/drivers/can_common.h b/board/drivers/can_common.h
+index fd2cfad4..070aafba 100644
+--- a/board/drivers/can_common.h
++++ b/board/drivers/can_common.h
+@@ -1,5 +1,15 @@
++#ifndef GRA_REFERENCE_CAPABILITY
++#define GRA_REFERENCE_CAPABILITY 0
++#endif
++#if GRA_REFERENCE_CAPABILITY && !defined(STM32H7)
++static bool gra_adapter_host_intercept(CANPacket_t *, uint8_t);
++#endif
+ #include "can_common_declarations.h"
+ 
++#ifndef GET_BYTE
++#define GET_BYTE(msg, idx) ((msg)->data[(idx)])
++#endif
++
+ uint32_t safety_tx_blocked = 0;
+ uint32_t safety_rx_invalid = 0;
+ uint32_t tx_buffer_overflow = 0;
+@@ -30,6 +40,18 @@ bool can_loopback = false;
+ __attribute__((section(".axisram"))) can_buffer(rx_q, CAN_RX_BUFFER_SIZE)
+ __attribute__((section(".itcmram"))) can_buffer(tx1_q, CAN_TX_BUFFER_SIZE)
+ __attribute__((section(".itcmram"))) can_buffer(tx2_q, CAN_TX_BUFFER_SIZE)
++#elif defined(STM32F4)
++#if !defined(STM32F413xx)
++#error "The SRAM2 RX queue layout is only validated for STM32F413"
++#endif
++// Keep the F413 receive ring in SRAM2 to preserve the original stack boundary.
++__attribute__((section(".ram2_bss"))) can_buffer(rx_q, CAN_RX_BUFFER_SIZE)
++can_buffer(tx1_q, CAN_TX_BUFFER_SIZE)
++can_buffer(tx2_q, CAN_TX_BUFFER_SIZE)
++#elif defined(STM32F4)
++can_buffer(rx_q, CAN_RX_BUFFER_SIZE)
++can_buffer(tx1_q, CAN_TX_BUFFER_SIZE)
++can_buffer(tx2_q, CAN_TX_BUFFER_SIZE)
+ #else
+ can_buffer(rx_q, CAN_RX_BUFFER_SIZE)
+ can_buffer(tx1_q, CAN_TX_BUFFER_SIZE)
+@@ -235,22 +257,37 @@ bool can_check_checksum(CANPacket_t *packet) {
+   return (calculate_checksum((uint8_t *) packet, CANPACKET_HEAD_SIZE + GET_LEN(packet)) == 0U);
+ }
+ 
+-void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
++typedef enum {
++  CAN_SEND_TX_DENIED, CAN_SEND_QUEUED, CAN_SEND_QUEUE_FULL, CAN_SEND_INVALID,
++} can_send_result;
++
++can_send_result can_report_tx_denied(CANPacket_t *to_push) {
++  safety_tx_blocked += 1U;
++  to_push->returned = 0U;
++  to_push->rejected = 1U;
++  can_set_checksum(to_push);
++  rx_buffer_overflow += can_push(&can_rx_q, to_push) ? 0U : 1U;
++  return CAN_SEND_TX_DENIED;
++}
++
++can_send_result can_send_enforced(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
+   if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
+     if (bus_number < PANDA_BUS_CNT) {
+-      // add CAN packet to send queue
+-      tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;
++      bool queued = can_push(can_queues[bus_number], to_push);
++      tx_buffer_overflow += queued ? 0U : 1U;
+       process_can(CAN_NUM_FROM_BUS_NUM(bus_number));
++      return queued ? CAN_SEND_QUEUED : CAN_SEND_QUEUE_FULL;
+     }
+-  } else {
+-    safety_tx_blocked += 1U;
+-    to_push->returned = 0U;
+-    to_push->rejected = 1U;
+-
+-    // data changed
+-    can_set_checksum(to_push);
+-    rx_buffer_overflow += can_push(&can_rx_q, to_push) ? 0U : 1U;
++    return CAN_SEND_INVALID;
+   }
++  return can_report_tx_denied(to_push);
++}
++
++void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
++#if GRA_REFERENCE_CAPABILITY && !defined(STM32H7)
++  if (!skip_tx_hook && gra_adapter_host_intercept(to_push, bus_number)) return;
++#endif
++  (void)can_send_enforced(to_push, bus_number, skip_tx_hook);
+ }
+ 
+ bool is_speed_valid(uint32_t speed, const uint32_t *all_speeds, uint8_t len) {
+diff --git a/board/main.c b/board/main.c
+index 458db967..3e1b3c2f 100644
+--- a/board/main.c
++++ b/board/main.c
+@@ -1,3 +1,6 @@
++#ifndef GRA_REFERENCE_CAPABILITY
++#define GRA_REFERENCE_CAPABILITY 0
++#endif
+ // ********************* Includes *********************
+ #include "config.h"
+ 
+@@ -20,6 +23,9 @@
+   #include "drivers/fdcan.h"
+ #else
+   #include "drivers/bxcan.h"
++  #if GRA_REFERENCE_CAPABILITY
++    #include "gra_transform.c"
++  #endif
+ #endif
+ 
+ #include "power_saving.h"
+@@ -62,6 +68,9 @@ void debug_ring_callback(uart_ring *ring) {
+ 
+ // this is the only way to leave silent mode
+ void set_safety_mode(uint16_t mode, uint16_t param) {
++#if GRA_REFERENCE_CAPABILITY && !defined(STM32H7)
++  gra_adapter_reset();
++#endif
+   uint16_t mode_copy = mode;
+   int err = set_safety_hooks(mode_copy, param);
+   if (err == -1) {
+@@ -159,6 +168,9 @@ static void tick_handler(void) {
+     harness_tick();
+     simple_watchdog_kick();
+     sound_tick();
++#if GRA_REFERENCE_CAPABILITY && !defined(STM32H7)
++    gra_adapter_tick();
++#endif
+ 
+     // re-init everything that uses harness status
+     if (harness.status != prev_harness_status) {
+@@ -248,6 +260,9 @@ static void tick_handler(void) {
+           // set flag to indicate the heartbeat was lost
+           if (is_car_safety_mode(current_safety_mode)) {
+             heartbeat_lost = true;
++#if GRA_REFERENCE_CAPABILITY && !defined(STM32H7)
++            gra_adapter_reset();
++#endif
+           }
+ 
+           // clear heartbeat engaged state
+diff --git a/board/main_comms.h b/board/main_comms.h
+index 643be954..9f9f62fc 100644
+--- a/board/main_comms.h
++++ b/board/main_comms.h
+@@ -74,6 +74,24 @@ int comms_control_handler(ControlPacket_t *req, uint8_t *resp) {
+ #endif
+ 
+   switch (req->request) {
++    // **** 0xa9: serialized PQ GRA button command (request ID in param1, button in param2)
++    case 0xa9:
++#if GRA_REFERENCE_CAPABILITY && !defined(STM32H7)
++      if (req->param2 <= 4U) (void)gra_adapter_issue(req->param1, (uint8_t)req->param2);
++#endif
++      break;
++    // **** 0xaa: versioned ICBM transaction status, correlated by returned request ID
++    case 0xaa:
++#if GRA_REFERENCE_CAPABILITY && !defined(STM32H7)
++      {
++        gra_txn_status status;
++        COMPILE_TIME_ASSERT(sizeof(status) <= USBPACKET_MAX_SIZE);
++        gra_adapter_get_status(&status);
++        (void)memcpy(resp, (const uint8_t *)&status, sizeof(status));
++        resp_len = sizeof(status);
++      }
++#endif
++      break;
+     // **** 0xa8: get microsecond timer
+     case 0xa8:
+       time = microsecond_timer_get();
+diff --git a/board/stm32f4/startup_stm32f413xx.s b/board/stm32f4/startup_stm32f413xx.s
+index 6e6fb5ff..c067c657 100644
+--- a/board/stm32f4/startup_stm32f413xx.s
++++ b/board/stm32f4/startup_stm32f413xx.s
+@@ -108,6 +108,17 @@ LoopFillZerobss:
+   cmp  r2, r3
+   bcc  FillZerobss
+ 
++/* Zero the separate SRAM2 queue before any application code can use it. */
++  ldr  r2, =_sram2_bss
++  ldr  r3, =_eram2_bss
++  movs r0, #0
++LoopFillZeroRam2:
++  cmp  r2, r3
++  bcs  DoneFillZeroRam2
++  str  r0, [r2], #4
++  b    LoopFillZeroRam2
++DoneFillZeroRam2:
++
+ /* Call the clock system intitialization function.*/
+   /* bl  SystemInit    */
+ /* Call static constructors */
+diff --git a/board/stm32f4/stm32f4_flash.ld b/board/stm32f4/stm32f4_flash.ld
+index a601c1f6..660cdeb9 100644
+--- a/board/stm32f4/stm32f4_flash.ld
++++ b/board/stm32f4/stm32f4_flash.ld
+@@ -153,6 +153,25 @@ SECTIONS
+   } >RAM
+ 
+   /* MEMORY_bank1 section, code must be located here explicitly            */
++  /* STM32F413 SRAM2, initialized by Reset_Handler independently of .bss. */
++  .ram2_bss (NOLOAD) :
++  {
++    . = ALIGN(4);
++    _sram2_bss = .;
++    *(.ram2_bss)
++    *(.ram2_bss.*)
++    . = ALIGN(4);
++    _eram2_bss = .;
++  } >RAM2
++
++  ASSERT(_ebss + _Min_Heap_Size + _Min_Stack_Size <= _estack,
++         "RAM data overlaps the legacy initial stack or bootloader flag")
++  ASSERT(_estack == 0x2001FFFC && enter_bootloader_mode == 0x2001FFFC,
++         "Legacy bootloader flag and stack boundary must stay unchanged")
++  ASSERT(_sram2_bss >= ORIGIN(RAM2) &&
++         _eram2_bss <= ORIGIN(RAM2) + LENGTH(RAM2),
++         "SRAM2 data exceeds STM32F413 capacity")
++
+   /* Example: extern int foo(void) __attribute__ ((section (".mb1text"))); */
+   .memory_b1_text :
+   {
+diff --git a/python/__init__.py b/python/__init__.py
+index f745ba32..8a977235 100644
+--- a/python/__init__.py
++++ b/python/__init__.py
+@@ -132,6 +132,10 @@ class Panda:
+   CAN_HEALTH_PACKET_VERSION = 5
+   HEALTH_STRUCT = struct.Struct("<IIIIIIIIBBBBBHBBBHfBBHBHHB")
+   CAN_HEALTH_STRUCT = struct.Struct("<BIBBBBBBBBIIIIIIIHHBBBIIII")
++  ICBM_STATUS_STRUCT = struct.Struct("<BBBBHH")
++  ICBM_BUTTONS = {"UP": 1, "DOWN": 2, "SET": 3, "RES": 4}
++  ICBM_STATES = {"idle": 0, "accepted": 1, "wait_release": 2, "complete": 3,
++                 "rejected": 4, "aborted_pending_release": 5, "aborted": 6, "aborted_no_press": 7}
+ 
+   F4_DEVICES = [HW_TYPE_WHITE_PANDA, HW_TYPE_GREY_PANDA, HW_TYPE_BLACK_PANDA, HW_TYPE_UNO, HW_TYPE_DOS]
+   H7_DEVICES = [HW_TYPE_RED_PANDA, HW_TYPE_RED_PANDA_V2, HW_TYPE_TRES, HW_TYPE_CUATRO]
+@@ -719,6 +723,25 @@ class Panda:
+   def set_safety_mode(self, mode=CarParams.SafetyModel.silent, param=0):
+     self._handle.controlWrite(Panda.REQUEST_OUT, 0xdc, mode, param, b'')
+ 
++  def icbm_button_command(self, request_id, button):
++    """Submit one versioned PQ ICBM request; retries with the same ID are idempotent."""
++    if isinstance(request_id, bool) or not isinstance(request_id, int) or not 1 <= request_id <= 0xffff:
++      raise ValueError("request_id must be an integer in 1..65535")
++    if button not in self.ICBM_BUTTONS:
++      raise ValueError("button must be UP, DOWN, SET, or RES")
++    self._handle.controlWrite(Panda.REQUEST_OUT, 0xa9, request_id, self.ICBM_BUTTONS[button], b'')
++
++  def icbm_button_status(self):
++    """Read the fixed-size Panda 10.2 ICBM lifecycle record, or None if unsupported."""
++    raw = self._handle.controlRead(Panda.REQUEST_IN, 0xaa, 0, 0, self.ICBM_STATUS_STRUCT.size)
++    if len(raw) != self.ICBM_STATUS_STRUCT.size:
++      return None
++    version, state, button, reason, request_id, tx_counter = self.ICBM_STATUS_STRUCT.unpack(raw)
++    if version != 1 or state not in self.ICBM_STATES.values() or button > len(self.ICBM_BUTTONS):
++      return None
++    return {"version": version, "state": state, "button": button, "reason": reason,
++            "request_id": request_id, "tx_counter": tx_counter}
++
+   def set_obd(self, obd):
+     self._handle.controlWrite(Panda.REQUEST_OUT, 0xdb, int(obd), 0, b'')
+ 

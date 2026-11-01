@@ -1,0 +1,65 @@
+{
+  "originalFirmwareIncluded": false,
+  "sourceOnly": true,
+  "compiler": "ARM GCC9.2.1",
+  "schema": 1,
+  "status": "REPRODUCED_TESTED_EXACT_STABLE_ICBM_MODULE_SOURCE",
+  "files": {
+    ".gitignore": {
+      "sha256": "b6a5445e33241efed86ce238771121f3142ec6b51179901901dfc07259c1ab70",
+      "bytes": 64
+    },
+    "original_abi.json": {
+      "sha256": "34aa5c9cbd331e74de9b4911809c63a298f5376118f07b02fedec1cb09dfb3d0",
+      "bytes": 1764
+    },
+    "gra_transform.c": {
+      "sha256": "b584b04af128d97bee22960b4c123f8eca273f2047ccaba0a867cb1a1270829f",
+      "bytes": 4786
+    },
+    "build.sh": {
+      "sha256": "eed2e29d662fa12ee15eaa92c175a2a1f4235e5bffbc0f8e0e42e1b443fb5964",
+      "bytes": 1214
+    },
+    "README.md": {
+      "sha256": "1a335eb27e0523c1c3f4b49a63c1e76539a63bccb014c05fcc5365d8190db1ca",
+      "bytes": 3687
+    },
+    "requirements.txt": {
+      "sha256": "9247e56a4abc075cb90e340c3d4a77d3600d532f972ed7d80dfd0ca3596eb223",
+      "bytes": 32
+    },
+    "build_prototype.py": {
+      "sha256": "1b421d353abcb04d596b3ea226784b93187e61e066c7ab07dac67d1a28d6a26e",
+      "bytes": 5252
+    },
+    "raw_image.py": {
+      "sha256": "8171f4bf4e72e4db79c081c4681da48a5b6707599f59f68adfc183b3326262cc",
+      "bytes": 8740
+    },
+    "exact_icbm.c": {
+      "sha256": "431a2d6dfaccf623cd4baf5fe02603a40cad1f38a1f88c39e3a2a5a602711900",
+      "bytes": 10394
+    },
+    "module.ld": {
+      "sha256": "1374c3ec96674df950aa9f251fe9f9ba9aea25d319b73192a907b69feb6010e4",
+      "bytes": 573
+    },
+    "veneers.S": {
+      "sha256": "f7e02bb52c48b87aa4a423fd9733243fe6f99816a4665567b9613b3230658c95",
+      "bytes": 433
+    },
+    "gra_transform.h": {
+      "sha256": "a5caf6e73b667fdd306da67032a44c4baec91ed1824d2f3a44b4460c7899a2ae",
+      "bytes": 2218
+    },
+    ".gitattributes": {
+      "sha256": "a79691a93b46e49ce460c26ef22afcc03d6eca1e63bf2edbc20e96159510f6c9",
+      "bytes": 14
+    }
+  },
+  "moduleBinSha256": "a8daad53681e26c990cf51b7fbde6b7576725a5aabb3f4e450f76e64df73721d",
+  "originalSignedSha256": "ef8ea87c17f0802bec38f754d93a3fb2c9850c640b5ba95e01e661323545daba",
+  "prototypeUnsignedSha256": "0523b0181b8f1b5be29fd688a7207ee8690ed2dd64973dcc747f942427e06695",
+  "privateKeysIncluded": false
+}

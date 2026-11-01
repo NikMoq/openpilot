@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "scope": "Sanitized metric button observations and explicitly synthetic ECU assumptions",
+  "originalLocalContractSha256": "ddcfa0746a81c6fbbad01bb086a42e3f1a4a8fa67bc67bb6241e70eeca0021fe",
+  "observed": {
+    "nativeGRAHz": 50,
+    "stockDisplayHz": 25,
+    "UP": {
+      "bit": 11,
+      "activeShortCorrelations": 98,
+      "heldFrames": [
+        3,
+        9
+      ],
+      "responseMs": [
+        56.427,
+        166.017
+      ],
+      "offGridExamples": [
+        [
+          56,
+          60
+        ],
+        [
+          33,
+          40
+        ],
+        [
+          43,
+          50
+        ],
+        [
+          106,
+          110
+        ]
+      ],
+      "behavior": "next higher decade"
+    },
+    "DOWN": {
+      "bit": 10,
+      "activeShortCorrelations": 64,
+      "heldFrames": [
+        4,
+        8
+      ],
+      "responseMs": [
+        53.992,
+        88.562
+      ],
+      "onGridDeltaKph": -10,
+      "offGridBehavior": "UNKNOWN; no qualifying off-grid DOWN observations"
+    },
+    "SET": {
+      "bit": 16,
+      "activeShortCorrelations": 1,
+      "heldFrames": [
+        5,
+        5
+      ],
+      "responseMs": [
+        60.965,
+        60.965
+      ],
+      "deltaKph": -1
+    },
+    "RES": {
+      "bit": 17,
+      "activeShortCorrelations": 6,
+      "heldFrames": [
+        6,
+        7
+      ],
+      "responseMs": [
+        67.001,
+        86.983
+      ],
+      "deltaKph": 1
+    }
+  },
+  "syntheticModel": {
+    "responseMs": 80,
+    "minimumKph": 30,
+    "acceptance": "first owned pressed frame once per request",
+    "downAlternatives": [
+      "next lower decade",
+      "minus10"
+    ],
+    "newSevenFrameECUAcceptance": "UNVERIFIED"
+  },
+  "limitations": [
+    "Historical correlations are not execution of a real ECU in this harness.",
+    "No raw frames, timestamps, routes, VIN, location or source filenames included.",
+    "Metric contract does not establish mph or PQ46 compatibility."
+  ]
+}

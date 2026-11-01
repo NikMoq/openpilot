@@ -42,6 +42,15 @@ struct can_frame {
   long src;
 };
 
+struct IcbmButtonStatus {
+  uint8_t version;
+  uint8_t state;
+  uint8_t button;
+  uint8_t reason;
+  uint16_t request_id;
+  uint16_t tx_counter;
+};
+
 
 class Panda {
 private:
@@ -73,6 +82,8 @@ public:
   std::optional<can_health_t> get_can_state(uint16_t can_number);
   void set_loopback(bool loopback);
   std::optional<std::vector<uint8_t>> get_firmware_version();
+  bool icbm_button_command(uint16_t request_id, uint8_t button);
+  std::optional<IcbmButtonStatus> icbm_button_status();
   bool up_to_date();
   std::optional<std::string> get_serial();
   void set_power_saving(bool power_saving);
@@ -92,6 +103,9 @@ protected:
   uint32_t receive_buffer_size = 0;
 
   Panda(uint32_t bus_offset) : bus_offset(bus_offset) {}
+  Panda(uint32_t bus_offset, std::unique_ptr<PandaCommsHandle> test_handle) : Panda(bus_offset) {
+    handle = std::move(test_handle);
+  }
   void pack_can_buffer(const capnp::List<cereal::CanData>::Reader &can_data_list,
                          std::function<void(uint8_t *, size_t)> write_func);
   bool unpack_can_buffer(uint8_t *data, uint32_t &size, std::vector<can_frame> &out_vec);

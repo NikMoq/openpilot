@@ -4,6 +4,7 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+import math
 import numpy as np
 
 from cereal import car, custom
@@ -52,7 +53,7 @@ class VCruiseHelperSP:
     self.short_increment = self.params.get("CustomAccShortPressIncrement", return_default=True)
     self.long_increment = self.params.get("CustomAccLongPressIncrement", return_default=True)
 
-    self.enable_button_timers = CRUISE_BUTTON_TIMER
+    self.enable_button_timers = CRUISE_BUTTON_TIMER.copy()
 
     # Speed Limit Assist
     self.sla_state = SpeedLimitAssistState.disabled
@@ -63,11 +64,65 @@ class VCruiseHelperSP:
     self.prev_speed_limit_final_last_kph = 0.
     self.req_plus = False
     self.req_minus = False
+    self.camera_manual_takeover = False
+    self.camera_episode_active = False
+    self.camera_mode = False
+    self.driver_set_speed_kph = V_CRUISE_UNSET
+    self._camera_manual_feedback_pending = False
+    self._camera_manual_feedback_baseline = None
+    self._camera_manual_feedback_direction = 0
+    self._camera_speed_buttons_held = set()
+    self._camera_release_seen = set()
+    self._camera_resume_session = False
+    self._camera_acc_engaged_prev = False
+    self._camera_manual_gesture = False
+    self._camera_manual_gesture_kind = None
+    self._camera_manual_changed_held = False
+    self._camera_manual_follow = False
+    self._stock_virtual_cruise_initialized = False
+    self._stock_set_pending = False
+    self._stock_set_held = False
+    self._stock_set_from_camera = False
+    self._native_driver_last_speed_kph = None
+    self._native_camera_origin_buttons = set()
+
+  def accept_native_driver_speed(self, CS: car.CarState) -> bool:
+    """Record supported native feedback only inside an attributed gesture."""
+    stock_kph = CS.cruiseState.speed * CV.MS_TO_KPH
+    if not math.isfinite(stock_kph) or not 0 < stock_kph <= V_CRUISE_MAX:
+      return False
+    self.v_cruise_kph = self.driver_set_speed_kph = stock_kph
+    cluster_kph = CS.cruiseState.speedCluster * CV.MS_TO_KPH
+    self.v_cruise_cluster_kph = cluster_kph if math.isfinite(cluster_kph) and cluster_kph > 0 else stock_kph
+    return True
+
+  @property
+  def remember_stock_cruise(self) -> bool:
+    # ICBM owns only the setpoint; stock ACC still owns engagement.
+    return (self.CP.pcmCruise and not self.CP_SP.pcmCruiseSpeed and
+            self.CP_SP.intelligentCruiseButtonManagementAvailable and not self.CP.openpilotLongitudinalControl)
 
   def read_custom_set_speed_params(self) -> None:
     self.custom_acc_enabled = self.params.get_bool("CustomAccIncrementsEnabled")
     self.short_increment = self.params.get("CustomAccShortPressIncrement", return_default=True)
     self.long_increment = self.params.get("CustomAccLongPressIncrement", return_default=True)
+
+  def update_stock_set_intent(self, CS: car.CarState, enabled: bool) -> None:
+    # Only SET used to reengage stock ACC replaces the remembered target.
+    # Active SET keeps its existing behavior; RES explicitly keeps the memory.
+    for button in CS.buttonEvents:
+      if button.type == ButtonType.setCruise:
+        if button.pressed:
+          self._stock_set_held = True
+          self._stock_set_from_camera = self.camera_episode_active
+        if (not self.camera_episode_active and not self._stock_set_from_camera and
+            (not enabled or not CS.cruiseState.enabled or not self.enabled_prev)):
+          self._stock_set_pending = True
+        if not button.pressed:
+          self._stock_set_held = False
+          self._stock_set_from_camera = False
+      elif button.type in (ButtonType.resumeCruise, ButtonType.cancel, ButtonType.mainCruise):
+        self._stock_set_pending = False
 
   def update_v_cruise_delta(self, long_press: bool, v_cruise_delta: float) -> tuple[bool, float]:
     if not self.custom_acc_enabled:
@@ -108,6 +163,30 @@ class VCruiseHelperSP:
     return enabled
 
   def update_speed_limit_assist(self, is_metric, LP_SP: custom.LongitudinalPlanSP) -> None:
+    camera = LP_SP.speedCameraControl
+    self.camera_mode = camera.enabled
+    # Native physical gestures outside a camera zone remain meaningful while
+    # camera control is off or no camera is selected. Camera-zone ownership is
+    # still handled separately by camera_episode_active below.
+    self.camera_manual_takeover = camera.manualTakeover
+    if self._camera_manual_follow and not self._camera_manual_gesture and not self._camera_manual_feedback_pending:
+      baseline = self._camera_manual_feedback_baseline
+      goal = LP_SP.vTarget * CV.MS_TO_KPH
+      explained = (abs(goal - baseline) > .036 if baseline is not None and self._camera_manual_feedback_direction == 0 else
+                   baseline is not None and (goal - baseline) * self._camera_manual_feedback_direction > .036)
+      if explained:
+        # This published goal can explain later same-direction stock motion;
+        # it is no longer evidence of a delayed physical gesture response.
+        self._camera_manual_follow = False
+    if self.remember_stock_cruise:
+      temporary_reasons = ("manual_button", "button_override", "gas", "brake", "brake_waiting_resume")
+      if camera.state in ("passed", "cancelled"):
+        self.camera_episode_active = False
+      elif camera.state in ("active", "driverOverride", "approach", "hold", "manual", "suspended") or (
+          camera.manualTakeover and camera.reason in temporary_reasons):
+        self.camera_episode_active = True
+      elif camera.state == "inactive" and camera.reason not in ("acc_disengaged", *temporary_reasons):
+        self.camera_episode_active = False
     resolver = LP_SP.speedLimit.resolver
     self.has_speed_limit = resolver.speedLimitValid or resolver.speedLimitLastValid
     self.speed_limit_final_last = LP_SP.speedLimit.resolver.speedLimitFinalLast
@@ -130,7 +209,7 @@ class VCruiseHelperSP:
     return False
 
   def update_speed_limit_assist_v_cruise_non_pcm(self) -> None:
-    if self.sla_state in SLA_ACTIVE_STATES and (self.prev_sla_state not in SLA_ACTIVE_STATES or
+    if not self.camera_mode and self.sla_state in SLA_ACTIVE_STATES and (self.prev_sla_state not in SLA_ACTIVE_STATES or
                                                 self.update_speed_limit_final_last_changed):
       self.v_cruise_kph = np.clip(round(self.speed_limit_final_last_kph, 1), self.v_cruise_min, V_CRUISE_MAX)
 

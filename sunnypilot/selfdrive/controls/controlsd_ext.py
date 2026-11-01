@@ -79,6 +79,10 @@ class ControlsExt:
     cc_sp_send = messaging.new_message('carControlSP')
     cc_sp_send.valid = sm['carState'].canValid
     cc_sp_send.carControlSP = CC_SP
+    if not sm.all_checks(['selfdriveStateSP']):
+      # Controlsd may keep running after the state publisher stalls. Its new
+      # envelope timestamp cannot authorize a previously retained button target.
+      cc_sp_send.carControlSP.intelligentCruiseButtonManagement = custom.IntelligentCruiseButtonManagement.new_message()
 
     pm.send('carControlSP', cc_sp_send)
 

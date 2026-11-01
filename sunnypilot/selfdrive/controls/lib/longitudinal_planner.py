@@ -5,6 +5,7 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 
+
 from cereal import messaging, custom
 from opendbc.car import structs
 from openpilot.common.constants import CV
@@ -24,7 +25,6 @@ LongitudinalPlanSource = custom.LongitudinalPlanSP.LongitudinalPlanSource
 class LongitudinalPlannerSP:
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP, mpc):
     self.events_sp = EventsSP()
-    self.resolver = SpeedLimitResolver()
     self.dec = DynamicExperimentalController(CP, mpc)
     self.scc = SmartCruiseControl()
     self.resolver = SpeedLimitResolver()
@@ -35,6 +35,10 @@ class LongitudinalPlannerSP:
 
     self.output_v_target = 0.
     self.output_a_target = 0.
+    self.camera = self.resolver.camera
+    self.camera.maximum_driver_speed_mps = V_CRUISE_MAX * CV.KPH_TO_MS
+    self.camera_compatible = (CP_SP.intelligentCruiseButtonManagementAvailable and not CP_SP.pcmCruiseSpeed and
+                              not CP.openpilotLongitudinalControl)
 
   @property
   def mlsim(self) -> bool:
@@ -59,12 +63,14 @@ class LongitudinalPlannerSP:
     self.scc.update(sm, long_enabled, long_override, v_ego, a_ego, v_cruise)
 
     # Speed Limit Resolver
-    self.resolver.update(v_ego, sm)
+    self.resolver.update(v_ego, sm, camera_compatible=self.camera_compatible)
 
     # Speed Limit Assist
     has_speed_limit = self.resolver.speed_limit_valid or self.resolver.speed_limit_last_valid
     self.sla.update(long_enabled, long_override, v_ego, a_ego, v_cruise_cluster, self.resolver.speed_limit,
-                    self.resolver.speed_limit_final_last, has_speed_limit, self.resolver.distance, self.events_sp)
+                    self.resolver.speed_limit_final_last, has_speed_limit, self.resolver.distance, self.events_sp,
+                    camera_mode=self.resolver.camera_mode, camera_event_id=self.camera.output.event_id,
+                    camera_auto_confirm=self.camera.output.automatic and CS.cruiseState.enabled)
 
     targets = {
       LongitudinalPlanSource.cruise: (v_cruise, a_ego),
@@ -75,6 +81,8 @@ class LongitudinalPlannerSP:
 
     self.source = min(targets, key=lambda k: targets[k][0])
     self.output_v_target, self.output_a_target = targets[self.source]
+    self.camera.set_automatic_target(self.output_v_target)
+
     return self.output_v_target, self.output_a_target
 
   def update(self, sm: messaging.SubMaster) -> None:
@@ -92,6 +100,23 @@ class LongitudinalPlannerSP:
     longitudinalPlanSP.vTarget = float(self.output_v_target)
     longitudinalPlanSP.aTarget = float(self.output_a_target)
     longitudinalPlanSP.events = self.events_sp.to_msg()
+    camera_control = longitudinalPlanSP.speedCameraControl
+    camera_control.enabled = self.resolver.camera_mode
+    camera_control.active = self.camera.output.automatic
+    camera_control.speedCap = self.resolver.speed_limit_final if self.camera.output.automatic else 0.0
+    camera_control.state = {"IDLE": "inactive", "APPROACHING": "approaching", "ACTIVE": "active",
+                            "DRIVER_OVERRIDE": "driverOverride", "PASSED": "passed"}[self.camera.output.state]
+    camera_control.reason = self.camera.output.reason
+    if self.resolver.camera_target_below_minimum:
+      camera_control.reason += ":below_stock_acc_minimum"
+    camera_control.manualTakeover = self.camera.output.manual
+    camera_control.driverSetSpeed = sm['carState'].vCruise * CV.KPH_TO_MS
+    camera_control.eventId = self.camera.output.event_id
+    camera_control.distance = self.camera.output.distance
+    camera_control.countdownValid = self.camera.output.countdown_valid
+    camera_control.reactionDistance = self.resolver.camera_reaction_distance
+    camera_control.rawLimit = self.resolver.camera_display_raw_limit
+    camera_control.appliedOffset = self.resolver.camera_display_offset
 
     # Dynamic Experimental Control
     dec = longitudinalPlanSP.dec

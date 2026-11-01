@@ -29,6 +29,13 @@ struct IntelligentCruiseButtonManagement {
   state @0 :IntelligentCruiseButtonManagementState;
   sendButton @1 :SendButtonState;
   vTarget @2 :Float32;
+  speedUnit @3 :SpeedUnit;
+
+  enum SpeedUnit {
+    unknown @0;
+    kph @1;
+    mph @2;
+  }
 
   enum IntelligentCruiseButtonManagementState {
     inactive @0;      # No button press or default state
@@ -192,6 +199,23 @@ struct LongitudinalPlanSP @0xf35cc4560bbf6ec2 {
   aTarget @5 :Float32;
   events @6 :List(OnroadEventSP.Event);
   e2eAlerts @7 :E2eAlerts;
+  speedCameraControl @8 :SpeedCameraControl;
+
+  struct SpeedCameraControl {
+    enabled @0 :Bool;
+    active @1 :Bool;
+    speedCap @2 :Float32;
+    state @3 :Text;
+    reason @4 :Text;
+    manualTakeover @5 :Bool;
+    driverSetSpeed @6 :Float32;  # Driver-selected base, m/s; excludes temporary camera target.
+    eventId @7 :Text;  # Correlates sign, countdown, control and passage proof.
+    distance @8 :Float32;  # Metres along the matched road to this event.
+    countdownValid @9 :Bool;  # Current trustworthy match within reaction distance.
+    reactionDistance @10 :UInt16;  # Configured metres, 50..1000 in steps of 50.
+    rawLimit @11 :Float32;  # Selected event's unadjusted display limit, m/s.
+    appliedOffset @12 :Float32;  # Native offset actually used for this event, m/s.
+  }
 
   struct DynamicExperimentalControl {
     state @0 :DynamicExperimentalControlState;
@@ -442,6 +466,28 @@ struct LiveMapDataSP @0xf416ec09499d9d19 {
   speedLimitAhead @3 :Float32;
   speedLimitAheadDistance @4 :Float32;
   roadName @5 :Text;
+  speedCameraAheadValid @6 :Bool;
+  speedCameraAheadDistance @7 :Float32;
+  speedCameraSpeedLimit @8 :Float32;
+  speedCameraType @9 :Text;
+  speedCameraLatitude @10 :Float64;
+  speedCameraLongitude @11 :Float64;
+  locationValid @12 :Bool;
+  speedCameraAutoControlAllowed @13 :Bool;
+  # Independent control selection; version 0 is a legacy warning-only publisher.
+  speedCameraControlVersion @14 :UInt8;
+  speedCameraControlValid @15 :Bool;
+  speedCameraControlDistance @16 :Float32;
+  speedCameraControlSpeedLimit @17 :Float32;  # Raw m/s, before the user's offset.
+  speedCameraControlType @18 :Text;
+  speedCameraControlLatitude @19 :Float64;
+  speedCameraControlLongitude @20 :Float64;
+  speedCameraControlAutoControlAllowed @21 :Bool;
+  speedCameraControlEventId @22 :Text;
+  speedCameraEventId @23 :Text;
+  speedCameraControlPassProven @24 :Bool;  # Valid only for speedCameraControlEventId.
+  speedCameraControlState @25 :Text;
+  speedCameraControlReason @26 :Text;
 }
 
 struct ModelDataV2SP @0xa1680744031fdb2d {
@@ -455,9 +501,24 @@ struct ModelDataV2SP @0xa1680744031fdb2d {
 }
 
 struct CustomReserved10 @0xcb9fd56c7057593a {
+  # One correlated Panda button request. button: 1=UP, 2=DOWN, 3=SET, 4=RES.
+  requestId @0 :UInt16;
+  button @1 :UInt8;
+  valid @2 :Bool;
 }
 
 struct CustomReserved11 @0xc2243c65e0340384 {
+  # Panda 10.2.0 ICBM transport status. Signature match is checked in pandad
+  # against an explicitly configured expected signature; absence means false.
+  signatureMatched @0 :Bool;
+  protocolValid @1 :Bool;
+  pandaCount @2 :UInt8;
+  state @3 :UInt8;
+  button @4 :UInt8;
+  reason @5 :UInt8;
+  requestId @6 :UInt16;
+  txCounter @7 :UInt16;
+  statusMonoTimeNs @8 :UInt64;  # First pandad observation of this status transition.
 }
 
 struct CustomReserved12 @0x9ccdc8676701b412 {
