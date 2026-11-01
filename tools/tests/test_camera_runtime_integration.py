@@ -2,7 +2,7 @@
 
 Run only inside the isolated runtime container with PQ35_RUNTIME_SMOKE=1 and
 PARAMS_ROOT=/data/params. Uses OsmMapData.tick -> BaseMapData.publish -> real
-msgq -> SubMaster decoded messages -> SpeedCameraPlanner/LongitudinalPlannerSP.
+msgq -> SubMaster decoded messages -> CameraSpeedSource/Resolver/SLA/LongitudinalPlannerSP.
 No module/socket or Params substitutes. Longitudinal tests supply only a given
 MPC crash counter; they do not execute an MPC solver or model inference.
 """
@@ -20,16 +20,17 @@ import pytest
 if sys.platform != 'linux' or os.getenv('PQ35_RUNTIME_SMOKE') != '1':
   pytest.skip('requires explicit disposable Linux runtime opt-in', allow_module_level=True)
 
-from cereal import car, custom, messaging
+from cereal import car, custom, log, messaging
 import msgq.ipc_pyx
 from openpilot.common import params_pyx
 from openpilot.common.params import Params
+from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import CameraDatabase, save_database
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.cityguide import parse_cityguide_snapshot
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
 from openpilot.sunnypilot.mapd.live_map_data.osm_map_data import OsmMapData
-from openpilot.sunnypilot.selfdrive.controls.lib.speed_camera_planner import SpeedCameraPlanner
+from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.speed_limit_resolver import SpeedLimitResolver
 from openpilot.sunnypilot.selfdrive.controls.lib.longitudinal_planner import LongitudinalPlannerSP
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode
 
@@ -39,7 +40,7 @@ USER_SPEED = 30.0
 LIMIT = 60 / 3.6
 EGO_LAT = LAT - math.degrees(100 / 6_371_000.0)
 INPUT_SERVICES = ['carState', 'carControl', 'gpsLocation', 'controlsState',
-                  'carStateSP', 'modelV2', 'radarState', 'selfdriveState']
+                  'carStateSP', 'modelV2', 'radarState', 'selfdriveState', 'selfdriveStateSP']
 
 
 @pytest.fixture
@@ -51,6 +52,11 @@ def native_params():
   params.put_bool('SpeedCameraEnabled', True)
   params.put_bool('SpeedCameraControlEnabled', True)
   params.put('SpeedCameraAlertDistanceMeters', '1000')
+  params.put('SpeedCameraReactionDistance', 300)
+  params.put('SpeedLimitOffsetType', 0)
+  params.put('SpeedLimitValueOffset', 0)
+  params.put_bool('IsMetric', True)
+  params.put_bool('UbloxAvailable', False)
   yield params
 
 
@@ -80,11 +86,31 @@ def test_camera_params_matches_native_pc_and_prefixed_roots(monkeypatch, tmp_pat
 
 
 @pytest.fixture
-def pipeline(native_params, tmp_path):
+def pipeline(native_params, tmp_path, monkeypatch):
   cache = tmp_path / 'cameras.json'
   native_params.put('SpeedCameraDatabasePath', str(cache))
+  monkeypatch.setattr(Paths, 'mapd_root', lambda: str(tmp_path))
+  import capnp
+  from pathlib import Path
+  source_root = Path(__file__).resolve().parents[2]
+  schema = capnp.load(str(source_root / 'sunnypilot/mapd/camera_osm_bridge.capnp'))
+  tile = schema.Offline.new_message(minLat=54.9, minLon=36.9, maxLat=55.1, maxLon=37.1, overlap=.001)
+  way = tile.init('ways', 1)[0]
+  way.oneWay = True
+  way.minLat, way.minLon, way.maxLat, way.maxLon = 54.95, LON, 55.05, LON
+  nodes = way.init('nodes', 2)
+  nodes[0].latitude, nodes[0].longitude = 54.95, LON
+  nodes[1].latitude, nodes[1].longitude = 55.05, LON
+  folder = tmp_path / 'offline' / '54' / '36'
+  folder.mkdir(parents=True)
+  (folder / '54.900000_36.900000_55.100000_37.100000').write_bytes(tile.to_bytes_packed())
+  # A nonexistent legacy graph path must not affect database-only operation.
+  native_params.put('SpeedCameraRoadGraphPath', str(tmp_path / 'missing-legacy-graph.osm'))
   publisher = messaging.PubMaster(['liveLocationKalman', *INPUT_SERVICES])
   map_data = OsmMapData()
+  map_data.camera_osm_bridge.tick(LAT, LON)
+  map_data.camera_osm_bridge._worker.join(5)
+  assert map_data.camera_osm_bridge.snapshot is not None
   receiver = messaging.SubMaster(['liveMapDataSP', *INPUT_SERVICES], poll='modelV2')
   assert type(map_data.params) is Params
   assert OsmMapData.publish is BaseMapData.publish
@@ -102,20 +128,42 @@ def receive(sm, services):
 
 def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, model_yaw_rate=0.001, user_cruise=USER_SPEED,
                   brake=False, buttons=(), cc_enabled=True, acc_enabled=True, cc_override=False, cc_cancel=False, cc_resume=False,
-                  north_m=-100, gps_time_s=None, cruise_helper=None, previous_plan=None):
+                  north_m=-100, gps_time_s=None, raw_gps_ok=None, cruise_helper=None, previous_plan=None):
   _, publisher, receiver, map_data = pipeline
   ego_lat = LAT + math.degrees(north_m / 6_371_000.0)
-  location = messaging.new_message('liveLocationKalman', valid=True)
-  llk = location.liveLocationKalman
-  llk.status = 'valid'
-  llk.gpsOK = gps_ok
-  llk.positionGeodetic.valid = True
-  llk.positionGeodetic.value = [ego_lat, LON, 0.0]
-  llk.calibratedOrientationNED.valid = True
-  llk.calibratedOrientationNED.value = [0.0, 0.0, 0.0]
-  publisher.send('liveLocationKalman', location)
-  receive(map_data.sm, ['liveLocationKalman'])
-  map_data.tick()
+  fix_ms = int((time.time() if gps_time_s is None else gps_time_s) * 1000)  # noqa: TID251 - GPS Unix timestamp
+  samples = [(ego_lat, fix_ms)]
+  if gps_ok and not map_data.camera_selection.camera_id:
+    # Deliver both measured approach fixes through real msgq. The first fix is
+    # five metres behind; no source-valid flag or selection is substituted.
+    samples.insert(0, (ego_lat - math.degrees(5 / 6_371_000.0), fix_ms - 1000))
+  for sample_lat, sample_ms in samples:
+    # Each transmitted Cap'n Proto message owns a fresh builder. Reusing one
+    # across the two real input samples triggers pycapnp's repeated-write guard.
+    location = messaging.new_message('liveLocationKalman', valid=True)
+    # Match native MessageBuilder BOOTTIME, including suspend time on Linux.
+    clock = sys.modules[OsmMapData.__module__].time
+    llk_now = clock.clock_gettime(clock.CLOCK_BOOTTIME) if hasattr(clock, "CLOCK_BOOTTIME") else clock.monotonic()
+    location.logMonoTime = int(llk_now*1e9) + (sample_ms-fix_ms)*1_000_000
+    llk = location.liveLocationKalman
+    llk.status = 'valid'
+    llk.gpsOK = gps_ok
+    llk.positionGeodetic.valid = True
+    llk.positionGeodetic.value = [sample_lat, LON, 0.0]
+    llk.calibratedOrientationNED.valid = True
+    llk.calibratedOrientationNED.value = [0.0, 0.0, 0.0]
+    gps_msg = messaging.new_message('gpsLocation', valid=True)
+    gps = gps_msg.gpsLocation
+    gps.hasFix = gps_ok if raw_gps_ok is None else raw_gps_ok
+    gps.speed = USER_SPEED
+    gps.horizontalAccuracy = 3.0
+    gps.bearingAccuracyDeg = 2.0
+    gps.unixTimestampMillis = sample_ms
+    gps.latitude, gps.longitude, gps.bearingDeg = sample_lat, LON, 0.0
+    publisher.send('gpsLocation', gps_msg)
+    publisher.send('liveLocationKalman', location)
+    receive(map_data.sm, ['liveLocationKalman'])
+    map_data.tick()
 
   cs_msg = messaging.new_message('carState', valid=True)
   cs = cs_msg.carState
@@ -143,15 +191,7 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
   cc_msg.carControl.cruiseControl.cancel = cc_cancel
   cc_msg.carControl.cruiseControl.resume = cc_resume
   publisher.send('carControl', cc_msg)
-  gps_msg = messaging.new_message('gpsLocation', valid=True)
-  gps = gps_msg.gpsLocation
-  gps.hasFix = True
-  gps.horizontalAccuracy = 3.0
-  gps.bearingAccuracyDeg = 2.0
-  gps.unixTimestampMillis = int((time.time() if gps_time_s is None else gps_time_s) * 1000)  # noqa: TID251 - GPS Unix timestamp
-  gps.latitude, gps.longitude, gps.bearingDeg = ego_lat, LON, 0.0
-  publisher.send('gpsLocation', gps_msg)
-  for service in ('controlsState', 'carStateSP', 'radarState', 'selfdriveState'):
+  for service in ('controlsState', 'carStateSP', 'radarState', 'selfdriveState', 'selfdriveStateSP'):
     publisher.send(service, messaging.new_message(service, valid=True))
   model_msg = messaging.new_message('modelV2', valid=True)
   model_msg.modelV2.position.x = [float(i * 5) for i in range(33)]
@@ -163,81 +203,17 @@ def publish_frame(pipeline, *, gps_ok=True, gas=False, stock_speed=USER_SPEED, m
   return receiver
 
 
-def plan(planner, sm):
-  return planner.update(
-    sm['carState'], sm['carControl'], sm['gpsLocation'], sm['liveMapDataSP'],
-    enabled=True, gps_valid=sm.valid['gpsLocation'], gps_alive=sm.alive['gpsLocation'],
-    lmd_valid=sm.valid['liveMapDataSP'], lmd_alive=sm.alive['liveMapDataSP'],
-    lmd_age_s=time.monotonic() - sm.recv_time['liveMapDataSP'],
-    lmd_generation=sm.recv_time['liveMapDataSP'], now_s=time.time(),  # noqa: TID251 - compare Unix GPS fixes
-    user_cruise_mps=USER_SPEED, minimum_speed_mps=30 / 3.6, adapt_accel_mps2=-1.0)
+def plan(resolver, sm):
+  resolver.update(USER_SPEED, sm, camera_compatible=True)
+  return resolver.camera.output
 
 
-def write_camera(cache, kind, trusted):
+def write_camera(cache, kind, trusted, speed_kph=60):
   metadata = '|1705|180|1713|1' if trusted else ''
-  raw = f'2|Radars|65001\n{kind}|Synthetic runtime fixture|{LAT}|{LON}|1709|60{metadata}\n'
+  raw = f'2|Radars|65001\n{kind}|Synthetic runtime fixture|{LAT}|{LON}|1709|{speed_kph}{metadata}\n'
   cameras = tuple(parse_cityguide_snapshot(raw))
   assert len(cameras) == 1
   save_database(str(cache), CameraDatabase('runtime-fixture', time.time(), cameras))  # noqa: TID251 - persisted cache Unix time
-
-
-@pytest.mark.parametrize('kind,trusted,allowed', [
-  ('18059', True, True), ('18950', True, True), ('18958', True, True),
-  ('18059', False, False), ('99999', True, False),
-])
-def test_production_map_publish_and_decoded_planner(pipeline, kind, trusted, allowed):
-  write_camera(pipeline[0], kind, trusted)
-  sm = publish_frame(pipeline)
-  lmd = sm['liveMapDataSP']
-  assert sm.valid['liveMapDataSP'] and sm.alive['liveMapDataSP']
-  assert lmd.locationValid and lmd.speedCameraAheadValid
-  assert lmd.speedCameraLatitude == LAT and lmd.speedCameraLongitude == LON
-  assert lmd.speedCameraSpeedLimit == pytest.approx(LIMIT)
-  assert lmd.speedCameraType == f'speedcamonline-cg77:{kind}'
-  assert lmd.speedCameraAutoControlAllowed is allowed
-  output = plan(SpeedCameraPlanner(), sm)
-  if allowed:
-    assert output.state.value == 'approach'
-    assert output.speed_cap_mps == pytest.approx(math.sqrt(LIMIT ** 2 + 200), abs=1e-5)
-  else:
-    assert output.speed_cap_mps is None and output.reason == 'camera_missing'
-
-
-def test_production_invalid_map_holds_then_decoded_gas_takes_over(pipeline):
-  write_camera(pipeline[0], '18059', True)
-  planner = SpeedCameraPlanner()
-  initial = plan(planner, publish_frame(pipeline))
-  assert initial.speed_cap_mps is not None
-  sm = publish_frame(pipeline, gps_ok=False)
-  assert not sm.valid['liveMapDataSP'] and not sm['liveMapDataSP'].locationValid
-  held = plan(planner, sm)
-  assert held.speed_cap_mps == initial.speed_cap_mps
-  assert held.reason == 'lmd_unreliable' and not held.restore_allowed
-  manual = plan(planner, publish_frame(pipeline, gas=True))
-  assert manual.manual_takeover and manual.reason == 'gas'
-  assert manual.speed_cap_mps is None and not manual.restore_allowed
-  assert manual.state.value == 'manual' and planner.controller.episode_active
-
-
-@pytest.mark.parametrize('eligible', [False, True])
-def test_production_nearest_warning_does_not_mask_independent_control_candidate(pipeline, eligible):
-  next_lat = LAT + math.degrees(400 / 6_371_000)
-  raw = f'2|Radars|65001\n18952|warning 100m|{LAT}|{LON}|1709|60|\n'
-  if eligible:
-    raw += f'18059|control 500m|{next_lat}|{LON}|1709|60|1705|180|1713|1|\n'
-  cameras = tuple(parse_cityguide_snapshot(raw))
-  save_database(str(pipeline[0]), CameraDatabase('runtime-selection', time.time(), cameras))  # noqa: TID251 - persisted cache Unix time
-  sm = publish_frame(pipeline)
-  lmd = sm['liveMapDataSP']
-  assert lmd.speedCameraAheadValid and lmd.speedCameraType == 'speedcamonline-cg77:18952'
-  assert lmd.speedCameraAheadDistance == pytest.approx(100, abs=0.001)
-  assert lmd.speedCameraControlVersion == 1 and lmd.speedCameraControlValid is eligible
-  output = plan(SpeedCameraPlanner(), sm)
-  assert (output.speed_cap_mps is not None) is eligible
-  if eligible:
-    assert lmd.speedCameraControlDistance == pytest.approx(500, abs=0.001)
-    assert lmd.speedCameraControlSpeedLimit == pytest.approx(LIMIT)
-    assert output.camera_id == f'{next_lat:.7f},{LON:.7f}:speedcamonline-cg77:18059'
 
 
 @dataclass
@@ -279,7 +255,7 @@ def plan_bus():
 
 def run_longitudinal(planner, sm, plan_bus, *, user_cruise=USER_SPEED, now_s=None):
   planner.sla.update_car_state(sm['carState'])
-  planner.camera.observe_car_state(sm['carState'], time.time() if now_s is None else now_s)  # noqa: TID251 - latch shares Unix GPS clock
+  planner.camera.observe_car_state(sm['carState'])  # noqa: TID251 - latch shares Unix GPS clock
   planner.update(sm)
   assert planner.dec._mpc_fcw_crash_cnt == planner.dec._mpc.crash_cnt
   target = planner.update_targets(sm, USER_SPEED, 0.0, user_cruise)
@@ -294,98 +270,185 @@ def run_longitudinal(planner, sm, plan_bus, *, user_cruise=USER_SPEED, now_s=Non
   return target, result
 
 
-@pytest.mark.parametrize('vision_curve_speed', [None, 19.0, 29.0])
-def test_longitudinal_real_min_arbitration_and_publish(pipeline, longitudinal, plan_bus, vision_curve_speed):
-  write_camera(pipeline[0], '18059', True)
-  planner = longitudinal(vision=vision_curve_speed is not None)
-  # Synthetic model geometry goes through the real vision-controller state machine.
-  rate = 0.001 if vision_curve_speed is None else 2 * USER_SPEED / vision_curve_speed ** 2
-  run_longitudinal(planner, publish_frame(pipeline, model_yaw_rate=rate), plan_bus)
-  time.sleep(0.05)
-  sm = publish_frame(pipeline, model_yaw_rate=rate)
-  target, published = run_longitudinal(planner, sm, plan_bus)
-  cap = planner.camera.output.speed_cap_mps
-  assert cap == pytest.approx(math.sqrt(LIMIT ** 2 + 200), abs=1e-5)
-  candidates = [USER_SPEED, planner.scc.vision.output_v_target,
-                planner.scc.map.output_v_target, planner.sla.output_v_target]
-  assert target[0] == pytest.approx(min(*candidates, cap))
-  if vision_curve_speed == 19.0:
-    assert planner.scc.vision.is_active
-    assert planner.scc.vision.output_v_target < cap
-    assert published.longitudinalPlanSource == 'sccVision'
+
+@pytest.mark.parametrize('kind,trusted,allowed', [('18059',True,True),('18950',True,True),('18958',True,True),('18059',False,False),('99999',True,False)])
+def test_production_map_publish_and_decoded_resolver(pipeline, kind, trusted, allowed):
+  write_camera(pipeline[0],kind,trusted)
+  sm=publish_frame(pipeline)
+  lmd=sm['liveMapDataSP']
+  assert sm.valid['liveMapDataSP'] and lmd.locationValid and lmd.speedCameraAheadValid
+  assert lmd.speedCameraSpeedLimit == pytest.approx(LIMIT)
+  assert lmd.speedCameraControlValid is allowed
+  output=plan(SpeedLimitResolver(),sm)
+  assert output.automatic is allowed
+  if allowed: assert output.state=='ACTIVE' and output.raw_limit==pytest.approx(LIMIT)
+
+
+def test_production_invalid_map_holds_without_button_override(pipeline):
+  write_camera(pipeline[0],'18059',True)
+  resolver=SpeedLimitResolver()
+  initial=plan(resolver,publish_frame(pipeline))
+  held=plan(resolver,publish_frame(pipeline,gps_ok=False))
+  assert held.automatic and held.raw_limit==initial.raw_limit and not held.countdown_valid
+  manual=plan(resolver,publish_frame(pipeline,buttons=(('accelCruise',True),)))
+  assert not manual.manual and manual.automatic and manual.state=='ACTIVE'
+  assert manual.event_id == initial.event_id and manual.raw_limit == initial.raw_limit
+
+
+@pytest.mark.parametrize('eligible',[False,True])
+def test_production_nearest_warning_independent_control(pipeline,eligible):
+  next_lat=LAT+math.degrees(400/6371000)
+  raw=f'2|Radars|65001\n18952|warning|{LAT}|{LON}|1709|60|\n'
+  if eligible: raw+=f'18059|control|{next_lat}|{LON}|1709|60|1705|180|1713|1|\n'
+  cameras=tuple(parse_cityguide_snapshot(raw))
+  save_database(str(pipeline[0]),CameraDatabase('runtime-selection',time.time(),cameras))
+  sm=publish_frame(pipeline)
+  lmd=sm['liveMapDataSP']
+  assert lmd.speedCameraAheadValid and lmd.speedCameraType=='speedcamonline-cg77:18952'
+  assert lmd.speedCameraControlValid is eligible
+  output=plan(SpeedLimitResolver(),sm)
+  # 500m is deliberately outside the300m reaction zone.
+  assert not output.automatic
+  if eligible:
+    assert output.state=='APPROACHING' and output.distance==pytest.approx(500,abs=.01)
+    assert lmd.speedCameraEventId != lmd.speedCameraControlEventId
+
+
+@pytest.mark.parametrize('vision_curve_speed',[None,12.,29.])
+def test_longitudinal_real_min_arbitration_and_publish(pipeline,longitudinal,plan_bus,vision_curve_speed):
+  write_camera(pipeline[0],'18059',True)
+  planner=longitudinal(vision=vision_curve_speed is not None)
+  rate=.001 if vision_curve_speed is None else 2*USER_SPEED/vision_curve_speed**2
+  run_longitudinal(planner,publish_frame(pipeline,model_yaw_rate=rate),plan_bus)
+  target,published=run_longitudinal(planner,publish_frame(pipeline,model_yaw_rate=rate),plan_bus)
+  candidates=[USER_SPEED,planner.scc.vision.output_v_target,planner.scc.map.output_v_target,planner.sla.output_v_target]
+  assert target[0]==pytest.approx(min(candidates))
+  assert planner.sla.output_v_target==pytest.approx(LIMIT)
+  if vision_curve_speed==12.: assert published.longitudinalPlanSource=='sccVision'
+  else: assert published.longitudinalPlanSource=='speedLimitAssist'
+  camera=published.speedCameraControl
+  assert camera.enabled and camera.active and camera.state=='active'
+  assert camera.speedCap==pytest.approx(LIMIT) and camera.rawLimit==pytest.approx(LIMIT)
+
+
+def test_longitudinal_hold_keeps_camera_authority_across_buttons_and_disabled(pipeline,longitudinal,plan_bus,native_params):
+  write_camera(pipeline[0],'18950',True)
+  planner=longitudinal()
+  target,_=run_longitudinal(planner,publish_frame(pipeline),plan_bus)
+  _,held=run_longitudinal(planner,publish_frame(pipeline,gps_ok=False),plan_bus)
+  assert held.speedCameraControl.active and held.speedCameraControl.speedCap==pytest.approx(target[0])
+  assert not held.speedCameraControl.countdownValid
+  _,manual=run_longitudinal(planner,publish_frame(pipeline,buttons=(('accelCruise',True),)),plan_bus)
+  assert not manual.speedCameraControl.manualTakeover and manual.speedCameraControl.active
+  assert manual.speedCameraControl.state == "active"
+  assert manual.speedCameraControl.speedCap == held.speedCameraControl.speedCap
+  native_params.put_bool('SpeedCameraControlEnabled',False)
+  planner.resolver.frame=0
+  _,disabled=run_longitudinal(planner,publish_frame(pipeline),plan_bus)
+  assert not disabled.speedCameraControl.enabled and disabled.speedCameraControl.state=='inactive'
+
+
+@pytest.mark.parametrize('cruise_kph',[108.,70.])
+@pytest.mark.parametrize('raw_kph',[20.,60.])
+def test_longitudinal_native_offset_preserves_raw_and_driver(pipeline,longitudinal,plan_bus,native_params,cruise_kph,raw_kph):
+  native_params.put('SpeedLimitOffsetType',1)
+  native_params.put('SpeedLimitValueOffset',15)
+  write_camera(pipeline[0],'18059',True,speed_kph=raw_kph)
+  planner=longitudinal()
+  cruise=cruise_kph/3.6
+  target,published=run_longitudinal(planner,publish_frame(pipeline,user_cruise=cruise,stock_speed=cruise),plan_bus,user_cruise=cruise)
+  assert target[0]==pytest.approx(min(cruise,(raw_kph+15)/3.6))
+  assert published.speedCameraControl.rawLimit==pytest.approx(raw_kph/3.6)
+  assert published.speedCameraControl.appliedOffset==pytest.approx(15/3.6)
+  assert published.speedCameraControl.driverSetSpeed==pytest.approx(cruise)
+
+
+@pytest.mark.parametrize('coordinates,valid', [
+  ([], False), ([55.], False), ([float('nan'), 37., 0.], False),
+  ([55., float('inf'), 0.], False), ([90.01, 37., 0.], False),
+  ([55., -180.01, 0.], False), ([55., 37., 0.], True),
+])
+def test_llk_coordinate_validation_with_native_capnp_lists(coordinates, valid):
+  from types import SimpleNamespace as NS
+  location = log.LiveLocationKalman.new_message()
+  location.status = 'valid'
+  location.positionGeodetic.valid = True
+  location.positionGeodetic.value = coordinates
+  location.calibratedOrientationNED.valid = True
+  location.calibratedOrientationNED.value = [0., 0., 0.]
+  class Inputs(dict):
+    valid = {'liveLocationKalman': True}
+    alive = {'liveLocationKalman': True}
+    logMonoTime = {'liveLocationKalman':time.clock_gettime_ns(time.CLOCK_BOOTTIME)}
+  map_data = OsmMapData.__new__(OsmMapData)
+  map_data.sm = Inputs(liveLocationKalman=location.as_reader())
+  map_data.last_position = None
+  map_data.last_bearing = None
+  map_data.mem_params = NS(put=lambda *_: None)
+  map_data.update_location()
+  assert bool(map_data.localizer_valid) is valid
+  if valid:
+    assert map_data.last_position.latitude == 55.
+    assert map_data.last_position.longitude == 37.
   else:
-    assert min(candidates) > cap
-    assert published.longitudinalPlanSource == 'speedLimitAssist'
-  camera = published.speedCameraControl
-  assert camera.enabled and camera.active and not camera.manualTakeover
-  assert camera.speedCap == pytest.approx(cap)
-  assert camera.state == 'approach' and camera.reason == 'kinematic_ceiling'
-  assert sm['carState'].vCruiseCluster == pytest.approx(USER_SPEED * 3.6)
+    assert map_data.last_position is None
 
 
-def test_longitudinal_published_hold_and_manual_takeover(pipeline, longitudinal, plan_bus):
-  write_camera(pipeline[0], '18950', True)
-  planner = longitudinal()
-  initial_target, _ = run_longitudinal(planner, publish_frame(pipeline), plan_bus)
-  _, held = run_longitudinal(planner, publish_frame(pipeline, gps_ok=False), plan_bus)
-  assert held.speedCameraControl.active and held.speedCameraControl.state == 'hold'
-  assert held.speedCameraControl.reason == 'lmd_unreliable'
-  assert held.speedCameraControl.speedCap == pytest.approx(initial_target[0])
-  target, manual = run_longitudinal(planner, publish_frame(pipeline, gas=True, stock_speed=18.0), plan_bus)
-  assert target[0] == 18.0
-  assert manual.speedCameraControl.manualTakeover and not manual.speedCameraControl.active
-  assert manual.speedCameraControl.state == 'manual' and manual.speedCameraControl.reason == 'gas'
-  assert manual.speedCameraControl.speedCap == 0.0
-  assert planner.camera.controller.episode_active
+@pytest.mark.parametrize('age,valid', [(0., True), (2.9, True), (3.1, False), (-1., False)])
+def test_native_llk_transport_age_controls_location_validity(age, valid, monkeypatch):
+  from types import SimpleNamespace as NS
+  import openpilot.sunnypilot.mapd.live_map_data.osm_map_data as module
+  location = log.LiveLocationKalman.new_message()
+  location.status = 'valid'
+  location.gpsOK = True
+  location.positionGeodetic.valid = True
+  location.positionGeodetic.value = [55., 37., 0.]
+  location.calibratedOrientationNED.valid = True
+  location.calibratedOrientationNED.value = [0., 0., 0.]
+  class Inputs(dict):
+    valid = {'liveLocationKalman': True}
+    alive = {'liveLocationKalman': True}
+    logMonoTime = {'liveLocationKalman':130_000_000_000}
+  monkeypatch.setattr(module, 'time', NS(CLOCK_BOOTTIME=7,
+    clock_gettime=lambda clock_id: 130.+age, monotonic=lambda: 10.+age))
+  map_data = OsmMapData.__new__(OsmMapData)
+  map_data.sm = Inputs(liveLocationKalman=location.as_reader())
+  map_data.last_position = map_data.last_bearing = None
+  map_data.mem_params = NS(put=lambda *_: None)
+  map_data.update_location()
+  assert map_data.localizer_valid is valid
 
 
-def test_longitudinal_disabled_camera_publishes_inactive(pipeline, longitudinal, plan_bus, native_params):
-  write_camera(pipeline[0], '18958', True)
-  native_params.put_bool('SpeedCameraControlEnabled', False)
-  planner = longitudinal()
-  target, published = run_longitudinal(planner, publish_frame(pipeline), plan_bus)
-  assert target[0] == USER_SPEED and published.longitudinalPlanSource == 'cruise'
-  camera = published.speedCameraControl
-  assert not camera.enabled and not camera.active and not camera.manualTakeover
-  assert camera.speedCap == 0.0 and camera.state == 'inactive' and camera.reason == 'disabled'
+def test_native_llk_camera_and_resolver_ignore_failed_raw_gps(pipeline):
+  write_camera(pipeline[0], '18059', True)
+  sm = publish_frame(pipeline, raw_gps_ok=False)
+  assert not sm['gpsLocation'].hasFix
+  assert sm['liveMapDataSP'].locationValid and sm['liveMapDataSP'].speedCameraControlValid
+  output = plan(SpeedLimitResolver(), sm)
+  assert output.automatic and output.countdown_valid
+  assert output.raw_limit == pytest.approx(LIMIT)
 
 
-@pytest.mark.parametrize('cruise_kph', [108.0, 70.0])
-def test_longitudinal_native_offset_preserves_raw_limit_and_user_cruise(pipeline, longitudinal, plan_bus, native_params, cruise_kph):
-  key = 'SpeedCameraSpeedOffsetKph'
-  previous_offset = native_params.get(key)
-  native_params.put(key, '19')
-  try:
-    assert Params().get(key) == '19'
-    write_camera(pipeline[0], '18059', True)
-    planner = longitudinal()
-    cruise = cruise_kph / 3.6
-    sm = publish_frame(pipeline, stock_speed=cruise, user_cruise=cruise)
-    target, published = run_longitudinal(planner, sm, plan_bus, user_cruise=cruise)
-    assert planner.camera_speed_offset_kph == 19.0
-    lmd = sm['liveMapDataSP']
-    assert lmd.speedCameraControlVersion == 1 and lmd.speedCameraControlValid
-    assert lmd.speedCameraSpeedLimit == pytest.approx(60 / 3.6)
-    assert lmd.speedCameraControlSpeedLimit == pytest.approx(60 / 3.6)
-    assert lmd.speedCameraControlDistance == pytest.approx(100, abs=0.001)
-    assert sm['carState'].vCruiseCluster == pytest.approx(cruise_kph)
-    camera = published.speedCameraControl
-    assert camera.enabled and not camera.manualTakeover
-    if cruise_kph == 108.0:
-      # At 100 m and the existing -1 m/s^2, 60 + 19 km/h sets this ceiling.
-      expected = math.sqrt((79 / 3.6) ** 2 + 200)
-      assert target[0] == pytest.approx(expected, abs=1e-5)
-      assert published.vTarget == pytest.approx(expected, abs=1e-5)
-      assert camera.active and camera.speedCap == pytest.approx(expected, abs=1e-5)
-      assert camera.state == 'approach' and camera.reason == 'kinematic_ceiling'
-      assert published.longitudinalPlanSource == 'speedLimitAssist'
-    else:
-      assert target[0] == pytest.approx(cruise) and published.vTarget == pytest.approx(cruise)
-      assert published.longitudinalPlanSource == 'cruise'
-      assert not camera.active and camera.speedCap == 0.0
-      assert camera.state == 'inactive' and camera.reason == 'below_camera_limit'
-  finally:
-    if previous_offset is None:
-      native_params.remove(key)
-    else:
-      native_params.put(key, previous_offset)
+@pytest.mark.parametrize('orientation,valid,bearing', [
+  ([0., 0., -math.pi/2], True, 270.), ([0., 0., math.pi/2], True, 90.),
+  ([], False, None), ([0., 0.], False, None), ([0., 0., float('nan')], False, None),
+])
+def test_native_llk_heading_validation_and_degree_normalization(orientation, valid, bearing):
+  from types import SimpleNamespace as NS
+  location = log.LiveLocationKalman.new_message()
+  location.status = 'valid'
+  location.positionGeodetic.valid = location.calibratedOrientationNED.valid = True
+  location.positionGeodetic.value = [55., 37., 0.]
+  location.calibratedOrientationNED.value = orientation
+  class Inputs(dict):
+    valid = {'liveLocationKalman': True}
+    alive = {'liveLocationKalman': True}
+    logMonoTime = {'liveLocationKalman':time.clock_gettime_ns(time.CLOCK_BOOTTIME)}
+  map_data = OsmMapData.__new__(OsmMapData)
+  map_data.sm = Inputs(liveLocationKalman=location.as_reader())
+  map_data.last_position = map_data.last_bearing = None
+  map_data.mem_params = NS(put=lambda *_: None)
+  map_data.update_location()
+  assert map_data.localizer_valid is valid
+  if valid:
+    assert map_data.last_bearing == pytest.approx(bearing)

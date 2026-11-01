@@ -9,17 +9,29 @@ import math
 import os
 import platform
 import time
+from dataclasses import replace
 
 from cereal import log
-from openpilot.common.constants import CV
 from openpilot.common.params import Params
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import load_database
+from openpilot.sunnypilot.mapd.camera_osm_bridge import OfflineOsmBridge
+from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, MAX_POSITION_AGE_S, camera_identity
+from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry, car_speed_sample
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
-from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera, find_nearest_control_camera
+from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera
 from openpilot.sunnypilot.navd.helpers import Coordinate
-from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.helpers import get_minimum_set_speed
+
+
+def _llk_now_s():
+  # Native MessageBuilder timestamps use nanos_since_boot(): CLOCK_BOOTTIME
+  # on Linux, CLOCK_MONOTONIC on Apple (common/timing.h). Unlike BOOTTIME,
+  # Python monotonic excludes Linux suspend time. Keep CAN's Python-produced
+  # timestamps and SubMaster receipt clocks in their own monotonic domain.
+  if hasattr(time, 'CLOCK_BOOTTIME'):
+    return time.clock_gettime(time.CLOCK_BOOTTIME)
+  return time.monotonic()
 
 
 class OsmMapData(BaseMapData):
@@ -34,8 +46,13 @@ class OsmMapData(BaseMapData):
     self.camera_index = None
     self.camera_match = None
     self.camera_control_match = None
+    self.camera_speed_source = CameraSpeedSource()
+    self.camera_selection = self.camera_speed_source.selection
+    self.camera_graph_status = None
+    self.camera_osm_bridge = OfflineOsmBridge(Paths.mapd_root())
     self.camera_enabled = True
-    self.camera_alert_distance_m = 1_000.0
+    self.camera_warning_enabled = True
+    self.camera_alert_distance_m = 300
 
   def _refresh_camera_config(self) -> None:
     configured_path = self.camera_params.get("SpeedCameraDatabasePath")
@@ -46,12 +63,13 @@ class OsmMapData(BaseMapData):
       self.camera_database_mtime = None
       self.camera_index = None
     enabled = str(self.camera_params.get("SpeedCameraEnabled") or "1").strip().lower()
-    self.camera_enabled = enabled not in ("0", "false", "no", "off")
+    self.camera_warning_enabled = enabled not in ("0", "false", "no", "off")
+    self.camera_enabled = self.camera_warning_enabled or self.camera_params.get("SpeedCameraControlEnabled") == "1"
     try:
-      distance = float(self.camera_params.get("SpeedCameraAlertDistanceMeters") or 1_000)
-      self.camera_alert_distance_m = min(max(distance, 100.0), 5_000.0) if math.isfinite(distance) else 1_000.0
+      distance = int(self.camera_params.get("SpeedCameraReactionDistance") or 300)
     except (TypeError, ValueError):
-      self.camera_alert_distance_m = 1_000.0
+      distance = 300
+    self.camera_alert_distance_m = distance if distance in range(50,1001,50) else 300
 
   def _load_camera_database(self) -> None:
     self._refresh_camera_config()
@@ -73,7 +91,8 @@ class OsmMapData(BaseMapData):
   def get_speed_camera(self):
     self._load_camera_database()
     self.camera_control_match = None
-    if self.camera_database is not None and time.time() - self.camera_database.fetched_at > 7 * 24 * 3600:  # noqa: TID251 - persisted Unix time
+    expired = self.camera_database is not None and time.time() - self.camera_database.fetched_at > 7 * 24 * 3600
+    if expired:
       self.camera_database = None
       self.camera_index = None
     if not self.localizer_valid or not self.camera_enabled or self.camera_database is None or self.last_position is None:
@@ -84,19 +103,124 @@ class OsmMapData(BaseMapData):
         self.last_position.latitude,
         self.last_position.longitude,
         heading_deg=self.last_bearing,
-        # Warning distance is a display preference, not the control lookahead.
-        # A short warning preference must not postpone the ICBM speed target.
-        max_distance_m=max(self.camera_alert_distance_m,
-                           5_000.0 if self.camera_params.get("SpeedCameraControlEnabled") == "1" else 0.0),
-      )
-      if self.camera_params.get("SpeedCameraControlEnabled") == "1":
-        is_metric = self.params.get_bool("IsMetric")
-        minimum_speed_kph = get_minimum_set_speed(is_metric) * (1.0 if is_metric else CV.MPH_TO_MS / CV.KPH_TO_MS)
-        self.camera_control_match = find_nearest_control_camera(
-          self.camera_index, self.last_position.latitude, self.last_position.longitude,
-          heading_deg=self.last_bearing, minimum_speed_kph=minimum_speed_kph,
-        )
+        # Warning visibility shares the configured reaction zone; the separate
+        # control source retains its independent5km lookahead.
+        max_distance_m=self.camera_alert_distance_m,
+      ) if self.camera_warning_enabled else None
+    if self.camera_params.get("SpeedCameraControlEnabled") == "1":
+      # Selection consumes the local database and localized trajectory.
+      self._update_camera_source(database_reason='camera_database_stale' if expired else 'camera_database_missing')
+    else:
+      self.camera_speed_source = CameraSpeedSource()
+      self.camera_selection = self.camera_speed_source.selection
+      self._set_camera_graph_status('disabled')
+    self._update_warning_odometry()
     return self.camera_match
+
+  def _update_warning_odometry(self):
+    self.camera_warning_tracking = False
+    self.camera_warning_passed = False
+    if not hasattr(self,'camera_warning_odometry'):
+      self.camera_warning_odometry = CameraOdometry()
+      self.camera_warning_retained = None
+      self.camera_warning_completed = []
+      self.camera_warning_fix_time = None
+      self.camera_warning_position = None
+    if not self.camera_warning_enabled:
+      self.camera_warning_retained = None
+      self.camera_warning_odometry = CameraOdometry()
+      self.camera_warning_fix_time = None
+      self.camera_warning_position = None
+      return
+    now = time.monotonic()
+    position_time = self.sm.logMonoTime['liveLocationKalman'] / 1_000_000_000
+    trusted = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK)
+    sample = car_speed_sample(self.sm,now)
+    position = (self.last_position.latitude, self.last_position.longitude) if self.last_position is not None else None
+    same_camera = self.camera_match is None or (
+      self.camera_warning_retained is not None and
+      camera_identity(self.camera_match.camera) == camera_identity(self.camera_warning_retained.camera))
+    same_fix = trusted and same_camera and self.camera_warning_fix_time is not None and (
+      self.camera_warning_fix_time == position_time or self.camera_warning_position == position)
+    if self.camera_match is not None and camera_identity(self.camera_match.camera) in self.camera_warning_completed:
+      self.camera_match = None
+    if trusted and not same_fix and self.camera_match is not None:
+      identity = camera_identity(self.camera_match.camera)
+      self.camera_warning_retained = self.camera_match
+      self.camera_warning_odometry.anchor(identity,self.camera_match.distance_m,sample)
+      self.camera_warning_fix_time = position_time
+      self.camera_warning_position = position
+    elif not trusted or same_fix:
+      retained = self.camera_warning_retained
+      # A still-qualified duplicate sample may retain its existing warning while
+      # CAN is absent; it must never reset the distance integration anchor.
+      if not trusted:
+        self.camera_match = None
+      if retained is not None:
+        identity = camera_identity(retained.camera)
+        remaining = self.camera_warning_odometry.advance(identity,sample)
+        if remaining is not None:
+          if remaining <= 0:
+            self.camera_warning_completed = (self.camera_warning_completed+[identity])[-128:]
+            self.camera_warning_retained = None
+            self.camera_match = None
+            self.camera_warning_passed = True
+          else:
+            self.camera_match = replace(retained,distance_m=remaining)
+            self.camera_warning_tracking = True
+    selection = self.camera_selection
+    if selection.pass_proven and self.camera_match is not None and camera_identity(self.camera_match.camera) == selection.camera_id:
+      self.camera_warning_completed = (self.camera_warning_completed+[selection.camera_id])[-128:]
+      self.camera_match = None
+      self.camera_warning_retained = None
+
+  def _set_camera_graph_status(self, status):
+    # Params.put is an atomic file replacement; do not fsync unchanged status
+    # every mapd tick, including while an offline worker is backing off.
+    if status != getattr(self, 'camera_graph_status', None):
+      self.camera_params.put('SpeedCameraRoadGraphStatus', status)
+      self.camera_graph_status = status
+
+  def _update_camera_source(self, database_reason='camera_database_missing'):
+    reaction = self.camera_alert_distance_m
+    now = _llk_now_s()
+    # This clock identifies LLK state samples; it does not establish a new
+    # satellite fix. Native localizer validity owns localization health.
+    position_time = self.sm.logMonoTime['liveLocationKalman'] / 1_000_000_000
+    position = self.last_position
+    latitude = position.latitude if position is not None else math.nan
+    longitude = position.longitude if position is not None else math.nan
+    position_valid = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK)
+    if getattr(self, 'camera_osm_bridge', None) is None:
+      self.camera_osm_bridge = OfflineOsmBridge(Paths.mapd_root())
+    if position_valid:
+      self.camera_osm_bridge.tick(latitude, longitude)
+    roads = self.camera_osm_bridge.snapshot
+    self.camera_selection = self.camera_speed_source.update(
+      self.camera_index or (), latitude, longitude, self.last_bearing,
+      gps_valid=position_valid and self.camera_database is not None and roads is not None,
+      fix_time_s=position_time, now_s=now,
+      reaction_distance_m=reaction, road_graph=roads)
+    self.camera_selection = self.camera_speed_source.update_odometry(
+      car_speed_sample(self.sm,time.monotonic()),trusted_position=position_valid,reaction_distance_m=reaction)
+    if not self.camera_selection.valid and not self.camera_selection.pass_proven:
+      if not position_valid:
+        reason = 'localizer_unreliable'
+      elif self.camera_database is None:
+        reason = database_reason
+      elif roads is None:
+        reason = self.camera_osm_bridge.status
+        if reason == 'ready':
+          reason = 'offline_maps_loading'  # Worker completed after this tick captured snapshot=None.
+      else:
+        reason = self.camera_selection.reason
+      self.camera_selection = replace(self.camera_selection, reason=reason)
+    # Read existing downloaded mapd tiles only. The bridge does not download
+    # data or use posted road limits; the camera database supplies the limit.
+    self._set_camera_graph_status('offline_osm:' + self.camera_osm_bridge.status + ':' + self.camera_selection.reason)
+    if self.camera_selection.valid:
+      from openpilot.sunnypilot.mapd.speed_cameras import CameraMatch
+      self.camera_control_match = CameraMatch(self.camera_selection.camera, self.camera_selection.distance_m, 0.)
 
   def get_speed_camera_control(self):
     # BaseMapData.publish refreshes both selections once through get_speed_camera.
@@ -105,11 +229,19 @@ class OsmMapData(BaseMapData):
   def update_location(self) -> None:
     location = self.sm['liveLocationKalman']
     self.localizer_valid = ((location.status == log.LiveLocationKalman.Status.valid) and location.positionGeodetic.valid
-                            and location.calibratedOrientationNED.valid)
+                            and location.calibratedOrientationNED.valid and len(location.calibratedOrientationNED.value) >= 3
+                            and math.isfinite(location.calibratedOrientationNED.value[2])
+                            and len(location.positionGeodetic.value) >= 2
+                            and all(math.isfinite(location.positionGeodetic.value[i]) for i in (0, 1))
+                            and -90 <= location.positionGeodetic.value[0] <= 90
+                            and -180 <= location.positionGeodetic.value[1] <= 180)
     self.localizer_valid = self.localizer_valid and self.sm.valid['liveLocationKalman'] and self.sm.alive['liveLocationKalman']
+    position_time = self.sm.logMonoTime['liveLocationKalman'] / 1_000_000_000
+    self.localizer_valid = bool(self.localizer_valid and position_time > 0 and
+                                0 <= _llk_now_s() - position_time <= MAX_POSITION_AGE_S)
 
     if self.localizer_valid:
-      self.last_bearing = math.degrees(location.calibratedOrientationNED.value[2])
+      self.last_bearing = math.degrees(location.calibratedOrientationNED.value[2]) % 360
       self.last_position = Coordinate(location.positionGeodetic.value[0], location.positionGeodetic.value[1])
 
     if self.last_position is None:

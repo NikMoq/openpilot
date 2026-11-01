@@ -4,6 +4,8 @@ Copyright (c) 2021-, Haibin Wen, sunnypilot, and a number of other contributors.
 This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
+import math
+
 from cereal import car, custom
 from opendbc.car import structs, apply_hysteresis
 from openpilot.common.constants import CV
@@ -42,6 +44,7 @@ class IntelligentCruiseButtonManagement:
     self.is_ready_prev = False
     self.v_target_ms_last = 0.0
     self.is_metric = False
+    self.native_feedback_valid = False
 
     self.cruise_button_timers = CRUISE_BUTTON_TIMER.copy()
 
@@ -66,7 +69,11 @@ class IntelligentCruiseButtonManagement:
 
     self.v_target = round(self.v_target_ms_last * speed_conv)
     self.v_cruise_min = get_minimum_set_speed(self.is_metric)
-    self.v_cruise_cluster = round(CS.cruiseState.speedCluster * speed_conv)
+    stock_speed = CS.cruiseState.speedCluster
+    self.native_feedback_valid = math.isfinite(stock_speed) and stock_speed > 0
+    # Missing/invalid stock feedback is not an ACC setpoint of zero. Avoid
+    # round(NaN/Inf), then inhibit transmission until valid feedback returns.
+    self.v_cruise_cluster = round(stock_speed * speed_conv) if self.native_feedback_valid else 0
 
   def update_state_machine(self) -> custom.IntelligentCruiseButtonManagement.SendButtonState:
     self.pre_active_timer = max(0, self.pre_active_timer - 1)
@@ -129,7 +136,8 @@ class IntelligentCruiseButtonManagement:
     # the driver's correction, including one above the remembered base speed.
     camera_manual = camera.state == "manual" and camera.manualTakeover
 
-    self.is_ready = ready and not button_pressed and not camera_manual and self.target_is_valid(CS, LP_SP)
+    self.is_ready = (ready and self.native_feedback_valid and not button_pressed and not camera_manual and
+                     self.target_is_valid(CS, LP_SP))
 
   def run(self, CS: car.CarState, CC: car.CarControl, LP_SP: custom.LongitudinalPlanSP, is_metric: bool) -> None:
     if self.CP_SP.pcmCruiseSpeed:

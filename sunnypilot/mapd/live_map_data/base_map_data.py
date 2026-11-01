@@ -19,7 +19,7 @@ class BaseMapData(ABC):
   def __init__(self):
     self.params = Params()
 
-    self.sm = messaging.SubMaster(['liveLocationKalman'])
+    self.sm = messaging.SubMaster(['liveLocationKalman', 'carState'])
     self.pm = messaging.PubMaster(['liveMapDataSP'])
 
     self.localizer_valid = False
@@ -58,6 +58,13 @@ class BaseMapData(ABC):
     mapd_sp_send.valid = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK)
     live_map_data = mapd_sp_send.liveMapDataSP
     live_map_data.locationValid = mapd_sp_send.valid
+    # Transport remains usable for a retained CAN-distance event; map/GPS
+    # validity above remains truthful and cannot authorize a new road target.
+    camera_selection = getattr(self, 'camera_selection', None)
+    if camera_selection is not None and camera_selection.reason in ('odometry_tracking','odometry_passed'):
+      mapd_sp_send.valid = True
+    if getattr(self,'camera_warning_tracking',False) or getattr(self,'camera_warning_passed',False):
+      mapd_sp_send.valid = True
 
     live_map_data.speedLimitValid = bool(MAX_SPEED_LIMIT > speed_limit > 0)
     live_map_data.speedLimit = speed_limit
@@ -67,8 +74,30 @@ class BaseMapData(ABC):
     live_map_data.roadName = self.get_current_road_name()
     # Always mark the new contract, including an explicitly empty selection.
     live_map_data.speedCameraControlVersion = 1
+    selection = getattr(self, 'camera_selection', None)
+    if selection is not None:
+      live_map_data.speedCameraControlEventId = selection.camera_id
+      live_map_data.speedCameraControlState = selection.state
+      live_map_data.speedCameraControlReason = selection.reason
+      live_map_data.speedCameraControlPassProven = selection.pass_proven
+      # Preserve the selected identity and position on invalid/pass messages.
+      if selection.camera is not None:
+        live_map_data.speedCameraControlLatitude = selection.camera.latitude
+        live_map_data.speedCameraControlLongitude = selection.camera.longitude
+        live_map_data.speedCameraControlType = selection.camera.camera_type
+        live_map_data.speedCameraControlAutoControlAllowed = selection.camera.allowed_auto_control
+        live_map_data.speedCameraControlSpeedLimit = (selection.camera.speed_limit_kph or 0.) / 3.6
+        live_map_data.speedCameraControlDistance = selection.distance_m
+    if getattr(self,'camera_warning_tracking',False) and not live_map_data.speedCameraControlValid:
+      # Warning-only odometry carries no control ID, authority or pass proof.
+      if selection is None or not selection.camera_id:
+        live_map_data.speedCameraControlReason = 'odometry_tracking'
+    if getattr(self,'camera_warning_passed',False) and (selection is None or not selection.camera_id):
+      live_map_data.speedCameraControlReason = 'odometry_passed'
 
     if camera is not None:
+      from openpilot.sunnypilot.mapd.camera_speed_source import camera_identity
+      live_map_data.speedCameraEventId = camera_identity(camera.camera)
       live_map_data.speedCameraAheadValid = True
       live_map_data.speedCameraAheadDistance = camera.distance_m
       live_map_data.speedCameraSpeedLimit = (camera.camera.speed_limit_kph or 0.) / 3.6

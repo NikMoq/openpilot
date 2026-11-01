@@ -1,14 +1,12 @@
 """Opt-in Linux: real cruise helper -> native messages -> planner -> ICBM.
 
-Only the planner's wall-clock input is controlled. Native Params/msgq, Capnp,
+The synthetic LLK trajectory uses controlled monotonic time; IPC receipt uses real time. Native Params/msgq, Capnp,
 cruise helper, controller, planner and sender execute their actual implementations.
 As in the shared fixtures, DEC receives a supplied MPC crash counter, not a solver.
 """
 from contextlib import ExitStack
-import json
 import math
 import os
-from pathlib import Path
 import sys
 import time
 
@@ -20,7 +18,6 @@ if sys.platform != 'linux' or os.getenv('PQ35_RUNTIME_SMOKE') != '1':
 from cereal import car, custom
 from openpilot.selfdrive.car.cruise import VCruiseHelper
 from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.controller import IntelligentCruiseButtonManagement
-from openpilot.sunnypilot.selfdrive.controls.lib import longitudinal_planner as planner_module
 from test_camera_runtime_integration import (
   longitudinal as longitudinal, native_params as native_params, pipeline as pipeline, plan_bus as plan_bus,
   publish_frame, run_longitudinal, write_camera,
@@ -31,17 +28,26 @@ SenderState = custom.IntelligentCruiseButtonManagement.IntelligentCruiseButtonMa
 
 
 class PlanningClock:
-  """Explicit caller-time boundary; message receipt still uses real monotonic time."""
-  monotonic = staticmethod(time.monotonic)
+  """Explicit trajectory-time boundary; message receipt uses a separate real clock."""
 
   def __init__(self):
+    self.mono_now = time.monotonic()
     self.now = time.time()  # noqa: TID251 - seed the controlled Unix GPS clock
 
   def time(self):
     return self.now
 
+  def monotonic(self):
+    return self.mono_now
+
+  CLOCK_BOOTTIME = 7
+
+  def clock_gettime(self, clock_id):
+    return self.mono_now+120.
+
   def advance(self, seconds):
     self.now += seconds
+    self.mono_now += seconds
 
 
 @pytest.fixture
@@ -117,297 +123,295 @@ def test_native_icbm_brake_release_never_reengages_acc(native_cruise_pair, decod
 
 
 class OverrideCycle:
-  def __init__(self, pipeline, planner, plan_bus, helper, sender, clock):
-    self.pipeline, self.planner, self.plan_bus = pipeline, planner, plan_bus
-    self.helper, self.sender, self.clock = helper, sender, clock
-    self.previous_plan = plan_bus[1]['longitudinalPlanSP']
-    self.trace = []
-    self.last_fix_ms = None
-    self.model_yaw_rate = 0.001
+  def __init__(self,pipeline,planner,plan_bus,helper,sender,clock):
+    self.pipeline,self.planner,self.plan_bus=pipeline,planner,plan_bus
+    self.helper,self.sender,self.clock=helper,sender,clock
+    self.last=None
+    helper.v_cruise_kph=helper.v_cruise_cluster_kph=130.
+    helper._stock_virtual_cruise_initialized=helper.enabled_prev=True
 
-  def step(self, label, *, stock_kph=80, dt=0.05, **physical):
+  def frame(self,*,dt=1.,north_m=-100,stock_kph=75.,**options):
     self.clock.advance(dt)
-    sm = publish_frame(self.pipeline, stock_speed=stock_kph / 3.6, gps_time_s=self.clock.time(),
-                       cruise_helper=self.helper, previous_plan=self.previous_plan,
-                       model_yaw_rate=self.model_yaw_rate, **physical)
-    fix_ms = sm['gpsLocation'].unixTimestampMillis
-    assert self.last_fix_ms is None or fix_ms > self.last_fix_ms
-    self.last_fix_ms = fix_ms
-    _, result = run_longitudinal(self.planner, sm, self.plan_bus,
-                                 user_cruise=self.helper.v_cruise_kph / 3.6, now_s=self.clock.time())
-    self.sender.run(sm['carState'], sm['carControl'], result, True)
-    self.previous_plan = result
-    self.sm = sm
-    camera = result.speedCameraControl
-    self.trace.append({'label': label, 'gps_fix_ms': fix_ms, 'base_kph': self.helper.v_cruise_kph,
-                       'wire_base_kph': sm['carState'].vCruise, 'stock_kph': sm['carState'].cruiseState.speedCluster * 3.6,
-                       'target_kph': result.vTarget * 3.6, 'camera_state': camera.state, 'reason': camera.reason,
-                       'manual_takeover': camera.manualTakeover, 'camera_active': camera.active,
-                       'sender': str(self.sender.cruise_button)})
-    return result
+    sm=publish_frame(self.pipeline,stock_speed=stock_kph/3.6,gps_time_s=self.clock.time(),
+      user_cruise=130/3.6,north_m=north_m,cruise_helper=self.helper if self.last is not None else None,
+      previous_plan=self.last,**options)
+    _,self.last=run_longitudinal(self.planner,sm,self.plan_bus,user_cruise=sm['carState'].vCruise/3.6)
+    self.sender.run(sm['carState'],sm['carControl'],self.last,True)
+    return sm,self.last
 
-  def assert_base(self, value=130):
-    assert self.helper.v_cruise_kph == pytest.approx(value)
-    assert self.helper.v_cruise_cluster_kph == pytest.approx(value)
-    assert self.sm['carState'].vCruise == pytest.approx(value)
-    assert self.sm['carState'].vCruiseCluster == pytest.approx(value)
-
-  def engage(self):
-    # Learn 130 from real stock messages, with no direct writes to helper state.
-    for i in range(3):
-      self.step(f'engage-{i}', stock_kph=130)
-      self.assert_base()
-
-  def acquire(self):
-    self.engage()
-    write_camera(self.pipeline[0], '18059', True)
-    for i in range(2):
-      result = self.step(f'approach-{i}', stock_kph=79)
-      self.assert_base()
-      assert result.speedCameraControl.active and result.vTarget < 130 / 3.6
-    assert self.helper.camera_episode_active
-
-  def confirm_pass(self, stock_kph, *, wheel_override=False):
-    self.step('first-behind-fix', north_m=20, stock_kph=stock_kph)
-    pending = self.step('second-behind-fix', north_m=30, stock_kph=stock_kph)
-    self.assert_base()
-    if wheel_override:
-      assert pending.speedCameraControl.state == 'manual'
-      assert pending.speedCameraControl.reason == 'manual_button'
-      assert pending.speedCameraControl.manualTakeover and pending.speedCameraControl.speedCap == 0.0
-      assert pending.vTarget == pytest.approx(stock_kph / 3.6)
-    else:
-      assert pending.speedCameraControl.reason == 'awaiting_map_update'
-    assert pending.vTarget < 130 / 3.6
-    restored = self.step('fresh-map-after-pass', north_m=40, stock_kph=stock_kph)
-    self.assert_base()
-    assert restored.speedCameraControl.state == 'passed'
-    assert not restored.speedCameraControl.manualTakeover
-    assert restored.vTarget == pytest.approx(130 / 3.6)
-    self.step('helper-consumes-passed', north_m=50, stock_kph=stock_kph)
-    self.assert_base()
-    assert not self.helper.camera_episode_active
-
-  def sender_ticks(self, count):
-    # Real 100 Hz sender calls using the most recently decoded model plan.
-    for _ in range(count):
-      self.sender.run(self.sm['carState'], self.sm['carControl'], self.previous_plan, True)
+  def pass_camera(self,**options):
+    self.frame(dt=2,north_m=-40,**options)
+    self.frame(dt=2,north_m=25,**options)
+    return self.frame(dt=1,north_m=30,**options)
 
 
 @pytest.fixture
-def override_cycle(pipeline, longitudinal, plan_bus, native_cruise_pair, native_params, monkeypatch, request):
-  options = getattr(request, 'param', {})
-  previous_offset = native_params.get('SpeedCameraSpeedOffsetKph')
-  native_params.put('SpeedCameraSpeedOffsetKph', str(options.get('offset', 0)))
-  clock = PlanningClock()
-  monkeypatch.setattr(planner_module, 'time', clock)
-  helper, sender = native_cruise_pair
-  vision_speed = options.get('vision_speed')
-  cycle = OverrideCycle(pipeline, longitudinal(pcm_cruise=True, vision=vision_speed is not None), plan_bus, helper, sender, clock)
-  if vision_speed is not None:
-    cycle.model_yaw_rate = 2 * 30 / vision_speed ** 2
-  try:
-    yield cycle
-  finally:
-    if os.getenv('PQ35_RUNTIME_EVIDENCE'):
-      directory = Path(os.environ['PQ35_RUNTIME_EVIDENCE'])
-      directory.mkdir(parents=True, exist_ok=True)
-      (directory / f'{request.node.name}.json').write_text(json.dumps(cycle.trace, indent=2) + '\n')
-    if previous_offset is None:
-      native_params.remove('SpeedCameraSpeedOffsetKph')
-    else:
-      native_params.put('SpeedCameraSpeedOffsetKph', previous_offset)
+def override_cycle(pipeline,longitudinal,plan_bus,native_cruise_pair,native_params,monkeypatch):
+  import openpilot.sunnypilot.mapd.live_map_data.osm_map_data as producer_module
+  import openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.speed_limit_resolver as resolver_module
+  native_params.put('SpeedLimitOffsetType',1)
+  native_params.put('SpeedLimitValueOffset',15)
+  write_camera(pipeline[0],'18059',True)
+  clock=PlanningClock()
+  # Explicit trajectory-clock boundary. Params,msgq,SubMaster,source,Resolver,
+  # SLA,planner,helper,ICBM all execute their actual implementations.
+  monkeypatch.setattr(producer_module,'time',clock)
+  # IPC receipt retains the real clock; only the synthetic LLK trajectory advances.
+  from types import SimpleNamespace
+  monkeypatch.setattr(resolver_module,'time',SimpleNamespace(time=clock.time,monotonic=time.monotonic))
+  helper,sender=native_cruise_pair
+  yield OverrideCycle(pipeline,longitudinal(pcm_cruise=True),plan_bus,helper,sender,clock)
 
 
-@pytest.mark.parametrize('stock_kph', [89, 80])
-@pytest.mark.parametrize('pedal', ['gas', 'brake'])
-def test_actual_cruise_planner_icbm_pedal_keeps_130_through_pass(override_cycle, pedal, stock_kph):
-  cycle = override_cycle
-  cycle.acquire()
-  physical = {'gas': True} if pedal == 'gas' else {'brake': True, 'acc_enabled': False, 'cc_enabled': False}
-  manual = cycle.step(pedal, stock_kph=stock_kph, **physical)
-  cycle.assert_base()
-  assert manual.speedCameraControl.manualTakeover and manual.speedCameraControl.reason == pedal
-  assert manual.speedCameraControl.state == 'manual' and not manual.speedCameraControl.active
-  assert manual.vTarget == pytest.approx(stock_kph / 3.6)
-  assert cycle.sender.cruise_button == SendButton.none
-  assert cycle.planner.camera.controller.episode_active
-  if pedal == 'brake':
-    waiting = cycle.step('brake-released-acc-off', stock_kph=stock_kph, dt=0.6, acc_enabled=False, cc_enabled=False)
-    cycle.assert_base()
-    assert waiting.speedCameraControl.reason == 'brake_waiting_resume'
-    assert cycle.sender.cruise_button == SendButton.none
-    cycle.step('physical-res', stock_kph=stock_kph, buttons=[('resumeCruise', True)])
-    cycle.assert_base()
-    cycle.step('physical-res-release', stock_kph=stock_kph, buttons=[('resumeCruise', False)])
-  resumed = cycle.step('pedal-priority-finished', stock_kph=stock_kph, dt=0.6)
-  cycle.assert_base()
-  assert resumed.speedCameraControl.active and not resumed.speedCameraControl.manualTakeover
-  cycle.confirm_pass(stock_kph)
-  cycle.sender_ticks(45)
-  assert cycle.sender.cruise_button == SendButton.increase
+@pytest.mark.parametrize('pedal,stock_kph',[('gas',68.),('gas',90.),('brake',68.),('brake',90.)])
+def test_actual_pedal_priority_retains_driver_and_safe_resume(override_cycle,pedal,stock_kph):
+  c=override_cycle
+  _,initial=c.frame()
+  assert initial.vTarget==pytest.approx(75/3.6)
+  options={pedal:True}
+  if pedal=='brake': options.update(cc_enabled=False,acc_enabled=False)
+  sm,pressed=c.frame(stock_kph=stock_kph,**options)
+  assert c.sender.cruise_button==SendButton.none
+  assert c.helper.v_cruise_kph==pytest.approx(130)
+  if pedal=='brake':
+    for _ in range(3):
+      c.frame(stock_kph=stock_kph,cc_enabled=False,acc_enabled=False)
+      assert c.sender.cruise_button==SendButton.none
+  else:
+    _,released=c.frame(stock_kph=stock_kph)
+    assert released.vTarget==pytest.approx(75/3.6)
+  assert pressed.speedCameraControl.driverSetSpeed==pytest.approx(130/3.6)
 
 
-@pytest.mark.parametrize('stock_kph', [89, 80])
-@pytest.mark.parametrize('button,base_delta', [('accelCruise', 1), ('decelCruise', -1)])
-def test_actual_cruise_planner_icbm_wheel_override_is_episode_local(override_cycle, button, base_delta, stock_kph):
-  cycle = override_cycle
-  cycle.acquire()
-  for edge in (True, False):
-    manual = cycle.step(f'wheel-{edge}', stock_kph=stock_kph, buttons=[(button, edge)])
-    cycle.assert_base()
-    assert manual.speedCameraControl.manualTakeover and manual.speedCameraControl.reason == 'manual_button'
-    assert manual.vTarget == pytest.approx(stock_kph / 3.6)
-  held = cycle.step('wheel-released-still-temporary', stock_kph=stock_kph, dt=0.6)
-  cycle.assert_base()
-  assert held.speedCameraControl.manualTakeover and held.speedCameraControl.state == 'manual'
-  cycle.sender_ticks(45)
-  assert cycle.sender.cruise_button == SendButton.none
-  cycle.confirm_pass(stock_kph, wheel_override=True)
-  cycle.step('stock-return-completed', north_m=55, stock_kph=130, dt=0.6)
-  cycle.assert_base()
-  cycle.step('outside-episode-press', north_m=60, stock_kph=130, buttons=[(button, True)])
-  cycle.step('outside-episode-release', north_m=65, stock_kph=130, buttons=[(button, False)])
-  cycle.assert_base(130 + base_delta)
-
-
-def test_actual_held_wheel_across_pass_waits_for_release_and_sender_delay(override_cycle):
-  cycle = override_cycle
-  cycle.acquire()
-  cycle.step('hold-wheel-press', stock_kph=89, buttons=[('accelCruise', True)])
-  cycle.step('held-beyond-planner-latch', stock_kph=89, dt=0.8)
-  for north in (20, 30, 40):
-    held = cycle.step(f'wheel-held-past-camera-{north}m', north_m=north, stock_kph=89)
-    cycle.assert_base()
-    assert held.speedCameraControl.state == 'manual' and held.speedCameraControl.manualTakeover
-    assert cycle.sender.cruise_button == SendButton.none
-  # Keep the original physical press held past the real helper long-press timer.
-  for _ in range(60):
-    cycle.clock.advance(0.01)
-    cycle.helper.update_speed_limit_assist(True, cycle.previous_plan)
-    cycle.helper.update_v_cruise(cycle.sm['carState'], cycle.sm['carControl'].enabled, True)
-    cycle.sender_ticks(1)
-    cycle.assert_base()
-    assert cycle.sender.cruise_button == SendButton.none
-  released = cycle.step('held-wheel-release-after-pass', stock_kph=89, north_m=60, buttons=[('accelCruise', False)])
-  cycle.assert_base()
-  following = cycle.step('frame-after-held-wheel-release', stock_kph=89, north_m=65)
-  cycle.assert_base()
-  for result in (released, following):
-    assert result.speedCameraControl.state == 'manual' and result.speedCameraControl.manualTakeover
-    assert result.speedCameraControl.reason == 'manual_button'
-  assert cycle.sender.cruise_button == SendButton.none
-  barrier = cycle.step('held-release-pass-barrier', stock_kph=89, north_m=70, dt=0.6)
-  cycle.assert_base()
-  assert barrier.speedCameraControl.state == 'manual' and barrier.speedCameraControl.reason == 'manual_button'
-  assert cycle.sender.cruise_button == SendButton.none
-  passed = cycle.step('held-release-new-map', stock_kph=89, north_m=75)
-  cycle.assert_base()
-  assert passed.speedCameraControl.state == 'passed' and not passed.speedCameraControl.manualTakeover
+@pytest.mark.parametrize('button,stock_after', [
+  ('accelCruise', 85.), ('decelCruise', 65.), ('setCruise', 70.)])
+def test_actual_zone_buttons_keep_precamera_base_and_camera_authority(override_cycle, button, stock_after):
+  c = override_cycle
+  c.frame()
+  _, held = c.frame(buttons=((button, True),))
+  assert held.speedCameraControl.active and not held.speedCameraControl.manualTakeover
+  assert c.sender.cruise_button == SendButton.none
+  _, released = c.frame(buttons=((button, False),), stock_kph=stock_after)
+  assert released.vTarget == pytest.approx(75 / 3.6)
+  assert released.speedCameraControl.active and not released.speedCameraControl.manualTakeover
+  assert c.helper.v_cruise_kph == c.helper.driver_set_speed_kph == pytest.approx(130)
+  for _ in range(45):
+    _, active = c.frame(dt=.01, stock_kph=stock_after)
+  expected = SendButton.decrease if stock_after > 75 else SendButton.increase
+  assert c.sender.cruise_button == expected
+  _, passed = c.pass_camera(stock_kph=stock_after)
+  assert passed.speedCameraControl.state == 'passed'
+  assert not passed.speedCameraControl.manualTakeover
   assert passed.vTarget == pytest.approx(130 / 3.6)
-  assert cycle.sender.state == SenderState.preActive and cycle.sender.cruise_button == SendButton.none
-  for _ in range(39):
-    cycle.sender_ticks(1)
-    assert cycle.sender.cruise_button == SendButton.none
-  cycle.sender_ticks(1)
-  assert cycle.sender.cruise_button == SendButton.increase and cycle.sender.v_target == 130
-  following = cycle.step('frame-after-held-release-restoration', stock_kph=89, north_m=80)
-  cycle.assert_base()
-  assert not following.speedCameraControl.manualTakeover and following.vTarget == pytest.approx(130 / 3.6)
+  _, after = c.frame(north_m=35, stock_kph=stock_after)
+  assert after.vTarget == pytest.approx(130 / 3.6)
+  assert c.helper.driver_set_speed_kph == pytest.approx(130)
 
 
-def test_actual_new_wheel_input_during_unfinished_return_hands_over_stock(override_cycle):
-  cycle = override_cycle
-  cycle.acquire()
-  cycle.confirm_pass(89)
-  manual = cycle.step('new-input-during-return', north_m=60, stock_kph=89, buttons=[('accelCruise', True)], dt=0.6)
-  assert manual.speedCameraControl.state == 'cancelled' and manual.speedCameraControl.manualTakeover
-  assert manual.vTarget == pytest.approx(89 / 3.6)
-  cycle.step('new-input-during-return-release', north_m=65, stock_kph=89, buttons=[('accelCruise', False)])
-  cycle.assert_base(89)
+def test_actual_delayed_native_button_feedback_does_not_create_manual_wait(override_cycle):
+  c = override_cycle
+  c.frame()
+  c.frame(buttons=(('accelCruise', True),))
+  c.frame(buttons=(('accelCruise', False),))
+  for _ in range(50):
+    _, active = c.frame(dt=.01)
+    assert active.vTarget == pytest.approx(75 / 3.6)
+    assert active.speedCameraControl.active and not active.speedCameraControl.manualTakeover
+    assert active.speedCameraControl.state not in ('manual', 'driverOverride')
+    assert c.helper.v_cruise_kph == pytest.approx(130)
+  _, delayed = c.frame(stock_kph=85)
+  assert delayed.vTarget == pytest.approx(75 / 3.6)
+  assert c.helper.driver_set_speed_kph == pytest.approx(130)
 
 
-@pytest.mark.parametrize('override_cycle,stock_kph', [
-  pytest.param({}, 140, id='manual-stock-above-base'),
-  pytest.param({'vision_speed': 19.0}, 89, id='manual-stock-above-lower-constraint'),
-], indirect=['override_cycle'])
-def test_actual_manual_wheel_sender_never_fights_stock_feedback(override_cycle, stock_kph):
-  cycle = override_cycle
-  cycle.acquire()
-  cycle.step('manual-authority-press', stock_kph=stock_kph, buttons=[('accelCruise', True)])
-  cycle.step('manual-authority-release', stock_kph=stock_kph, buttons=[('accelCruise', False)])
-  result = cycle.step('manual-authority-no-held-button', stock_kph=stock_kph, dt=0.6)
-  cycle.assert_base()
-  assert result.speedCameraControl.state == 'manual' and result.speedCameraControl.manualTakeover
-  assert result.vTarget < stock_kph / 3.6
-  if stock_kph == 140:
-    assert result.vTarget == pytest.approx(130 / 3.6)
-  else:
-    assert cycle.planner.scc.vision.is_active and result.longitudinalPlanSource == 'sccVision'
-    assert result.vTarget == pytest.approx(cycle.planner.scc.vision.output_v_target)
-  cycle.sender_ticks(45)
-  assert cycle.sender.cruise_button == SendButton.none and cycle.sender.state == SenderState.inactive
+def test_actual_gps_loss_holds_applied_native_offset_without_release(override_cycle, native_params):
+  c = override_cycle
+  _, initial = c.frame()
+  native_params.put('SpeedLimitValueOffset', 30)
+  c.planner.resolver.frame = 0
+  _, held = c.frame(gps_ok=False)
+  assert held.vTarget == pytest.approx(initial.vTarget)
+  assert held.speedCameraControl.active and not held.speedCameraControl.countdownValid
+  assert held.speedCameraControl.appliedOffset == pytest.approx(15 / 3.6)
+  assert held.speedCameraControl.state != 'passed'
+  assert not held.speedCameraControl.manualTakeover
 
 
-def test_actual_stock_set_after_brake_outside_camera_replaces_base_and_allows_first_camera(override_cycle):
-  cycle = override_cycle
-  cycle.engage()
-  assert not cycle.helper.camera_episode_active
-  cycle.step('non-camera-brake', stock_kph=79, brake=True, cc_enabled=False, acc_enabled=False)
-  cycle.step('non-camera-brake-release', stock_kph=79, cc_enabled=False, acc_enabled=False, dt=0.6)
-  cycle.assert_base()
-  cycle.step('physical-set-off', stock_kph=79, buttons=[('setCruise', True)], cc_enabled=False, acc_enabled=False)
-  cycle.step('physical-set-reengagement', stock_kph=79, buttons=[('setCruise', False)])
-  following = cycle.step('following-stock-set-frame', stock_kph=79, dt=0.6)
-  cycle.assert_base(79)
-  assert following.vTarget == pytest.approx(79 / 3.6)
-  cycle.sender_ticks(45)
-  assert cycle.sender.cruise_button == SendButton.none
-  write_camera(cycle.pipeline[0], '18059', True)
-  first_camera = cycle.step('first-camera-after-ordinary-set', stock_kph=79, north_m=-10)
-  cycle.assert_base(79)
-  assert first_camera.speedCameraControl.active and not first_camera.speedCameraControl.manualTakeover
-  assert first_camera.speedCameraControl.state == 'approach'
-  assert first_camera.speedCameraControl.reason == 'kinematic_ceiling'
-  assert first_camera.vTarget < 79 / 3.6
+def install_next_camera(c):
+  from openpilot.sunnypilot.mapd.camera_database import CameraDatabase, save_database
+  from openpilot.sunnypilot.mapd.cityguide import parse_cityguide_snapshot
+  latitude = 55 + math.degrees(200 / 6371000)
+  rows = f'2|Radars|65001\n18059|second|{latitude}|37|1709|60|1705|180|1713|1|\n'
+  cameras = tuple(parse_cityguide_snapshot(rows))
+  save_database(str(c.pipeline[0]), CameraDatabase('second-runtime', c.clock.time(), cameras))
 
 
-@pytest.mark.parametrize('override_cycle', [
-  pytest.param({'offset': 19}, id='offset19'),
-  pytest.param({'offset': 19, 'vision_speed': 19.0}, id='offset19-lower-vision'),
-], indirect=True)
-def test_actual_gas_beyond_pass_window_keeps_130_offset_and_lower_constraint(override_cycle):
-  cycle = override_cycle
-  cycle.acquire()
-  assert cycle.planner.camera_speed_offset_kph == 19
-  assert cycle.sm['liveMapDataSP'].speedCameraControlSpeedLimit == pytest.approx(60 / 3.6)
-  initial = cycle.previous_plan
-  assert initial.speedCameraControl.speedCap == pytest.approx(math.sqrt((79 / 3.6) ** 2 + 200), abs=1e-5)
-  lower_constraint = cycle.model_yaw_rate > 0.001
-  if lower_constraint:
-    assert cycle.planner.scc.vision.is_active
-    assert initial.vTarget == pytest.approx(cycle.planner.scc.vision.output_v_target)
-    assert initial.vTarget < initial.speedCameraControl.speedCap
-    assert initial.longitudinalPlanSource == 'sccVision'
-  for north in (-5, 20, 40, 400, 1000):
-    manual = cycle.step(f'gas-held-{north}m', north_m=north, stock_kph=89, gas=True, cc_override=True, dt=0.6)
-    cycle.assert_base()
-    assert manual.speedCameraControl.state == 'manual' and manual.speedCameraControl.reason == 'gas'
-    assert manual.speedCameraControl.manualTakeover and not manual.speedCameraControl.active
-    assert cycle.sender.cruise_button == SendButton.none
-    assert cycle.planner.camera.controller.episode_active
-  barrier = cycle.step('gas-released-beyond-250m', north_m=1200, stock_kph=89, dt=0.6)
-  cycle.assert_base()
-  assert barrier.speedCameraControl.reason == 'awaiting_map_update'
-  assert barrier.speedCameraControl.speedCap == pytest.approx(79 / 3.6)
-  assert barrier.vTarget <= barrier.speedCameraControl.speedCap
-  passed = cycle.step('fresh-map-after-long-gas', north_m=1300, stock_kph=89)
-  cycle.assert_base()
-  assert passed.speedCameraControl.state == 'passed' and not passed.speedCameraControl.manualTakeover
-  if lower_constraint:
-    assert cycle.planner.scc.vision.is_active
-    assert passed.longitudinalPlanSource == 'sccVision'
-    assert passed.vTarget == pytest.approx(cycle.planner.scc.vision.output_v_target)
-    assert passed.vTarget < 79 / 3.6
-  else:
-    assert passed.vTarget == pytest.approx(130 / 3.6)
+def test_actual_pass_restores_base_and_next_camera_has_independent_cycle(override_cycle):
+  c = override_cycle
+  c.frame()
+  _, passed = c.pass_camera()
+  assert passed.speedCameraControl.state == 'passed'
+  assert passed.vTarget == pytest.approx(130 / 3.6)
+  install_next_camera(c)
+  _, confirming = c.frame(north_m=35)
+  assert not confirming.speedCameraControl.active
+  _, next_camera = c.frame(north_m=40)
+  assert next_camera.speedCameraControl.active
+  assert next_camera.speedCameraControl.eventId
+  assert next_camera.vTarget == pytest.approx(75 / 3.6)
+
+
+def test_actual_gps_gap_across_camera_recovers_pass_and_next_event(override_cycle):
+  c = override_cycle
+  _, initial = c.frame()
+  first_id = initial.speedCameraControl.eventId
+  c.frame(buttons=(('accelCruise', True),))
+  c.frame(buttons=(('accelCruise', False),), stock_kph=105)
+  _, missing = c.frame(north_m=-10, gps_ok=False, stock_kph=105)
+  assert missing.speedCameraControl.eventId == first_id
+  assert missing.speedCameraControl.active and not missing.speedCameraControl.manualTakeover
+  _, first_behind = c.frame(north_m=25, stock_kph=105)
+  assert first_behind.speedCameraControl.state != 'passed'
+  _, passed = c.frame(north_m=30, stock_kph=105)
+  assert passed.speedCameraControl.state == 'passed'
+  assert not passed.speedCameraControl.manualTakeover
+  assert passed.speedCameraControl.rawLimit == 0
+  assert passed.vTarget == pytest.approx(130 / 3.6)
+  install_next_camera(c)
+  c.frame(north_m=35, stock_kph=105)
+  _, second = c.frame(north_m=40, stock_kph=105)
+  assert second.speedCameraControl.active and second.speedCameraControl.eventId != first_id
+  assert not second.speedCameraControl.manualTakeover
+  assert c.helper.driver_set_speed_kph == pytest.approx(130)
+
+
+def test_actual_held_unacknowledged_button_does_not_keep_camera_after_pass(override_cycle):
+  c = override_cycle
+  c.frame()
+  c.frame(buttons=(('accelCruise', True),))
+  _, passed = c.pass_camera()
+  assert passed.speedCameraControl.state == 'passed'
+  assert passed.speedCameraControl.rawLimit == 0 and not passed.speedCameraControl.manualTakeover
+  assert c.helper.v_cruise_kph == pytest.approx(130)
+  assert c.sender.cruise_button == SendButton.none
+  for _ in range(5):
+    _, after = c.frame(north_m=35)
+    assert after.speedCameraControl.rawLimit == 0
+    assert not after.speedCameraControl.manualTakeover
+    assert c.helper.driver_set_speed_kph == pytest.approx(130)
+    assert c.sender.cruise_button == SendButton.none  # A physically held button still owns the actual buttons.
+  _, released = c.frame(north_m=40, stock_kph=85, buttons=(('accelCruise', False),))
+  assert c.helper.v_cruise_kph == pytest.approx(130)
+  for _ in range(45):
+    c.frame(dt=.01, north_m=45, stock_kph=85)
+  assert c.sender.cruise_button == SendButton.increase
+  assert released.vTarget == pytest.approx(130 / 3.6)
+
+
+def test_actual_stock_set_after_brake_outside_camera_replaces_driver_base(override_cycle):
+  c = override_cycle
+  c.frame()
+  c.pass_camera(brake=True, cc_enabled=False, acc_enabled=False)
+  c.frame(north_m=35, stock_kph=75, cc_enabled=False, acc_enabled=False)
+  c.frame(north_m=40, stock_kph=75, buttons=(('setCruise', True),), cc_enabled=False, acc_enabled=False)
+  _, engaged = c.frame(north_m=45, stock_kph=95, buttons=(('setCruise', False),))
+  assert c.helper.v_cruise_kph == pytest.approx(95)
+  assert engaged.vTarget == pytest.approx(95 / 3.6)
+
+
+def test_actual_native_raw_twenty_plus_fifteen_targets_thirty_five(override_cycle):
+  c = override_cycle
+  write_camera(c.pipeline[0], '18059', True, speed_kph=20)
+  sm, result = c.frame(stock_kph=75)
+  assert sm['liveMapDataSP'].speedCameraControlValid
+  assert result.speedCameraControl.rawLimit == pytest.approx(20 / 3.6)
+  assert result.speedCameraControl.appliedOffset == pytest.approx(15 / 3.6)
+  assert result.vTarget == pytest.approx(35 / 3.6)
+  for _ in range(45):
+    c.sender.run(sm['carState'], sm['carControl'], result, True)
+  assert c.sender.v_cruise_min == 30
+  assert c.sender.v_target == 35 and c.sender.cruise_button == SendButton.decrease
+
+
+@pytest.mark.parametrize('button,first,held,final', [
+  ('accelCruise', 85., 95., 105.), ('decelCruise', 65., 55., 45.)])
+@pytest.mark.parametrize('delayed_final', [False, True])
+def test_actual_held_increments_and_delayed_release_preserve_precamera_base(override_cycle, button, first, held, final, delayed_final):
+  c = override_cycle
+  c.frame()
+  c.frame(buttons=((button, True),), stock_kph=75)
+  c.frame(stock_kph=first)
+  for _ in range(10):
+    _, holding = c.frame(dt=.01, stock_kph=held)
+    assert c.sender.cruise_button == SendButton.none
+    assert not holding.speedCameraControl.manualTakeover
+  c.frame(buttons=((button, False),), stock_kph=held if delayed_final else final)
+  if delayed_final:
+    for _ in range(10):
+      c.frame(dt=.01, stock_kph=held)
+    c.frame(stock_kph=final)
+  assert c.helper.v_cruise_kph == c.helper.driver_set_speed_kph == pytest.approx(130)
+  _, passed = c.pass_camera(stock_kph=final)
+  assert passed.vTarget == pytest.approx(130 / 3.6)
+  assert not passed.speedCameraControl.manualTakeover
+
+
+@pytest.mark.parametrize('button,first,final', [
+  ('accelCruise', 85., 95.), ('decelCruise', 65., 55.)])
+def test_actual_release_feedback_does_not_replace_precamera_setting(override_cycle, button, first, final):
+  c = override_cycle
+  c.frame()
+  c.frame(buttons=((button, True),), stock_kph=75)
+  c.frame(stock_kph=first)
+  c.frame(stock_kph=final)
+  _, released = c.frame(buttons=((button, False),), stock_kph=final)
+  assert released.vTarget == pytest.approx(75 / 3.6)
+  assert c.helper.v_cruise_kph == pytest.approx(130)
+  for _ in range(10):
+    _, stable = c.frame(dt=.01, stock_kph=final)
+    assert not stable.speedCameraControl.manualTakeover
+  _, passed = c.pass_camera(stock_kph=final)
+  assert passed.vTarget == pytest.approx(130 / 3.6)
+
+
+@pytest.mark.parametrize('button,native', [('accelCruise', 95.), ('decelCruise', 55.)])
+def test_actual_scc_feedback_and_inzone_buttons_never_rewrite_precamera_base(override_cycle, native_params, button, native):
+  c = override_cycle
+  c.frame()
+  c.frame(buttons=((button, True),), stock_kph=75)
+  c.frame(buttons=((button, False),), stock_kph=native)
+  native_params.put_bool('SmartCruiseControlVision', True)
+  c.planner.scc.vision.frame = 0
+  rate = 2 * 30 / (12 ** 2)
+  c.frame(stock_kph=native, model_yaw_rate=rate)
+  _, curve = c.frame(stock_kph=native, model_yaw_rate=rate)
+  assert curve.longitudinalPlanSource == 'sccVision' and curve.vTarget < 75 / 3.6
+  c.frame(stock_kph=45 if button == 'decelCruise' else 75, model_yaw_rate=rate)
+  assert c.helper.v_cruise_kph == pytest.approx(130)
+  native_params.put_bool('SmartCruiseControlVision', False)
+  c.planner.scc.vision.frame = 0
+  _, recovered = c.frame(stock_kph=native)
+  assert recovered.vTarget == pytest.approx(75 / 3.6)
+  assert c.helper.driver_set_speed_kph == pytest.approx(130)
+
+
+@pytest.mark.parametrize('baseline,response', [(140., 150.), (0., 75.)])
+def test_actual_inzone_high_or_unknown_native_feedback_does_not_stick_override(override_cycle, baseline, response):
+  c = override_cycle
+  c.frame()
+  c.helper.v_cruise_kph = c.helper.v_cruise_cluster_kph = 100.
+  c.frame(stock_kph=baseline, buttons=(('accelCruise', True),))
+  _, responded = c.frame(stock_kph=response, buttons=(('accelCruise', False),))
+  assert c.helper.v_cruise_kph == pytest.approx(100)
+  assert not responded.speedCameraControl.manualTakeover
+  assert responded.speedCameraControl.active and responded.vTarget == pytest.approx(75 / 3.6)
+  for _ in range(45):
+    _, active = c.frame(dt=.01, stock_kph=response)
+    assert not active.speedCameraControl.manualTakeover
+    assert c.helper.v_cruise_kph == pytest.approx(100)
+  assert c.sender.cruise_button == (SendButton.decrease if response > 75 else SendButton.none)
+  _, passed = c.pass_camera(stock_kph=response)
+  assert passed.speedCameraControl.state == 'passed'
+  assert not passed.speedCameraControl.manualTakeover and passed.speedCameraControl.rawLimit == 0
+  assert passed.vTarget == pytest.approx(100 / 3.6)
+  assert c.helper.driver_set_speed_kph == pytest.approx(100)

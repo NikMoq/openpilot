@@ -1,0 +1,12 @@
+# Fresh official host toolchain. No source or caches from previous build images.
+FROM ubuntu:22.04
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential clang python3 ninja-build pkg-config \
+    qtbase5-dev qtbase5-private-dev qttools5-dev-tools libqt5svg5-dev \
+    libssl-dev libzmq3-dev libcapnp-dev capnproto libeigen3-dev \
+    ocl-icd-opencl-dev libgles2-mesa-dev libegl1-mesa-dev libwayland-dev \
+    xvfb xauth git ca-certificates fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /work
+ENTRYPOINT ["python3", "tools/ui_build/build.py"]

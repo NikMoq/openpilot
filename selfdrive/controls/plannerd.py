@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import time
 from cereal import car, custom
 from openpilot.common.gps import get_gps_location_service
 from openpilot.common.params import Params
@@ -28,14 +27,14 @@ def main():
   longitudinal_planner = LongitudinalPlanner(CP, CP_SP)
   pm = messaging.PubMaster(['longitudinalPlan', 'driverAssistance', 'longitudinalPlanSP'])
   sm = messaging.SubMaster(['carControl', 'carState', 'controlsState', 'liveParameters', 'radarState', 'modelV2', 'selfdriveState',
-                            'liveMapDataSP', 'carStateSP', gps_location_service],
+                            'liveMapDataSP', 'carStateSP', 'selfdriveStateSP', gps_location_service],
                            poll='carState')
 
   while True:
     sm.update()
     longitudinal_planner.sla.update_car_state(sm['carState'])
     if sm.updated['carState']:
-      longitudinal_planner.camera.observe_car_state(sm['carState'], time.time())  # noqa: TID251 - same epoch as GPS/planner
+      longitudinal_planner.camera.observe_car_state(sm['carState'], automatic_target=longitudinal_planner.output_v_target)
     if sm.updated['modelV2']:
       longitudinal_planner.update(sm)
       longitudinal_planner.publish(sm, pm)
