@@ -24,6 +24,7 @@ MAX_NEARBY_TILES = 16
 MAX_LOCAL_EDGES = 40_000
 MAX_INDEX_REFERENCES = 250_000
 MAX_DIRECTORY_ENTRIES = 20_000
+MAX_LOCAL_WAY_HOPS = 64
 SEARCH_RADIUS_M = 1800.
 CROP_RADIUS_M = 2300.
 FAILURE_CODES = frozenset({
@@ -144,12 +145,61 @@ class OfflineRoadSnapshot:
       return None
     candidates.sort(key=lambda item: (item[0],item[1]))
     distance,_,edge,along = candidates[0]
-    for rival_distance,_,rival,_ in candidates[1:]:
+    local_positions = None
+    for rival_distance,_,rival,rival_along in candidates[1:]:
       same_road = rival.way == edge.way and bool({rival.start,rival.end}.intersection((edge.start,edge.end)))
       same_road = same_road or self._unique_continuation(edge,rival) or self._unique_continuation(rival,edge)
       if not same_road and rival_distance <= distance+8:
-        return None
+        # Dense nodes can put several nonadjacent pieces of one local road
+        # inside the search circle. Do not mistake those pieces for rivals.
+        # Build this bounded neighborhood once, not a route per candidate.
+        if rival.way != edge.way:
+          return None
+        if local_positions is None:
+          local_positions = self._local_way_positions(edge, along, heading, tolerance)
+        offset = local_positions.get(rival.key)
+        if offset is None or abs(offset+rival_along) > 2*tolerance:
+          return None
     return edge,along
+
+  def _local_way_positions(self, origin, along, heading, tolerance):
+    # Candidate projections lie in one tolerance-radius circle. Permit only
+    # a unique local chain within its diameter, never an entire shared way ID.
+    limit = 2*tolerance
+    positions = {origin.key: -along}
+    hx,hy = math.sin(math.radians(heading)),math.cos(math.radians(heading))
+    for forward in (True,False):
+      edge,offset = origin,-along
+      visited = {origin.key}
+      for _ in range(MAX_LOCAL_WAY_HOPS):
+        joint_offset = offset+edge.length if forward else offset
+        if abs(joint_offset) > limit:
+          break
+        joint = edge.end if forward else edge.start
+        incoming = self.incoming.get(joint,())
+        outgoing = self.outgoing.get(joint,())
+        if len(incoming) > 2 or len(outgoing) > 2:
+          break
+        choices = ([candidate for candidate in outgoing if candidate.end != edge.start] if forward else
+                   [candidate for candidate in incoming if candidate.start != edge.end])
+        if len(choices) != 1:
+          break
+        neighbor = choices[0]
+        before,after = (edge,neighbor) if forward else (neighbor,edge)
+        preceding = [candidate for candidate in incoming if candidate.start != after.end]
+        following = [candidate for candidate in outgoing if candidate.end != before.start]
+        if (len(preceding) != 1 or preceding[0].key != before.key or
+            len(following) != 1 or following[0].key != after.key or
+            neighbor.way != origin.way or neighbor.key in visited):
+          break
+        vx,vy = xy(neighbor.end,neighbor.start)
+        if vx*hx+vy*hy <= 1e-9:
+          break  # A sideways/backtracking connector cannot merge hairpin legs.
+        offset = joint_offset if forward else joint_offset-neighbor.length
+        positions[neighbor.key] = offset
+        visited.add(neighbor.key)
+        edge = neighbor
+    return positions
 
   def _heading_matches(self, edge, point, bearing, heading, tolerance, heading_tolerance=35.):
     if angle_difference(bearing,heading) <= heading_tolerance:

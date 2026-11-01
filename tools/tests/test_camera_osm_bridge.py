@@ -482,3 +482,91 @@ def test_cumulative_index_reference_budget_rejects_many_long_segments_before_all
   edges = [RoadEdge(f'way-{i}:0',f'way-{i}',a,b,math.hypot(*xy(b,a))) for i in range(100)]
   with pytest.raises(ValueError,match='offline_map_index_budget'):
     OfflineRoadSnapshot(edges,[(-1.,-1.,1.,1.)],a)
+
+
+# Adding survey nodes must not change the road represented by a polyline.
+def dense_way(vertices, spacing):
+  coordinates = []
+  for (north,east),(next_north,next_east) in zip(vertices,vertices[1:]):
+    count = math.ceil(math.hypot(next_north-north,next_east-east)/spacing)
+    coordinates.extend(point(north+(next_north-north)*step/count,
+                             east+(next_east-east)*step/count) for step in range(count))
+  coordinates.append(point(*vertices[-1]))
+  return coordinates
+
+
+@pytest.mark.parametrize('spacing',[2.,5.,20.])
+@pytest.mark.parametrize('vertices',[
+  [(-100.,0.),(1000.,0.)],
+  [(-100.,0.),(100.,0.),(300.,20.),(1000.,20.)],
+])
+def test_dense_way_preserves_straight_and_mild_bend_association_and_distance(tmp_path,spacing,vertices):
+  coarse,dense = tmp_path/'coarse',tmp_path/'dense'
+  tile(coarse,[[point(*node) for node in vertices]])
+  tile(dense,[dense_way(vertices,spacing)])
+  original = load(coarse).snapshot
+  densified = load(dense).snapshot
+  if vertices[-1][1]:
+    vehicle,heading = point(152.5,5.25),math.degrees(math.atan2(20.,200.))
+  else:
+    vehicle,heading = point(2.5),0.
+  camera = point(900.,vertices[-1][1])
+  expected = original.camera_distance(vehicle,heading,camera,0)
+  assert expected is not None
+  assert densified.associate(vehicle,heading) is not None
+  assert densified.camera_distance(vehicle,heading,camera,0) == pytest.approx(expected,abs=.05)
+
+
+@pytest.mark.parametrize('spacing',[2.,5.])
+def test_dense_way_source_acquires_and_passes_camera_from_distinct_positions(tmp_path,spacing):
+  tile(tmp_path,[dense_way([(-100.,0.),(1000.,0.)],spacing)])
+  graph = load(tmp_path).snapshot
+  camera = SpeedCamera(*point(150),60,0,'speedcamonline:1',1)
+  source = CameraSpeedSource()
+  results = []
+  for second,north in enumerate((2.5,12.5,50.,100.,140.,175.,185.)):
+    results.append(source.update([camera],*point(north),0,gps_valid=True,
+      fix_time_s=NOW+second,now_s=NOW+second,road_graph=graph))
+  assert results[1].valid and results[1].state == 'ACTIVE'
+  assert results[1].distance_m == pytest.approx(137.5,abs=.05)
+  assert all(result.reason != 'approach_corridor_lost' for result in results[1:])
+  assert results[-1].pass_proven and results[-1].state == 'PASSED'
+  assert results[-1].camera_id == results[1].camera_id
+
+
+def test_dense_parallel_ways_remain_ambiguous(tmp_path):
+  tile(tmp_path,[dense_way([(-100.,east),(1000.,east)],5.) for east in (0.,10.)])
+  graph = load(tmp_path).snapshot
+  assert graph.associate(point(2.5,5),0) is None
+  assert graph.camera_distance(point(2.5,5),0,point(900),0) is None
+
+
+@pytest.mark.parametrize('junction',['fork','merge'])
+def test_dense_near_junction_does_not_hide_fork_or_merge(tmp_path,junction):
+  main = dense_way([(-100.,0.),(0.,0.),(1000.,0.)],5.)
+  branch = [(0.,0.),(1000.,20.)] if junction == 'fork' else [(-100.,20.),(0.,0.)]
+  tile(tmp_path,[main,dense_way(branch,5.)])
+  graph = load(tmp_path).snapshot
+  assert graph.associate(point(-7.5 if junction == 'fork' else 7.5),0) is None
+
+
+def test_dense_disconnected_crossing_does_not_create_connectivity(tmp_path):
+  tile(tmp_path,[dense_way([(-100.,0.),(1000.,0.)],5.),
+                 dense_way([(2.5,-100.),(2.5,100.)],5.)])
+  graph = load(tmp_path).snapshot
+  assert graph.camera_distance(point(-50),0,point(2.5,80),90) is None
+
+
+@pytest.mark.parametrize('turn_north',[5.,100.])
+def test_dense_hairpin_other_leg_is_not_a_local_forward_continuation(tmp_path,turn_north):
+  # Both road directions admit heading north. Even a short U connector may
+  # not collapse two nearby legs into a single local association candidate.
+  tile(tmp_path,[dense_way([(-100.,0.),(turn_north,0.),(turn_north,5.),(-100.,5.)],5.)],one_way=False)
+  graph = load(tmp_path).snapshot
+  assert graph.associate(point(2.5,2.5),0) is None
+
+
+def test_dense_hairpin_preserves_real_route_distance_without_leg_shortcut(tmp_path):
+  tile(tmp_path,[dense_way([(-100.,0.),(100.,0.),(100.,15.),(-100.,15.)],5.)])
+  graph = load(tmp_path).snapshot
+  assert graph.camera_distance(point(),0,point(0,15),180) == pytest.approx(215.,abs=.05)
