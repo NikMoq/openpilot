@@ -125,6 +125,39 @@ tests alongside the existing camera and CityGuide tests. The native Qt provider
 preview and Russian translation compilation were also verified in Docker; this
 is separate from compiling and running the full vehicle UI.
 
-No hardware deployment, bench run or road validation was performed. Native UI
-compilation and operation on a physical Comma remain unverified. No controller
-acceleration/deceleration algorithms or safety limits are changed.
+## Prebuilt installation and checks
+
+This repository ships `prebuilt` and executes the tracked `selfdrive/ui/ui`.
+Updating C++ or `.ts` sources alone does not update that running interface. The
+Waze package therefore includes rebuilt ARM64 `selfdrive/ui/ui`, CPython 3.12
+`common/params_pyx.so`, and the corresponding `main_ru.qm`. The UI embeds its
+translation resources. The native library dependencies match the prior package.
+
+`tools/ui_build/waze_package.json` records the artifact hashes and native input
+hashes. Run `python tools/ui_build/check_waze_package.py` before publishing.
+`test_waze_package.py` also rejects changed native inputs without a rebuild and
+a binary missing the Waze registry even when its artifact hash is updated.
+All 211 Waze tests, including the package regression checks, pass in Linux
+Python 3.12 Docker. The full Qt UI was also compiled and started on the PC target;
+the actual Russian provider page was captured with its standard controls and
+collapsed descriptions. QA navigation/capture helpers are outside the repository
+and are not linked into the shipped ARM64 UI.
+
+The ARM Params candidate was imported in official ARM64 CPython 3.12.11 under
+Docker QEMU: all five keys, typed defaults, writing, reopening, persistence and
+cleanup transitions passed with the real Cython/C++ implementation.
+
+After a normal branch update and restart, open the existing Cruise / Speed Limit
+page. **Waze** is directly below **Custom database URL**, followed by the disabled
+Yandex Navigator source and Waze status. Enable Waze with camera warnings enabled.
+To check acquisition, keep the vehicle stationary with internet and a valid
+localized GPS position (the localization process normally runs with ignition on).
+`Waiting for GPS` means no usable localized position; `Updating` means a request
+is active; `Connected` plus the event count confirms a completed refresh.
+A zero count alone does not prove failure: the current area may have no reports.
+No cruise engagement or road test is required to verify data acquisition.
+
+No physical hardware installation, bench run or road validation was performed.
+Operation of the new package on a physical Comma still needs confirmation after
+update. No controller acceleration/deceleration algorithms or safety limits are
+changed.

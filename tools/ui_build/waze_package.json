@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "source_commit": "6e84af0f5c0127d5287204684555559a460bc086",
+  "architecture": "AArch64",
+  "python_abi": "CPython 3.12",
+  "qt_version": "5.12.8",
+  "compiler": "clang version 10.0.0-4ubuntu1 ",
+  "source_normalization": "LF",
+  "artifacts": {
+    "selfdrive/ui/ui": "72fdd7842fd44ad35b4a73e38b9f92a4c5b24506566ba4a7b8f2c0c27b7e71a9",
+    "common/params_pyx.so": "6d43da16d56617cb0f3b59f5a31cc4a1139ea4f68ece1a138e6a5b316e78d3d5",
+    "selfdrive/ui/translations/main_ru.qm": "7885edba02f0e08ccc2f3be6addd66d8e5574f9c15a0ffa39adc242e051eedfb"
+  },
+  "source_sha256": {
+    "common/params_keys.h": "053141e5872a15ba4ba80dd754a829656273ba1fdad0689d5a449c92afe86056",
+    "common/params.cc": "7e188310f10e7a18e1e5a22445dcd50d66c3e3560a80a833d5e9c4814f576d93",
+    "common/params_pyx.pyx": "0bd24405a2ddb964f8028d7ba319dd3cbbe1fab3b30412dd50318b79c9861aa5",
+    "common/params_pyx.cpp": "0121be3b448e999058c57f8a53c781f6999e9ea3707b696d613a87b7f2abd581",
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.cc": "4fc0334aa1e2286bb9c86e07db69530668d6c89985df3d43ee6fcb29a963532c",
+    "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h": "0266a90ee7860fb378c8d7b5396d5ecc2ed72858fd9049ae6d78c99331c40441",
+    "selfdrive/ui/translations/main_ru.ts": "e0ab6b5e057e90cf500de6d2d309da11ca4d717b63bf818a1fab64b9547a6045"
+  }
+}
