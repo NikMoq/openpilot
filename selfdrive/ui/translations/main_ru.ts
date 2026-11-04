@@ -4064,10 +4064,6 @@ Data</source><translation>Авто +
         <translation>Нужны ICBM и режим «Помощь». Управление можно отменить или изменить кнопками на руле.</translation>
     </message>
     <message>
-        <source>Database Source</source>
-        <translation>Источник базы</translation>
-    </message>
-    <message>
         <source>EDIT</source>
         <translation>ИЗМЕНИТЬ</translation>
     </message>

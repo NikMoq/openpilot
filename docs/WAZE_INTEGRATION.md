@@ -15,7 +15,8 @@ The existing global camera and automatic-control settings still apply.
 Acquisition requires a localized GPS position and internet access. Fixed cameras
 refresh every 120 seconds, mobile reports every 60 seconds, or after 1 km of
 movement, within a 5 km request radius. Network work runs on a background worker,
-not the map publisher thread. Status, report count and errors appear in settings.
+not the map publisher thread. Settings show a plain status and report count;
+technical error classes remain in local diagnostics.
 
 Sources are Waze throughout:
 

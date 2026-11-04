@@ -229,8 +229,9 @@ def events_to_cameras(events: Iterable[dict], now: float) -> list[SpeedCamera]:
 def waze_control_evidence(camera: SpeedCamera) -> bool:
   """Structural evidence gate, deliberately independent of wall-clock functions.
 
-  This is not itself a verification service: real backend events do not set the
-  verification fields. Freshness must be rechecked at import/merge on every tick.
+  Matched road evidence is supplied by the backend and checked structurally
+  here. Raw RT/tile decoders do not assert verified camera speed-byte fields.
+  Freshness must be rechecked at import/merge on every tick.
   Mobile RT needs separate matched road-limit evidence; its raw report cannot
   supply a control limit or restrict enforcement to the report's facing.
   """
