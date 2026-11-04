@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -16,6 +17,8 @@ SOURCES = ('common/params_keys.h', 'common/params.cc', 'common/params_pyx.pyx', 
            'selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.cc',
            'selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h',
            'selfdrive/ui/translations/main_ru.ts')
+ICBM_FILES = ('selfdrive/pandad/pq_icbm_release.py', 'selfdrive/pandad/pq_icbm_release.json',
+              'selfdrive/pandad/pandad', 'panda/board/obj/panda.bin.signed')
 
 
 def digest(data):
@@ -50,7 +53,16 @@ def validate(root=ROOT):
       raise ValueError('Packaged native artifact lacks the Waze parameter registry: ' + path)
     if path == 'selfdrive/ui/ui' and any(text not in data for text in (b'Custom database URL', b'Yandex Navigator', b'PHASE 2')):
       raise ValueError('Packaged UI lacks the provider controls')
-  return dict(status='PASS', architecture='AArch64', artifacts=len(ARTIFACTS), native_sources=len(SOURCES))
+  # Use the real read-only preflight, not a duplicate implementation or a
+  # relaxed hash check. A Params rebuild must remain a matched ICBM release.
+  icbm_manifest = json.loads((root / ICBM_FILES[1]).read_text(encoding='utf-8'))
+  if not isinstance(icbm_manifest.get('params_pyx_sha256'), str):
+    raise ValueError('Waze ICBM release must retain the Params extension pin')
+  spec = importlib.util.spec_from_file_location('waze_icbm_release_check', root / ICBM_FILES[0])
+  release = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(release)
+  release.verified_signature(root)
+  return dict(status='PASS', architecture='AArch64', artifacts=len(ARTIFACTS), native_sources=len(SOURCES), icbm_preflight='PASS')
 
 
 if __name__ == '__main__':

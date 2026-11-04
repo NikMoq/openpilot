@@ -161,3 +161,33 @@ No physical hardware installation, bench run or road validation was performed.
 Operation of the new package on a physical Comma still needs confirmation after
 update. No controller acceleration/deceleration algorithms or safety limits are
 changed.
+
+## ICBM release consistency and GPS
+
+The initial rebuilt Params artifact exposed a packaging error: the ICBM release
+manifest still pinned the stable extension hash. The real Panda wrapper failed
+with `ICBM Params extension mismatch` before hardware discovery. Only
+`params_pyx_sha256` in `selfdrive/pandad/pq_icbm_release.json` is updated to the
+reviewed Waze binding. Panda firmware, native daemon, signature, packet versions
+and validation code remain identical to stable. No integrity check is removed.
+
+An ARM64 CPython 3.12.11 differential check imported both old and new bindings:
+the default device path, public API, enum values and all 246 prior keys/types/
+defaults agree; five Waze keys are the only additions. The Waze package checker
+now invokes the existing read-only `verified_signature()` and rejects a stale
+extension pin. The common Docker test runner also includes the ICBM release and
+wrapper preflight suites, including corrupted-package rejection before hardware.
+
+GPS acquisition and `OsmMapData.update_location()` are unchanged from stable.
+Waze consumes `last_position` from the existing `liveLocationKalman` subscription
+and starts regional fetches only when that position is fresh, valid and `gpsOK`.
+It does not change the GNSS receiver or localization algorithm. When Panda
+startup is blocked, the system may never enter the started state required by
+`locationd`/`locationd_llk`; Waze then reports `Waiting for GPS`. That status alone
+does not establish whether raw GNSS fixes are available. Physical Panda recovery
+and GPS validity still need confirmation on the user's updated device.
+
+Validation of the ICBM consistency correction: **1060 passed, 9 skipped** in
+Linux/Python 3.12 Docker, including camera, CityGuide, Waze, packaged ICBM release
+and hardware-entry preflight tests. The guard also rejects a removed extension
+pin; it cannot pass by omitting the integrity dependency.
