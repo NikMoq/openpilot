@@ -4113,6 +4113,34 @@ Default: %1. Custom HTTPS sources do not use the backup. Source and direction da
     <message><source>+%1 km/h</source><translation>+%1 км/ч</translation></message>
     <message><source>Add this offset to the camera limit for automatic camera speed control, up to your selected cruise speed. Always stored in km/h.</source><translation>Прибавлять это значение к ограничению у камеры при автоматическом управлении скоростью, не превышая заданную скорость круиза. Значение всегда хранится в км/ч.</translation></message>
     <message><source>Camera Speed Offset</source><translation>Нештрафуемый лимит</translation></message>
+    <message>
+        <source>Custom database URL</source>
+        <translation>Своя база по URL</translation>
+    </message>
+    <message>
+        <source>Waze cameras and posts</source>
+        <translation>Waze: камеры и посты</translation>
+    </message>
+    <message>
+        <source>Download nearby Waze cameras and user reports using the internet. Unknown limits remain warnings; automatic speed control requires a verified applicable limit and direction.</source>
+        <translation>Загружать камеры, полицейские посты и ограничения дорог Waze через интернет. Если подходящий дорожный лимит не определён, событие остаётся предупреждением.</translation>
+    </message>
+    <message>
+        <source>Waze Status</source>
+        <translation>Состояние Waze</translation>
+    </message>
+    <message>
+        <source>Yandex Navigator</source>
+        <translation>Яндекс.Навигатор</translation>
+    </message>
+    <message>
+        <source>PHASE 2</source>
+        <translation>ВТОРОЙ ЭТАП</translation>
+    </message>
+    <message>
+        <source>Yandex Navigator will be added in the second phase. This source is not available yet.</source>
+        <translation>Яндекс.Навигатор будет добавлен на втором этапе. Этот источник пока недоступен.</translation>
+    </message>
 </context>
 
 <context>

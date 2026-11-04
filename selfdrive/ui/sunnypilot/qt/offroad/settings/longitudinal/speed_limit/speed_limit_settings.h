@@ -39,6 +39,7 @@ private:
   OptionControlSP *speed_limit_offset;
   MultiButtonControlSP *speed_camera_interval;
   LabelControlSP *speed_camera_status;
+  LabelControlSP *waze_status;
   LabelControlSP *speed_camera_count;
   LabelControlSP *speed_camera_updated;
   LabelControlSP *speed_camera_version;

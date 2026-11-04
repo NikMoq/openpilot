@@ -1,0 +1,19 @@
+{
+  "source": "Waze public fixed-camera map tiles",
+  "retrieved_at": "2026-11-01",
+  "wire_format": "protocol2 batch wrapper containing WZDF version0x00030000",
+  "fixtures": [
+    {
+      "file": "348134252.bin",
+      "tile_id": 348134252,
+      "sha256": "4abc68ee091f45f6ab337ad64696f9e5ca1f88a5fe1bbc49ae911b4fbbb3c0d2",
+      "url": "https://ctilesgcs-row.waze.com/TileServer/multi-get?reqtype=tileBatch&protocol=2&num=1&variation=PARTIAL_SIMPLIFICATION&t0=348134252&v0=0&p0=42"
+    },
+    {
+      "file": "348170252.bin",
+      "tile_id": 348170252,
+      "sha256": "0322e325601f0ae4945f7499356d1308c7c42181cdfd45924c6d5e6ee1b9ae00",
+      "url": "https://ctilesgcs-row.waze.com/TileServer/multi-get?reqtype=tileBatch&protocol=2&num=1&variation=PARTIAL_SIMPLIFICATION&t0=348170252&v0=0&p0=42"
+    }
+  ]
+}

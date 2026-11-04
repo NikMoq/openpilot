@@ -19,6 +19,8 @@ from openpilot.sunnypilot.mapd.camera_osm_bridge import OfflineOsmBridge
 from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, MAX_POSITION_AGE_S, camera_identity
 from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry, car_speed_sample
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
+from openpilot.sunnypilot.mapd.waze_updater import WazeCameraUpdater
+from openpilot.sunnypilot.mapd.waze_policy import merge_camera_sources
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
 from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera
 from openpilot.sunnypilot.navd.helpers import Coordinate
@@ -39,6 +41,8 @@ class OsmMapData(BaseMapData):
     super().__init__()
     self.mem_params = Params("/dev/shm/params") if platform.system() != "Darwin" else self.params
     self.camera_params = CameraParams()
+    self.waze_updater = WazeCameraUpdater(self.camera_params, os.path.join(Paths.mapd_root(), "waze"))
+    self._camera_sources_key = None
     configured_path = self.camera_params.get("SpeedCameraDatabasePath")
     self.camera_database_path = configured_path or os.path.join(Paths.mapd_root(), "speed_cameras.json")
     self.camera_database = None
@@ -71,7 +75,7 @@ class OsmMapData(BaseMapData):
       distance = 300
     self.camera_alert_distance_m = distance if distance in range(50,1001,50) else 300
 
-  def _load_camera_database(self) -> None:
+  def _load_russian_camera_database(self) -> None:
     self._refresh_camera_config()
     try:
       mtime = os.path.getmtime(self.camera_database_path)
@@ -85,17 +89,39 @@ class OsmMapData(BaseMapData):
       self.camera_database = load_database(self.camera_database_path, max_age_s=7 * 24 * 3600)
       self.camera_database_mtime = mtime
       self.camera_index = None
-    if self.camera_database is not None and self.camera_index is None:
-      self.camera_index = CameraSpatialIndex(self.camera_database.cameras)
+
+  def _load_camera_database(self) -> None:
+    previous_index = self.camera_index
+    self._load_russian_camera_database()
+    now = time.time()  # noqa: TID251 - persisted provider observations use Unix time
+    if self.camera_database is not None and now - self.camera_database.fetched_at > 7 * 24 * 3600:
+      self.camera_database = None
+    updater = getattr(self, 'waze_updater', None)
+    if updater is not None:
+      position = self.last_position
+      enabled = self.camera_params.get('SpeedCameraWazeEnabled') == '1' and self.camera_enabled
+      updater.tick(position.latitude if position is not None else math.nan,
+                   position.longitude if position is not None else math.nan,
+                   enabled=enabled, position_valid=bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK))
+      waze = updater.snapshot()
+    else:
+      waze = ()  # Compatibility for offline publishers created without background workers.
+    signature = (self.camera_database_path, self.camera_database_mtime, id(self.camera_database),
+                 tuple((c.source_id, c.source_params.get('waze_event')) for c in waze))
+    if signature != getattr(self, '_camera_sources_key', None):
+      russian = self.camera_database.cameras if self.camera_database is not None else ()
+      combined = merge_camera_sources(russian, waze, now)
+      self.camera_index = CameraSpatialIndex(combined) if self.camera_database is not None or combined else None
+      self._camera_sources_key = signature
+      self._camera_sources_database_reference = self.camera_database
+    else:
+      self.camera_index = previous_index
 
   def get_speed_camera(self):
     self._load_camera_database()
     self.camera_control_match = None
-    expired = self.camera_database is not None and time.time() - self.camera_database.fetched_at > 7 * 24 * 3600
-    if expired:
-      self.camera_database = None
-      self.camera_index = None
-    if not self.localizer_valid or not self.camera_enabled or self.camera_database is None or self.last_position is None:
+    expired = False  # Each provider is aged independently before merging.
+    if not self.localizer_valid or not self.camera_enabled or self.camera_index is None or self.last_position is None:
       self.camera_match = None
     else:
       self.camera_match = find_nearest_camera(
@@ -132,6 +158,14 @@ class OsmMapData(BaseMapData):
       self.camera_warning_fix_time = None
       self.camera_warning_position = None
       return
+    retained = self.camera_warning_retained
+    if retained is not None and retained.camera.camera_type.startswith('waze:'):
+      from openpilot.sunnypilot.mapd.waze_policy import filter_fresh_waze
+      if (self.camera_params.get('SpeedCameraWazeEnabled') != '1' or
+          not filter_fresh_waze((retained.camera,), time.time())):  # noqa: TID251 - source observations use Unix time
+        self.camera_warning_retained = None
+        self.camera_warning_odometry = CameraOdometry()
+        self.camera_warning_fix_time = self.camera_warning_position = None
     now = time.monotonic()
     position_time = self.sm.logMonoTime['liveLocationKalman'] / 1_000_000_000
     trusted = bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK)
@@ -198,7 +232,7 @@ class OsmMapData(BaseMapData):
     roads = self.camera_osm_bridge.snapshot
     self.camera_selection = self.camera_speed_source.update(
       self.camera_index or (), latitude, longitude, self.last_bearing,
-      gps_valid=position_valid and self.camera_database is not None and roads is not None,
+      gps_valid=position_valid and self.camera_index is not None and roads is not None,
       fix_time_s=position_time, now_s=now,
       reaction_distance_m=reaction, road_graph=roads)
     self.camera_selection = self.camera_speed_source.update_odometry(
@@ -206,7 +240,7 @@ class OsmMapData(BaseMapData):
     if not self.camera_selection.valid and not self.camera_selection.pass_proven:
       if not position_valid:
         reason = 'localizer_unreliable'
-      elif self.camera_database is None:
+      elif self.camera_index is None:
         reason = database_reason
       elif roads is None:
         reason = self.camera_osm_bridge.status

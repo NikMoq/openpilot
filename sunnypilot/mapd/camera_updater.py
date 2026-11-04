@@ -26,6 +26,11 @@ DEFAULT_UPDATE_PERIOD_HOURS = 24.0
 DEFAULT_CACHE_MAX_AGE_HOURS = 7 * 24.0
 DEFAULT_CACHE_CHECK_PERIOD_S = 30.0
 CAMERA_PARAM_KEYS = frozenset({
+  "SpeedCameraWazeEnabled",
+  "SpeedCameraWazeStatus",
+  "SpeedCameraWazeCount",
+  "SpeedCameraWazeError",
+  "SpeedCameraWazeUpdatedAt",
   "SpeedCameraRoadGraphPath",
   "SpeedCameraRoadGraphStatus",
   "SpeedCameraReactionDistance",

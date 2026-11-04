@@ -144,7 +144,7 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
   list->addItem(horizontal_line());
   list->addItem(vertical_space());
 
-  speed_camera_source = new ButtonControlSP(tr("Database Source"), tr("EDIT"),
+  speed_camera_source = new ButtonControlSP(tr("Custom database URL"), tr("EDIT"),
     tr("CityGuide 7.7: all camera types and all Russian regions. Updates use SpeedCamOnline, with a verified backup copy from this repository when the site is unreachable.\nDefault: %1. Custom HTTPS sources do not use the backup. Source and direction data are retained; automatic control depends on camera type support.")
       .arg(QString::fromUtf8(SPEED_CAMERA_DEFAULT_URL)));
   connect(speed_camera_source, &ButtonControlSP::clicked, this, [this]() {
@@ -163,6 +163,15 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
     refresh();
   });
   list->addItem(speed_camera_source);
+
+  list->addItem(new ParamControlSP("SpeedCameraWazeEnabled", tr("Waze cameras and posts"),
+    tr("Download nearby Waze cameras and user reports using the internet. Unknown limits remain warnings; automatic speed control requires a verified applicable limit and direction."), "", this));
+  auto *yandex_source = new ButtonControlSP(tr("Yandex Navigator"), tr("PHASE 2"),
+    tr("Yandex Navigator will be added in the second phase. This source is not available yet."));
+  yandex_source->setEnabled(false);
+  list->addItem(yandex_source);
+  waze_status = new LabelControlSP(tr("Waze Status"));
+  list->addItem(waze_status);
 
   std::vector<QString> speed_camera_interval_texts{
     tr("Manual"), tr("6 h"), tr("24 h"), tr("168 h")
@@ -298,6 +307,9 @@ void SpeedLimitSettings::refresh() {
   const QString status = QString::fromStdString(params.get("SpeedCameraDatabaseStatus"));
   speed_camera_reaction_distance->setLabel(tr("%1 m").arg(QString::fromStdString(params.get("SpeedCameraReactionDistance"))));
   speed_camera_status->setText(cameraStatus(status));
+  waze_status->setText(QString::fromStdString(params.get("SpeedCameraWazeStatus")) + " · " +
+    QString::fromStdString(params.get("SpeedCameraWazeCount")) + " · " +
+    QString::fromStdString(params.get("SpeedCameraWazeError")));
   const QString count = QString::fromStdString(params.get("SpeedCameraDatabaseCount"));
   speed_camera_count->setText(count.isEmpty() ? "0" : count);
   speed_camera_updated->setText(cameraTimestamp(params.get("SpeedCameraDatabaseUpdatedAt")));
