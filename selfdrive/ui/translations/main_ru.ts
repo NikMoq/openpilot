@@ -4118,12 +4118,12 @@ Default: %1. Custom HTTPS sources do not use the backup. Source and direction da
         <translation>Своя база по URL</translation>
     </message>
     <message>
-        <source>Waze cameras and posts</source>
-        <translation>Waze: камеры и посты</translation>
+        <source>Waze</source>
+        <translation>Waze</translation>
     </message>
     <message>
-        <source>Download nearby Waze cameras and user reports using the internet. Unknown limits remain warnings; automatic speed control requires a verified applicable limit and direction.</source>
-        <translation>Загружать камеры, полицейские посты и ограничения дорог Waze через интернет. Если подходящий дорожный лимит не определён, событие остаётся предупреждением.</translation>
+        <source>Road cameras, portable cameras, police reports, and speed limits.</source>
+        <translation>Дорожные камеры, треноги, полицейские посты и ограничения скорости.</translation>
     </message>
     <message>
         <source>Waze Status</source>
@@ -4140,6 +4140,30 @@ Default: %1. Custom HTTPS sources do not use the backup. Source and direction da
     <message>
         <source>Yandex Navigator will be added in the second phase. This source is not available yet.</source>
         <translation>Яндекс.Навигатор будет добавлен на втором этапе. Этот источник пока недоступен.</translation>
+    </message>
+    <message>
+        <source>Connected</source>
+        <translation>Подключено</translation>
+    </message>
+    <message>
+        <source>Some data could not be updated</source>
+        <translation>Часть данных не обновлена</translation>
+    </message>
+    <message>
+        <source>Updating</source>
+        <translation>Обновление</translation>
+    </message>
+    <message>
+        <source>Waiting for GPS</source>
+        <translation>Ожидание GPS</translation>
+    </message>
+    <message>
+        <source>Update failed</source>
+        <translation>Не удалось обновить</translation>
+    </message>
+    <message>
+        <source>%1 events</source>
+        <translation>Событий: %1</translation>
     </message>
 </context>
 

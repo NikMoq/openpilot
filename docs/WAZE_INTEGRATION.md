@@ -5,11 +5,12 @@ Branch `waze` starts at `stable` commit
 Waze is phase 1; Yandex Navigator is reserved for phase 2. The provider block
 retains the custom URL editor, adds an independent Waze toggle, and shows a
 disabled Yandex Navigator row marked PHASE 2. The new controls have Russian
-translations.
+translations. Provider descriptions stay collapsed until their title is tapped;
+Waze help lists supported road alerts without implementation details.
 
 ## Operation
 
-Enable **Waze cameras and posts** in the speed-camera settings (default off).
+Enable **Waze** in the speed-camera settings (default off).
 The existing global camera and automatic-control settings still apply.
 Acquisition requires a localized GPS position and internet access. Fixed cameras
 refresh every 120 seconds, mobile reports every 60 seconds, or after 1 km of

@@ -164,8 +164,8 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
   });
   list->addItem(speed_camera_source);
 
-  list->addItem(new ParamControlSP("SpeedCameraWazeEnabled", tr("Waze cameras and posts"),
-    tr("Download nearby Waze cameras and user reports using the internet. Unknown limits remain warnings; automatic speed control requires a verified applicable limit and direction."), "", this));
+  list->addItem(new ParamControlSP("SpeedCameraWazeEnabled", tr("Waze"),
+    tr("Road cameras, portable cameras, police reports, and speed limits."), "", this));
   auto *yandex_source = new ButtonControlSP(tr("Yandex Navigator"), tr("PHASE 2"),
     tr("Yandex Navigator will be added in the second phase. This source is not available yet."));
   yandex_source->setEnabled(false);
@@ -307,9 +307,17 @@ void SpeedLimitSettings::refresh() {
   const QString status = QString::fromStdString(params.get("SpeedCameraDatabaseStatus"));
   speed_camera_reaction_distance->setLabel(tr("%1 m").arg(QString::fromStdString(params.get("SpeedCameraReactionDistance"))));
   speed_camera_status->setText(cameraStatus(status));
-  waze_status->setText(QString::fromStdString(params.get("SpeedCameraWazeStatus")) + " · " +
-    QString::fromStdString(params.get("SpeedCameraWazeCount")) + " · " +
-    QString::fromStdString(params.get("SpeedCameraWazeError")));
+  const QString waze_state = QString::fromStdString(params.get("SpeedCameraWazeStatus"));
+  QString waze_label = tr("Off");
+  if (waze_state.startsWith("ready")) waze_label = tr("Connected");
+  else if (waze_state.startsWith("partial")) waze_label = tr("Some data could not be updated");
+  else if (waze_state == "downloading Waze") waze_label = tr("Updating");
+  else if (waze_state == "waiting for localized position") waze_label = tr("Waiting for GPS");
+  else if (waze_state == "error") waze_label = tr("Update failed");
+  if (params.getBool("SpeedCameraWazeEnabled")) {
+    waze_label += " · " + tr("%1 events").arg(QString::fromStdString(params.get("SpeedCameraWazeCount")));
+  }
+  waze_status->setText(waze_label);
   const QString count = QString::fromStdString(params.get("SpeedCameraDatabaseCount"));
   speed_camera_count->setText(count.isEmpty() ? "0" : count);
   speed_camera_updated->setText(cameraTimestamp(params.get("SpeedCameraDatabaseUpdatedAt")));
