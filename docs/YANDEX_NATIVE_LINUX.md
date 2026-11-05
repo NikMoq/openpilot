@@ -56,7 +56,10 @@ The service base URL is configuration supplied; a production host was not
 established from these code paths alone.
 
 The shared header builder computes X-YRuntime-Signature using HMAC-SHA1 and an
-embedded 16-byte key. The key value was not read or extracted. The generic GET
+embedded 16-byte key. The owner separately authorized using that signing material
+on 2026-11-06. It was then used only in bounded Linux diagnostics and was not
+exported, logged or checked into Git. This does not extend to firmware keys.
+The generic GET
 and POST dispatch paths are consistent with using that builder, although one
 intermediate virtual/thread dispatch remains unresolved. This does not prove
 the server's exact signature requirement or authorize borrowing credentials.
@@ -88,10 +91,34 @@ and representation field2 remain opaque; field3 has no invented semantic enum;
 speed fields have no asserted units. The module neither authenticates HTTP nor
 turns a decoded numeric value into a control limit.
 
-The combined Yandex Linux Docker suite now passes 114 tests, including 27 fixed
+The combined Yandex Linux Docker suite now passes 159 tests, including 27 fixed
 synthetic native-wire cases. The native wire codec has not decoded an actual
 server conditions response; its confirmed component schemas are not a claimed
 complete network envelope.
+
+Further verified native components:
+
+* `native_events.py` decodes the raw Conditions -> RouteEvents -> SegmentEvent
+  chain with aggregate budgets and unknown-number tracking. Point, tag mapping,
+  field semantics and speed units remain unqualified for automatic control.
+* `native_auth.py` provides HMAC-SHA1 for the exact prepared request URL/body,
+  with a caller-supplied key and no embedded credentials. The signed input is
+  User-Agent + METHOD + space + path/query + body, excluding URL authority.
+  Synthetic GET/POST cases reached the original ARM64 HMAC call in Linux Unicorn;
+  modeled standard-string helpers produced the same input as the Python formula.
+  This is instruction-level verification, not an Android runtime or full SDK run.
+* Signed diagnostics to the historical driving/2.x route path still returned
+  403. Sorting parameters and using the same existing egress proxy did not
+  establish access. One network timeout was followed by a bounded same-request
+  diagnostic, which again returned 403; timeout was not treated as success.
+* A single persistent Linux installation identity was created for the SDK's
+  confirmed deviceid/uuid fields; it is reused, not rotated on errors. These
+  locally generated identifiers are not asserted equivalent to SDK-issued miid.
+* Current SDK service URLs are configuration-driven. Its config GET appends
+  a runtime prefix and /config/2.x/; its init worker uses /init/2.x/random and
+  /init/2.x/miid. Exact normal bootstrap and current driving prefix remain under
+  investigation. The signed legacy-path tests are not complete current-SDK
+  request reproductions and do not isolate the reason for server rejection.
 
 The public HTTP Routing API documents geometry/travel times and road flags, but
 does not document a camera/mobile-event response contract. It is not treated as

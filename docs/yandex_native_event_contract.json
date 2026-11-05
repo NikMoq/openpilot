@@ -1,0 +1,12 @@
+{
+  "input_sha256": "126607c7824398ca365c1e3eba1718d92e6bf7abeda419c610442b54d3e73f9d",
+  "method": "Offline ARM64 generated parser/serializer and APS2 vtable/GetTypeName identity in Linux Docker; no native execution",
+  "Conditions": {"parser": "0x1bb49c4", "field4": "optional RouteEvents; tag0x22", "other_known_fields": "1,2,3,6 optional nested;5 repeated nested; retained opaque"},
+  "RouteEvents": {"parser": "0x1bbce0c", "field1": "repeated SegmentEvent; helper0x1bbd1d0"},
+  "SegmentEvent": {
+    "parser": "0x1bbc234", "serializer": "0x1bbc60c",
+    "fields": {"1": "optional signedint32; ldrsw0x1bbc644", "2": "optional string/bytes", "3": "repeated raw enum0..12; packed/unpacked", "5": "optional common2.geometry.Point, retained opaque", "6": "optional string/bytes", "7": "optional double; tag0x39; store0x1bbc36c", "8": "repeated string/bytes"}
+  },
+  "unknowns": ["HTTP response root", "raw enum to SDK event tag mapping", "Point coordinates", "doublefield7 meaning and units", "field semantic names", "freshness and control suitability"],
+  "policy": "Raw codec only. Unsupported enum values reject rather than silently classify. Unknown field numbers retained. Duplicate singular fields reject. Synthetic vectors only; no native network response fixture."
+}
