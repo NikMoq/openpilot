@@ -1,6 +1,10 @@
-# Yandex integration status — 2026-11-05
+# Yandex integration status — 2026-11-06
 
-Status: **PARTIAL IMPLEMENTATION — CAMERA ACQUISITION UNRESOLVED**.
+Status: **SDK ACQUISITION VERIFIED; NATIVE LINUX ACQUISITION UNRESOLVED**.
+
+Current requirement: Linux on Comma without Android or an external relay. See
+[native Linux status](YANDEX_NATIVE_LINUX.md). Historical SDK success does not
+establish autonomous Comma acquisition.
 
 ## Implemented and observed
 
@@ -183,7 +187,7 @@ Navigator camera access or road readiness; there was no Comma deployment for
 this inactive acquisition stage.
 
 
-## Verified live SDK acquisition � 6 November 2026
+## Verified live SDK acquisition — 6 November 2026
 
 The own bound key now obtains genuine route events through Full MapKit 4.45.0.
 The initial route callback contained zero events. Explicit requestConditionsUpdate
