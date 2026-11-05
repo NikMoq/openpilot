@@ -1,0 +1,32 @@
+{
+  "observed_date": "2026-11-05",
+  "artifact": "com.yandex.android:maps.mobile:4.45.0-full",
+  "url": "https://repo.maven.apache.org/maven2/com/yandex/android/maps.mobile/4.45.0-full/maps.mobile-4.45.0-full.aar",
+  "aar_bytes": 61346821,
+  "aar_sha256": "15a06afb385f40f8f2016c8ad9d28e2463f918ae8aa45d761a07e5eb5119a495",
+  "classes_jar_sha256": "45d0a6f24a5cc48edd32b389e831c000fbc1ef5c5f90fa3709974f58f6693c9d",
+  "arm64_native_sha256": "126607c7824398ca365c1e3eba1718d92e6bf7abeda419c610442b54d3e73f9d",
+  "android_min_sdk_manifest": 26,
+  "opengl_es_manifest": "3.0",
+  "confirmed_full_sdk_classes": [
+    "com/yandex/mapkit/directions/driving/DrivingRoute.class",
+    "com/yandex/mapkit/directions/driving/Event.class",
+    "com/yandex/mapkit/road_events/EventTag.class"
+  ],
+  "absent_navikit_classes": [
+    "com/yandex/mapkit/navigation/automotive/UpcomingRoadEvent.class",
+    "com/yandex/mapkit/navigation/automotive/Guidance.class"
+  ],
+  "verified_methods": ["DrivingRoute.getEvents()", "DrivingRoute.getSpeedLimits()", "Event.getSpeedLimit()"],
+  "normal_initialization": "Own MapKit API key must be set before MapKitFactory.initialize(Context)",
+  "runtime_camera_access_verified": false,
+  "speed_unit_verified": false,
+  "linux_runtime_supported_verified": false,
+  "anonymous_route_probe": {
+    "status": 403,
+    "response_bytes": 10,
+    "body": "Forbidden\n",
+    "server": "nginx/1.26.2",
+    "meaning": "Anonymous GET did not implement normal SDK initialization; cannot distinguish missing authorization/client protocol from other server rejection"
+  }
+}

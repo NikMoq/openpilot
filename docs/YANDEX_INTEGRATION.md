@@ -63,6 +63,48 @@ The official SDK exposes route events, segment limits and upcoming events:
 * https://yandex.com/maps-api/docs/mapkit/com/yandex/mapkit/navigation/automotive/UpcomingRoadEvent.html
 * https://yandex.com/maps-api/docs/mapkit/com/yandex/mapkit/road_events/EventTag.html
 
+### Follow-up: current SDK contract and the 403
+
+The current official Maven artifact `com.yandex.android:maps.mobile:4.45.0-full`
+was downloaded and inspected separately from the archived application. Exact
+artifact hashes and verified class/method presence are recorded in
+`docs/yandex_sdk_contract.json`; no SDK/native binaries are checked into Git.
+
+**Important distinction:** `DrivingRoute.getEvents()`, `getSpeedLimits()` and
+`Event.getSpeedLimit()` are present in ordinary Full MapKit. The separate NaviKit
+classes `UpcomingRoadEvent` and `Guidance` are absent from that artifact. Thus a
+route-event test can target Full MapKit with an own MapKit key; it is premature
+to assert that the separate NaviKit activation is required for every camera
+query. A real SDK route response is still required to confirm returned camera
+data and server entitlements.
+
+Archived application initialization checks for a nonempty API key before runtime
+initialization. Its ARM64 library contains the header names `X-YMapKit-Api-Key`
+and `x-yruntime-signature`; instruction references were verified (API key header
+at native VAs `0x19acafc`, `0x2281638`, signature reference `0x1752120`). Those
+references do not establish the exact route request method/body/signing contract.
+The anonymous GET omitted normal SDK initialization and is not an authenticated
+client test. A follow-up probe returned the same 10-byte 403 from nginx; the host
+had no HTTP_PROXY/HTTPS_PROXY/ALL_PROXY configured. This narrows the evidence but
+does not prove the precise server-side rejection rule.
+
+Native type families `RoadEventMetadata`, `LayerRoadEventMetadata`,
+`SegmentEvent`, and `roadevents.Config` exist in both the archived application
+and current SDK. A separate native tile layer exists; its endpoint/configuration
+and speed field units have not been reconstructed. Float fields in a protobuf
+parser are not enough to name a field speed or select a conversion factor.
+
+`tools/yandex_sdk_probe/` contains a source-only Android diagnostic class for one
+ordinary Full MapKit ONLINE route request with a caller-owned key. It exports
+original event tags, nullable camera limits, per-segment limits, geometry and the
+conditions-outdated flag. It does not normalize unknown units or control a car.
+Timeout/cancellation and snapshot-size budgets are included; error text and key
+material are not exported. Compilation was checked against the actual official
+SDK `classes.jar` using JDK 21 (`--release 8`), Android compile stubs and Android
+JSON API. This is not an executed Android test, installable APK, Linux runtime or
+proof of successful camera access. An Android harness and an own MapKit key are
+still required for the next live SDK request. A Yandex login alone is not a key.
+
 Official SDK initialization requires a developer API key. NaviKit requires
 additional activation; a Yandex account is not that key. Android/iOS SDKs do not
 establish a supported native Linux/Comma implementation:
