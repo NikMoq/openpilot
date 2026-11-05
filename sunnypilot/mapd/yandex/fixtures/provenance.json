@@ -1,0 +1,55 @@
+{
+  "scope": "Public VECTOR3 road-event observations only; not a camera inventory or posted-limit feed",
+  "sources": [
+    {
+      "url": "https://maps.yastatic.net/s3/front-maps-static/maps-front-maps/build/client/worker/content_provider.worker/089ee1eb891e663c037f.js",
+      "sha256": "09e42fbd9b91ff474d7b1099abf862032a684f5dae0896b62aaed2aef0e0c154",
+      "facts": "vmap3 protobuf schema; Tile.geometry sint32 deltas; geometrySizes; sequential per-feature geometry; POINT empty marker; tile-center/(2^bitness-1) conversion"
+    },
+    {
+      "url": "https://maps.yastatic.net/s3/front-maps-static/maps-front-maps/build/client/desktop/chunks/ymaps/ca57b789148da110cd60.yandex.ru.js",
+      "sha256": "3354651d090f7fdae78b1547cbeddddd5558a98fde9d1df25d0651430d2de48f",
+      "facts": "EPSG:3395 ellipsoidal Mercator inverse; a6378137 e.0818191908426"
+    },
+    {
+      "url": "https://maps.yastatic.net/s3/front-maps-static/maps-front-maps/build/client/desktop/chunks/base/c42ef5964e6c7eb24412.yandex.ru.js",
+      "sha256": "9f2ca425b07dd37423747a2f560336b77b79e77b4137c131ea8c7579d40532e0",
+      "facts": "module32448 supplies current public content_provider.worker path"
+    }
+  ],
+  "fixtures": [
+    {
+      "file": "moscow-4952-2568-z13.bin",
+      "bytes": 451,
+      "sha256": "6458fae69aabce9bb70060db84038bd62694f58cb6af04513b2b89ddb8ee0eca",
+      "url": "https://core-road-events-renderer.maps.yandex.net/2.x/tiles?trf&l=trfe&lang=ru_RU&x=4952&y=2568&z=13&format=protobuf&vec_protocol=3",
+      "x": 4952,
+      "y": 2568,
+      "z": 13,
+      "geometry_bitness": 8,
+      "observed_raw_types": [
+        "ACCIDENT",
+        "RECONSTRUCTION"
+      ],
+      "retrieval": "Anonymous public read-only web tile in research session; no account, cookies, token or user content credentials"
+    },
+    {
+      "file": "empty.bin",
+      "bytes": 2,
+      "sha256": "0b57459772db2f3f6986a135824545af8690c536a865454c3c664767dc2b73f0",
+      "origin": "https://core-road-events-renderer.maps.yandex.net/",
+      "research_artifact": "kr-ell.bin",
+      "note": "Actual empty public response0808. Empty response is not evidence of camera absence.",
+      "url": "https://core-road-events-renderer.maps.yandex.net/2.x/tiles?trf&l=trfe&lang=ru_RU&x=9964&y=5902&z=14&format=protobuf&vec_protocol=3",
+      "x": 9964,
+      "y": 5902,
+      "z": 14
+    }
+  ],
+  "coverage_limits": [
+    "Only POINT geometry is decoded; unknown geometry/schema fails closed",
+    "No classification of generic POLICE as actual mobile camera",
+    "No camera inventory completeness, posted speed units, expiry, direction or control eligibility established",
+    "No network calls in decoder/unit tests"
+  ]
+}
