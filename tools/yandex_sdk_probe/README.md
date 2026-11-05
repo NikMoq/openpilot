@@ -58,8 +58,8 @@ It exports only hosts/statuses or exception cause-class names.
 Successful SDK snapshots contain source/SDK identity, original route geometry
 as `[latitude,longitude]`, conditions-outdated flag, original per-segment limit
 values, event IDs/locations/tags and SDK enum ordinals, nullable camera limits
-and polyline positions. Ordinals are not claimed wire enum values. All speed
-units remain unknown until established from actual source evidence. No numeric
+and polyline positions. Ordinals are not claimed wire enum values. Raw values are retained with unknown input units; official SDK I18n formatting
+additionally exports canonical values and units. No manual conversion is used. No numeric
 city fallback, TTL, camera direction, completeness or control eligibility is
 invented. Event descriptions are omitted; oversized snapshots are rejected.
 
@@ -71,14 +71,21 @@ fixed categories and exception/SDK error class names.
 
 ## Executed status
 
-The Android APK build and signature verification passed. The signed package was
-installed in an isolated API-26 x86_64 emulator with an own active key. Route
-acquisition timed out, with forbidden/auth_rejected/api_key_mentioned/invalid_key
-hints. Ordinary Android HTTPS completed. No actual camera/limit payload has yet
-been obtained. The MapView A/B ended in Activity cancellation after key-related
-hints, so it is not a completed routing or camera-coverage test. See
-`docs/YANDEX_INTEGRATION.md` for detailed evidence and remaining authorization
-questions. Nothing was deployed to Comma or enabled for vehicle control.
+The Android build, signature verification and installation passed in an isolated
+API-26 x86_64 emulator. After the owner bound the key to this package, normal
+SDK routing succeeded. Initial routes had zero events: the probe now retains
+the route and requests one conditions update, waiting up to 12 seconds within
+the overall deadline. Results explicitly report whether that update arrived.
+Missing updates must not be interpreted as fresh empty camera coverage.
+
+Live tests returned 41 events on MKAD (35 SPEED_CONTROL), 139 on Krasnodar to
+Rostov (114 SPEED_CONTROL, 4 MOBILE_CONTROL), and 184 on Moscow to Voronezh
+(155 SPEED_CONTROL, 1 MOBILE_CONTROL). SDK-formatted camera and segment limits
+were obtained. General POLICE does not identify mobile patrols; POLICE_PATROL
+was not observed. These are route snapshots, not a complete regional inventory.
+See docs/yandex_sdk_live_evidence.json for result hashes and conditions status.
+Raw results and credentials stay outside Git. Nothing was deployed to Comma
+or enabled for vehicle control.
 
 References: [initialization](https://yandex.com/maps-api/docs/mapkit/android/generated/getting_started.html),
 [DrivingRoute](https://yandex.com/maps-api/docs/mapkit/com/yandex/mapkit/directions/driving/DrivingRoute.html),

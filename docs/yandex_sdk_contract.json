@@ -1,5 +1,5 @@
 {
-  "observed_date": "2026-11-05",
+  "observed_date": "2026-11-06",
   "artifact": "com.yandex.android:maps.mobile:4.45.0-full",
   "url": "https://repo.maven.apache.org/maven2/com/yandex/android/maps.mobile/4.45.0-full/maps.mobile-4.45.0-full.aar",
   "aar_bytes": 61346821,
@@ -17,13 +17,17 @@
     "com/yandex/mapkit/navigation/automotive/UpcomingRoadEvent.class",
     "com/yandex/mapkit/navigation/automotive/Guidance.class"
   ],
-  "verified_methods": ["DrivingRoute.getEvents()", "DrivingRoute.getSpeedLimits()", "Event.getSpeedLimit()"],
+  "verified_methods": [
+    "DrivingRoute.getEvents()",
+    "DrivingRoute.getSpeedLimits()",
+    "Event.getSpeedLimit()"
+  ],
   "normal_initialization": "Own MapKit API key must be set before MapKitFactory.initialize(Context)",
-  "runtime_camera_access_verified": false,
+  "runtime_camera_access_verified": true,
   "android_runtime_tested": true,
   "android_runtime_api": 26,
   "android_runtime_abi": "x86_64",
-  "runtime_outcome": "DrivingRouter callback did not complete within 60 seconds; sanitized SDK logging contains forbidden/auth_rejected/api_key_mentioned/invalid_key hints",
+  "runtime_outcome": "Normal SDK routes and explicit conditions updates returned SPEED_CONTROL, MOBILE_CONTROL, camera limits and segment limits after own key binding; no Comma deployment",
   "speed_unit_verified": false,
   "linux_runtime_supported_verified": false,
   "anonymous_route_probe": {
@@ -32,5 +36,8 @@
     "body": "Forbidden\n",
     "server": "nginx/1.26.2",
     "meaning": "Anonymous GET did not implement normal SDK initialization; cannot distinguish missing authorization/client protocol from other server rejection"
-  }
+  },
+  "sdk_speed_formatter_verified": true,
+  "speed_unit_evidence": "Raw fields retained; official I18n canonicalSpeed formats observed camera/road values as kilometers per hour. Raw field unit remains separately unverified.",
+  "live_evidence": "docs/yandex_sdk_live_evidence.json"
 }

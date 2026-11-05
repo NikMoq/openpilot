@@ -1,0 +1,69 @@
+{
+  "observed_date": "2026-11-06",
+  "source": "yandex_mapkit_full_sdk",
+  "sdk": "4.45.0-full",
+  "runtime": "owned headless Android API26 x86_64 emulator; not Comma",
+  "payloads_stored_outside_git": true,
+  "runs": [
+    {
+      "route": "mkad",
+      "result_file": "sdk-live-mkad-33e4e12c528948b2a9b4efcf04493f66.json",
+      "sha256": "218d084364249e727149ec647bd643741f40ad6a69cd861e9bc87f9a997aa943",
+      "events": 41,
+      "speed_control": 35,
+      "mobile_control": 0,
+      "police_patrol": 0,
+      "initial_events": 0,
+      "conditions_update_seen": true,
+      "conditions_outdated": false
+    },
+    {
+      "route": "m4",
+      "result_file": "sdk-live-m4-c08f61783b7e4e4599c74a7d1ec580bd.json",
+      "sha256": "60ff9b6598487d8733d30d062063ffeacbf08684c58745b35770cfad75e99fe1",
+      "events": 10,
+      "speed_control": 8,
+      "mobile_control": 0,
+      "police_patrol": 0,
+      "initial_events": 0,
+      "conditions_update_seen": true,
+      "conditions_outdated": false
+    },
+    {
+      "route": "rostov",
+      "result_file": "sdk-live-rostov-d7af9823372b40bfaf1200fab32ad6d0.json",
+      "sha256": "c1e2222cfc5b59ca00bda087d6e522561c534586c43c6817d368181f824fc6cf",
+      "events": 139,
+      "speed_control": 114,
+      "mobile_control": 4,
+      "police_patrol": 0,
+      "initial_events": 0,
+      "conditions_update_seen": true,
+      "conditions_outdated": false
+    },
+    {
+      "route": "voronezh",
+      "result_file": "sdk-live-voronezh-a69fb996225e467796fb5086fd893f47.json",
+      "sha256": "e3c440b88d0406cb7440c6e7fa5a467289752ae01069b2328314c178ae47bcba",
+      "events": 184,
+      "speed_control": 155,
+      "mobile_control": 1,
+      "police_patrol": 0,
+      "initial_events": 0,
+      "conditions_update_seen": true,
+      "conditions_outdated": false
+    },
+    {
+      "route": "rostov-back",
+      "result_file": "sdk-live-rostov-back-2f7eebbb75d74ac8b060e2397efd864a.json",
+      "sha256": "e17aebbb4d539568359eadf59ef0bb9b732984a3f34b18331ac487bbffb477e2",
+      "events": 118,
+      "speed_control": 99,
+      "mobile_control": 5,
+      "police_patrol": 0,
+      "initial_events": 0,
+      "conditions_update_seen": true,
+      "conditions_outdated": false
+    }
+  ]
+}

@@ -3,11 +3,13 @@ package org.sunnypilot.yandexprobe;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import com.yandex.mapkit.MapKitFactory;
 import com.yandex.mapkit.RequestPoint;
 import com.yandex.mapkit.RequestPointType;
 import com.yandex.mapkit.directions.DirectionsFactory;
 import com.yandex.mapkit.directions.driving.DrivingOptions;
+import com.yandex.mapkit.directions.driving.ConditionsListener;
 import com.yandex.mapkit.directions.driving.DrivingRoute;
 import com.yandex.mapkit.directions.driving.DrivingRouter;
 import com.yandex.mapkit.directions.driving.DrivingRouterType;
@@ -24,6 +26,8 @@ import com.yandex.runtime.logging.LoggingFactory;
 import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -43,11 +47,41 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
 
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final Callback callback;
-  private final Runnable timeout = () -> finish(null, "timeout");
+  private boolean done;
+  private DrivingRoute retainedRoute;
+  private boolean awaitingConditions;
+  private boolean conditionsUpdateSeen;
+  private final Runnable timeout = () -> {
+    if (retainedRoute == null) finish(null, "timeout");
+    else completeConditionsPhase("not_observed");
+  };
+  private final Runnable conditionsTimeout = () -> completeConditionsPhase("not_observed");
+  private final Runnable conditionsSnapshot = () -> {
+    if (!done && awaitingConditions && conditionsUpdateSeen) completeConditionsPhase("observed");
+  };
+  private long deadlineUptimeMillis;
+  private long conditionsWaitBudgetMillis;
+  private int initialEventCount = -1;
+  private boolean conditionsRequestIssued;
+  private boolean conditionsListenerRegistered;
+  private String conditionsUpdateStatus = "not_observed";
+  private String conditionsRequestError;
+  // The SDK keeps a weak listener reference. Retain both the listener and its
+  // exact WeakReference wrapper until completion/removal.
+  private final ConditionsListener conditionsListener = new ConditionsListener() {
+    @Override public void onConditionsUpdated() {
+      if (done || !awaitingConditions || !conditionsRequestIssued) return;
+      conditionsUpdateSeen = true;
+      // Defer serialization until requestConditionsUpdate/add-listener unwinds,
+      // including when a native callback arrives synchronously.
+      handler.post(conditionsSnapshot);
+    }
+    @Override public void onConditionsOutdated() { }
+  };
+  private final WeakReference<ConditionsListener> conditionsReference = new WeakReference<>(conditionsListener);
   private DrivingRouter router;
   private DrivingSession session;
   private boolean startedLifecycle;
-  private boolean done;
   private final String[] hints = {"forbidden", "auth_rejected", "tls_certificate", "dns",
       "connection_failed", "timeout", "config_failed", "signature_invalid", "api_key_mentioned",
       "invalid_key_hint", "missing_key_hint", "activation_hint", "service_hint", "quota_hint", "package_hint", "region_hint"};
@@ -72,6 +106,7 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
       throw new IllegalArgumentException("Invalid probe arguments");
     }
     RouteProbe probe = new RouteProbe(callback);
+    probe.deadlineUptimeMillis = SystemClock.uptimeMillis() + timeoutMs;
     probe.handler.postDelayed(probe.timeout, timeoutMs);
     try {
       // No key field, log, file, intent or result serialization in this probe.
@@ -99,13 +134,52 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
   public void cancel() { requireMainThread(); finish(null, "cancelled"); }
 
   @Override public void onDrivingRoutes(List<DrivingRoute> routes) {
-    if (done) return;
+    if (done || retainedRoute != null) return;
     try {
       if (routes == null || routes.size() != 1) {
         finish(null, "expected_one_route");
         return;
       }
-      DrivingRoute route = routes.get(0);
+      retainedRoute = routes.get(0);
+      initialEventCount = retainedRoute.getEvents().size();
+      if (initialEventCount > 10000) {
+        finish(null, "snapshot_budget_exceeded");
+        return;
+      }
+      conditionsWaitBudgetMillis = Math.min(12000L, Math.max(0L, deadlineUptimeMillis - SystemClock.uptimeMillis()));
+      if (conditionsWaitBudgetMillis == 0) {
+        completeConditionsPhase("not_observed");
+        return;
+      }
+      awaitingConditions = true;
+      handler.postDelayed(conditionsTimeout, conditionsWaitBudgetMillis);
+      conditionsListenerRegistered = true;
+      retainedRoute.addConditionsListener(conditionsReference);
+      conditionsRequestIssued = true;
+      retainedRoute.requestConditionsUpdate(); // Exactly one explicit conditions request; no retry.
+    } catch (RuntimeException | AssertionError | LinkageError error) {
+      if (retainedRoute == null) {
+        finish(null, "route_callback:" + error.getClass().getSimpleName());
+      } else {
+        conditionsRequestError = error.getClass().getSimpleName();
+        completeConditionsPhase(conditionsUpdateSeen ? "observed" : "not_observed");
+      }
+    }
+  }
+
+  private void completeConditionsPhase(String status) {
+    if (done) return;
+    awaitingConditions = false;
+    conditionsUpdateStatus = conditionsUpdateSeen ? "observed" : status;
+    handler.removeCallbacks(conditionsTimeout);
+    handler.removeCallbacks(conditionsSnapshot);
+    if (retainedRoute == null) finish(null, "missing_route");
+    else snapshot(retainedRoute);
+  }
+
+  private void snapshot(DrivingRoute route) {
+    if (done) return;
+    try {
       List<Point> geometry = route.getGeometry().getPoints();
       List<Event> events = route.getEvents();
       List<Float> limits = route.getSpeedLimits();
@@ -116,6 +190,13 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
       JSONArray points = new JSONArray(), rawEvents = new JSONArray(), rawLimits = new JSONArray();
       for (Point point : geometry) points.put(point(point));
       for (Float limit : limits) rawLimits.put(rawNumber(limit));
+      JSONArray speedFormats = new JSONArray();
+      Set<Float> uniqueLimits = new LinkedHashSet<>(limits);
+      int formatCount = 0;
+      for (Float limit : uniqueLimits) {
+        if (formatCount++ >= 32) break;
+        speedFormats.put(SdkSpeedFormatter.describe(limit));
+      }
       for (Event event : events) {
         JSONArray tags = new JSONArray();
         for (EventTag tag : event.getTags()) {
@@ -125,29 +206,50 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
         rawEvents.put(new JSONObject().put("event_id", event.getEventId())
             .put("location", point(event.getLocation())).put("tags", tags)
             .put("speed_limit_raw", rawNumber(event.getSpeedLimit()))
+            .put("speed_limit_sdk_format", SdkSpeedFormatter.describe(event.getSpeedLimit()))
             .put("polyline_segment_index", position.getSegmentIndex())
             .put("polyline_segment_position", position.getSegmentPosition()));
       }
       String result = new JSONObject().put("schema_version", 1)
           .put("source", "yandex_mapkit_full_sdk").put("sdk_build", "4.45.0-full")
           .put("observed_at_ms", System.currentTimeMillis()).put("speed_unit", "unknown")
+          .put("initial_event_count", initialEventCount)
+          .put("conditions_update_requested", conditionsRequestIssued)
+          .put("conditions_update_seen", conditionsUpdateSeen)
+          .put("conditions_update_status", conditionsUpdateStatus)
+          .put("conditions_wait_budget_ms", conditionsWaitBudgetMillis)
+          .put("conditions_request_error_class", conditionsRequestError == null ? JSONObject.NULL : conditionsRequestError)
           .put("conditions_outdated", route.isAreConditionsOutdated())
           .put("route_geometry_lat_lon", points).put("segment_speed_limits_raw", rawLimits)
+          .put("sdk_speed_format_examples", speedFormats).put("sdk_speed_format_examples_complete", uniqueLimits.size() <= 32)
           .put("events", rawEvents).toString();
       finish(result, null);
-    } catch (RuntimeException | JSONException error) {
+    } catch (RuntimeException | JSONException | AssertionError | LinkageError error) {
       finish(null, "snapshot:" + error.getClass().getSimpleName());
     }
   }
 
   @Override public void onDrivingRoutesError(com.yandex.runtime.Error error) {
-    finish(null, "sdk_error:" + (error == null ? "unknown" : error.getClass().getSimpleName()));
+    String category = "sdk_error:" + (error == null ? "unknown" : error.getClass().getSimpleName());
+    if (retainedRoute == null) finish(null, category);
+    else {
+      conditionsRequestError = category;
+      completeConditionsPhase("not_observed");
+    }
   }
 
   private void finish(String snapshot, String error) {
     if (done) return;
     done = true;
     handler.removeCallbacks(timeout);
+    handler.removeCallbacks(conditionsTimeout);
+    handler.removeCallbacks(conditionsSnapshot);
+    awaitingConditions = false;
+    try {
+      if (conditionsListenerRegistered && retainedRoute != null) retainedRoute.removeConditionsListener(conditionsReference);
+    } catch (RuntimeException ignored) { }
+    conditionsListenerRegistered = false;
+    retainedRoute = null;
     try { if (logging != null) logging.unsubscribe(logReference); } catch (RuntimeException ignored) { }
     try { callback.onDiagnostics(diagnosticSnapshot()); } catch (RuntimeException ignored) { }
     try { if (session != null) session.cancel(); } catch (RuntimeException ignored) { }

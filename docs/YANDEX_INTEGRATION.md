@@ -144,10 +144,9 @@ Double-extra option. The `networkOnly` diagnostic never reads the key or starts
 MapKit. Logging exports only fixed counters/cause-class names, never raw SDK
 messages, verbose info, headers, tokens or general logcat.
 
-Remaining blocker: establish why the active own key is not authorized by the
-SDK backend; verify actual key/application rights or activation with Yandex.
-Do not claim that paying, another key, an account password or a binding change
-is proven to fix this. Camera inventory and speed units remain unverified.
+Historical authorization blocker resolved in subsequent SDK tests after the owner
+bound the key to org.sunnypilot.yandexprobe. Binding versus activation delay is
+not isolated as the cause. See the current verified status below.
 
 Official SDK initialization requires a developer API key. NaviKit requires
 additional activation; a Yandex account is not that key. Android/iOS SDKs do not
@@ -182,3 +181,36 @@ Linux Docker full camera/Waze/Yandex/ICBM offline suite: 1111 passed, 9 skipped
 50 passed. Ruff and Git whitespace checks pass. These checks do not establish
 Navigator camera access or road readiness; there was no Comma deployment for
 this inactive acquisition stage.
+
+
+## Verified live SDK acquisition — 6 November 2026
+
+The own bound key now obtains genuine route events through Full MapKit 4.45.0.
+The initial route callback contained zero events. Explicit requestConditionsUpdate
+followed by ConditionsListener produced fresh events; the client now waits for
+that phase and records its completion separately from the initial route.
+
+| Route | Events | SPEED_CONTROL | MOBILE_CONTROL |
+| --- | ---: | ---: | ---: |
+| MKAD | 41 | 35 | 0 |
+| M4 near Krasnodar | 10 | 8 | 0 |
+| Krasnodar to Rostov | 139 | 114 | 4 |
+| Moscow to Voronezh | 184 | 155 | 1 |
+| Rostov to Krasnodar | 118 | 99 | 5 |
+
+All listed runs observed the requested conditions update and reported conditions
+not outdated. Counts are time/route specific. POLICE is broad, not evidence of
+patrols; POLICE_PATROL was not observed. Reverse routing returns a different set,
+so future acquisition must consider both approaches for mobile events while
+retaining the speed limit of the actual driven road. No completeness claim.
+
+The SDK I18n canonicalSpeed/localizeSpeed formatter exposes camera and road
+limits in kilometers per hour (including mobile limits such as 50/70/90/110).
+Raw values remain preserved without an assumed input-unit conversion. The
+probe uses no invented urban fallback and no NaviKit effective-limit API.
+
+The checked-in count/hash index is docs/yandex_sdk_live_evidence.json; actual
+SDK JSON and credentials remain outside Git. Android compile/lint/package and
+signed-emulator execution passed. This does not implement a Linux SDK bridge:
+Comma acquisition, expiry/merging and vehicle-control integration remain to be
+implemented and validated before enabling the Yandex toggle.
