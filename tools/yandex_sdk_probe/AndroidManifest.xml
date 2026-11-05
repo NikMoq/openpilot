@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <application android:label="Yandex route diagnostic" android:allowBackup="false"
+      android:usesCleartextTraffic="false"
+      android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <meta-data android:name="yandex.maps.runtime.stl.linkage" android:value="static" />
+    <service android:name="com.yandex.runtime.connectivity.internal.ConnectivityService"
+        android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
+    <activity android:name=".ProbeActivity" android:exported="true"
+        android:excludeFromRecents="true" android:configChanges="orientation|screenSize" />
+  </application>
+</manifest>

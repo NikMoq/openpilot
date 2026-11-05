@@ -1,0 +1,36 @@
+plugins {
+  id 'com.android.application' version '8.9.1'
+}
+
+android {
+  namespace 'org.sunnypilot.yandexprobe'
+  compileSdk 36
+  defaultConfig {
+    applicationId 'org.sunnypilot.yandexprobe'
+    minSdk 26
+    targetSdk 35
+    versionCode 1
+    versionName '0.1-diagnostic'
+    ndk { abiFilters 'x86_64' } // This diagnostic package targets the isolated emulator.
+  }
+  sourceSets.main {
+    manifest.srcFile 'AndroidManifest.xml'
+    java.srcDirs = ['src']
+  }
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+  buildTypes.release {
+    minifyEnabled false
+    debuggable true // Diagnostic-only package: permits run-as for private test input.
+    // Deliberately unsigned: no private key or automatic debug keystore.
+    signingConfig null
+  }
+}
+androidComponents {
+  beforeVariants(selector().withBuildType('debug')) { variant -> variant.enable = false }
+}
+dependencies {
+  implementation 'com.yandex.android:maps.mobile:4.45.0-full'
+}

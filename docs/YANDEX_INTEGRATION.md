@@ -94,16 +94,60 @@ and current SDK. A separate native tile layer exists; its endpoint/configuration
 and speed field units have not been reconstructed. Float fields in a protobuf
 parser are not enough to name a field speed or select a conversion factor.
 
-`tools/yandex_sdk_probe/` contains a source-only Android diagnostic class for one
+`tools/yandex_sdk_probe/` contains an Android diagnostic client for one
 ordinary Full MapKit ONLINE route request with a caller-owned key. It exports
 original event tags, nullable camera limits, per-segment limits, geometry and the
 conditions-outdated flag. It does not normalize unknown units or control a car.
 Timeout/cancellation and snapshot-size budgets are included; error text and key
 material are not exported. Compilation was checked against the actual official
 SDK `classes.jar` using JDK 21 (`--release 8`), Android compile stubs and Android
-JSON API. This is not an executed Android test, installable APK, Linux runtime or
-proof of successful camera access. An Android harness and an own MapKit key are
-still required for the next live SDK request. A Yandex login alone is not a key.
+JSON API. It is not a Linux/Comma runtime or proof of successful camera access.
+A Yandex login alone is not a key.
+
+### Executed Android SDK diagnostic
+
+The user subsequently provided an active own MapKit key and explicitly authorized
+one disposable APK-signing key for this isolated test only. An ordinary x86_64
+Android APK was built with AGP 8.9.1/Gradle 8.14, signed and signature-verified,
+then installed in a separate headless Android API-26 emulator. No firmware keys,
+Comma installation, vehicle mode, GPS or existing Waze deployment were changed.
+SDK credentials, signing material, APKs, SDK binaries, AVD and build outputs are
+outside Git. The key is supplied only in the app-private owner-0600 input file.
+
+Actual results on 2026-11-05:
+
+* Ordinary HTTPS in the same Android app: yandex.ru returned 302 and the bare
+  mobile route endpoint returned 403; default TLS verification was retained.
+* A chosen-coordinate Krasnodar route through Full MapKit did not complete
+  within 45/60 seconds. This is a failed acquisition, not an empty camera list.
+* Sanitized SDK logging for a 60-second run inspected eight messages: four
+  `forbidden`, four `auth_rejected`, four `api_key_mentioned`, and four
+  `invalid_key_hint` classifications. DNS, certificate, connection, quota,
+  package and region hints were zero; no explicit HTTP-code evidence was parsed.
+  These are limited diagnostic hints, not the complete server rejection reason.
+* Windows had an enabled loopback proxy and fake-IP DNS (198.18.x.x). Normal
+  Android proxy configuration and an emulator-only transparent host-proxy path
+  were tested without changing Windows proxy settings. SDK acquisition still
+  failed. General HTTPS success is not proof of SDK authorization.
+* The user key-settings screenshot showed an empty application-ID restriction.
+  No different application identifier restriction was visible. Own runtime key
+  transport was checked by digest comparison without exporting the key/digest.
+
+An optional normal MapView A/B mode is included, not asserted to be required for
+Directions callbacks. Its test ended in Activity cancellation after key-related
+hints; it is not a successful route or evidence of camera coverage. No key
+rotation, other application's key or TLS/certificate bypass was used.
+
+Per-run nonsecret IDs and completion timestamps reject stale result files.
+Coordinate strings via adb are parsed explicitly because `am start` has no
+Double-extra option. The `networkOnly` diagnostic never reads the key or starts
+MapKit. Logging exports only fixed counters/cause-class names, never raw SDK
+messages, verbose info, headers, tokens or general logcat.
+
+Remaining blocker: establish why the active own key is not authorized by the
+SDK backend; verify actual key/application rights or activation with Yandex.
+Do not claim that paying, another key, an account password or a binding change
+is proven to fix this. Camera inventory and speed units remain unverified.
 
 Official SDK initialization requires a developer API key. NaviKit requires
 additional activation; a Yandex account is not that key. Android/iOS SDKs do not

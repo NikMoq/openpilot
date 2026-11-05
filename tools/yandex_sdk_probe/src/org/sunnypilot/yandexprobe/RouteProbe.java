@@ -17,8 +17,16 @@ import com.yandex.mapkit.directions.driving.VehicleOptions;
 import com.yandex.mapkit.geometry.Point;
 import com.yandex.mapkit.geometry.PolylinePosition;
 import com.yandex.mapkit.road_events.EventTag;
+import com.yandex.runtime.logging.LogListener;
+import com.yandex.runtime.logging.LogMessage;
+import com.yandex.runtime.logging.Logging;
+import com.yandex.runtime.logging.LoggingFactory;
+import java.lang.ref.WeakReference;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -28,6 +36,9 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
   public interface Callback {
     void onSnapshot(String json);
     void onFailure(String category);
+    default void onDiagnostics(String sanitizedJson) { }
+    default void onSdkInitialized() { }
+    default void onSdkStopping() { }
   }
 
   private final Handler handler = new Handler(Looper.getMainLooper());
@@ -37,6 +48,18 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
   private DrivingSession session;
   private boolean startedLifecycle;
   private boolean done;
+  private final String[] hints = {"forbidden", "auth_rejected", "tls_certificate", "dns",
+      "connection_failed", "timeout", "config_failed", "signature_invalid", "api_key_mentioned",
+      "invalid_key_hint", "missing_key_hint", "activation_hint", "service_hint", "quota_hint", "package_hint", "region_hint"};
+  private final int[] diagnosticCounts = new int[hints.length + 200];
+  private int diagnosticMessages;
+  private boolean diagnosticsClosed;
+  private Logging logging;
+  private final LogListener logListener = this::classifyMessage;
+  private final WeakReference<LogListener> logReference = new WeakReference<>(logListener);
+  private static final Pattern HTTP_STATUS = Pattern.compile(
+      "\\b(?:http(?:/[0-9.]+)?(?:\\s+status)?|status(?:\\s+code)?)(?:\\s+|\\s*[:=]\\s*)([45][0-9]{2})\\b",
+      Pattern.CASE_INSENSITIVE);
 
   private RouteProbe(Callback callback) { this.callback = callback; }
 
@@ -52,8 +75,12 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
     probe.handler.postDelayed(probe.timeout, timeoutMs);
     try {
       // No key field, log, file, intent or result serialization in this probe.
+      MapKitFactory.setLocale("ru_RU");
       MapKitFactory.setApiKey(ownApiKey);
       MapKitFactory.initialize(context.getApplicationContext());
+      probe.logging = LoggingFactory.getLogging();
+      probe.logging.subscribe(probe.logReference);
+      callback.onSdkInitialized();
       MapKitFactory.getInstance().onStart();
       probe.startedLifecycle = true;
       probe.router = DirectionsFactory.getInstance().createDrivingRouter(DrivingRouterType.ONLINE);
@@ -121,11 +148,56 @@ public final class RouteProbe implements DrivingSession.DrivingRouteListener {
     if (done) return;
     done = true;
     handler.removeCallbacks(timeout);
+    try { if (logging != null) logging.unsubscribe(logReference); } catch (RuntimeException ignored) { }
+    try { callback.onDiagnostics(diagnosticSnapshot()); } catch (RuntimeException ignored) { }
     try { if (session != null) session.cancel(); } catch (RuntimeException ignored) { }
     session = null;
     router = null;
+    try { callback.onSdkStopping(); } catch (RuntimeException ignored) { }
     try { if (startedLifecycle) MapKitFactory.getInstance().onStop(); } catch (RuntimeException ignored) { }
     if (snapshot != null) callback.onSnapshot(snapshot); else callback.onFailure(error);
+  }
+
+  private synchronized void classifyMessage(LogMessage message) {
+    if (diagnosticsClosed || diagnosticMessages >= 4096 || message == null) return;
+    diagnosticMessages++;
+    String raw = message.getMessage(); // Never request scope/verbose info or retain raw SDK text.
+    if (raw == null) return;
+    String text = raw.substring(0, Math.min(raw.length(), 8192)).toLowerCase(Locale.ROOT);
+    boolean failed = text.contains("fail") || text.contains("error") || text.contains("invalid");
+    boolean[] matches = {text.contains("forbidden"), text.contains("unauthorized") || text.contains("not authorized")
+        || text.contains("invalid api key") || text.contains("authentication failed"),
+        text.contains("certificate") && (failed || text.contains("verify") || text.contains("not ok")),
+        text.contains("could not resolve") || text.contains("name resolution failed") || text.contains("unknown host"),
+        text.contains("connection refused") || text.contains("connection reset") || text.contains("failed to connect")
+        || text.contains("couldn't connect") || text.contains("connection failed"),
+        text.contains("timed out") || text.contains("timeout"), text.contains("config") && failed,
+        text.contains("signature") && (failed || text.contains("mismatch")),
+        text.contains("api key") || text.contains("api-key") || text.contains("api_key") || text.contains("apikey"),
+        text.contains("invalid key") || text.contains("invalid api") || text.contains("key is invalid"),
+        text.contains("missing key") || text.contains("key is missing") || text.contains("empty key"),
+        text.contains("activation") || text.contains("not activated"), text.contains("service") && failed,
+        text.contains("quota") || text.contains("limit exceeded"), text.contains("package") || text.contains("application id"),
+        text.contains("region") || text.contains("country")};
+    for (int i = 0; i < matches.length; i++) if (matches[i]) diagnosticCounts[i]++;
+    Matcher status = HTTP_STATUS.matcher(text);
+    for (int i = 0; i < 16 && status.find(); i++) {
+      int index = hints.length + Integer.parseInt(status.group(1)) - 400;
+      diagnosticCounts[index] = Math.min(65535, diagnosticCounts[index] + 1);
+    }
+  }
+
+  private synchronized String diagnosticSnapshot() {
+    diagnosticsClosed = true;
+    JSONObject output = new JSONObject(), counters = new JSONObject(), statuses = new JSONObject();
+    try {
+      for (int i = 0; i < hints.length; i++) counters.put(hints[i], diagnosticCounts[i]);
+      for (int i = hints.length; i < diagnosticCounts.length; i++) if (diagnosticCounts[i] != 0) {
+        statuses.put(Integer.toString(400 + i - hints.length), diagnosticCounts[i]);
+      }
+      return output.put("messages_inspected", diagnosticMessages).put("message_budget", 4096)
+          .put("classification_hints", counters).put("explicit_http_status_counts", statuses).toString();
+    } catch (JSONException ignored) { return "{\"diagnostics_unavailable\":true}"; }
   }
 
   private static JSONArray point(Point p) throws JSONException {

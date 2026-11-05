@@ -20,6 +20,10 @@
   "verified_methods": ["DrivingRoute.getEvents()", "DrivingRoute.getSpeedLimits()", "Event.getSpeedLimit()"],
   "normal_initialization": "Own MapKit API key must be set before MapKitFactory.initialize(Context)",
   "runtime_camera_access_verified": false,
+  "android_runtime_tested": true,
+  "android_runtime_api": 26,
+  "android_runtime_abi": "x86_64",
+  "runtime_outcome": "DrivingRouter callback did not complete within 60 seconds; sanitized SDK logging contains forbidden/auth_rejected/api_key_mentioned/invalid_key hints",
   "speed_unit_verified": false,
   "linux_runtime_supported_verified": false,
   "anonymous_route_probe": {
