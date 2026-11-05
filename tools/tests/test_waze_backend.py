@@ -302,3 +302,24 @@ def test_credentials_cannot_be_stored_in_checkout():
 def test_transport_rejects_unsafe_targets_without_network(url):
   with pytest.raises(ValueError, match="approved HTTPS"):
     request(url)
+
+
+def test_captured_server_placeholder_is_empty_for_requested_tiles():
+  body = (FIXTURES / "empty-placeholder.wdf").read_bytes()
+  for identifier in (394015501, 348134252):
+    assert parse_tile(body, identifier) == []
+  # Batch framing still binds every response to the requested outer tile ID.
+  framed = b"...." + struct.pack(">I", 1) + struct.pack(">III", 394015501, 0, len(body)) + body
+  with pytest.raises(ValueError):
+    split_batch(framed, [348134252])
+
+
+def test_modified_placeholder_cannot_bypass_tile_identity():
+  body = (FIXTURES / "empty-placeholder.wdf").read_bytes()
+  raw = bytearray(zlib.decompress(body[20:]))
+  # Change harmless metadata, retaining a well-formed WZDF and wrong inner ID.
+  raw[-1] ^= 1
+  compressed = zlib.compress(raw)
+  changed = body[:12] + struct.pack("<II", len(compressed), len(raw)) + compressed
+  with pytest.raises(ValueError, match="tile header mismatch"):
+    parse_tile(changed, 394015501)

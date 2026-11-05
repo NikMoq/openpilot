@@ -7,6 +7,7 @@ The speed byte's units remain unknown; it is never converted into a limit.
 """
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 import re
@@ -109,6 +110,13 @@ def parse_tile(body: bytes, expected_tile: int) -> list[dict]:
       raise ValueError("Invalid Waze fixed-camera section bounds")
     spans.append((base + (end if end == previous else start), base + end))
     previous = end
+  # Public server placeholder observed byte-for-byte on independent host/Comma
+  # requests (2026-11-05). It contains no camera records, but its embedded tile
+  # ID is a constant rather than the requested tile. Match only this exact body;
+  # normal empty tiles and every other identity mismatch keep strict validation.
+  # This is an empty server observation, never proof of camera inventory coverage.
+  if hashlib.sha256(body).hexdigest() == "97bef6b2e5764dbe70668d6257f3f1b7e0ac729e95c08e50ff3c583db3e1728b":
+    return []
   start, end = spans[26]
   if end - start < 12 or struct.unpack_from("<I", raw, start)[0] != expected_tile:
     raise ValueError("Waze fixed-camera tile header mismatch")

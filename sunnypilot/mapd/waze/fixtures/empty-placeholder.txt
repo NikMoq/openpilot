@@ -1,0 +1,5 @@
+Public fixed-tile response, 2026-11-05. No account or credential content.
+Observed independently on Comma and host for requested tile 394015501.
+155-byte WZDF SHA-256: 97bef6b2e5764dbe70668d6257f3f1b7e0ac729e95c08e50ff3c583db3e1728b
+Section25 empty; section26=(486009000,0,1346574557); count28 alignment2.
+Exact-byte compatibility only. Not proof of complete camera inventory.
