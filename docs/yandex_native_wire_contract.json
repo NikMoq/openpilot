@@ -1,0 +1,109 @@
+{
+  "input_sha256": "126607c7824398ca365c1e3eba1718d92e6bf7abeda419c610442b54d3e73f9d",
+  "execution": "Offline Linux Docker yandex-native-analysis:local; capstone and pyelftools; no SDK execution",
+  "type": "yandex.maps.proto.driving.conditions_request.ConditionsRequest",
+  "typename_va": "0x2a9ad0",
+  "get_type_name_va": "0x1bb59d8",
+  "vtable_address_point": "0x22111b0",
+  "parse_va": "0x1bb55c8",
+  "serialize_va": "0x1bb5778",
+  "aps2": {
+    "relocation_count": 161222,
+    "bytes_consumed": 625404,
+    "bytes_total": 625404
+  },
+  "fields": [
+    {
+      "number": 3,
+      "wire_types": [
+        0,
+        2
+      ],
+      "cardinality": "repeated",
+      "value": "32-bit varint, no zigzag transform observed; semantic name and exact declared uint32/enum type unknown",
+      "object_offsets": [
+        "0x18",
+        "0x20"
+      ],
+      "evidence_va": [
+        "0x1bb5658",
+        "0x1bb5680",
+        "0x1bb56d0",
+        "0x1bb57ac",
+        "0x1bb57bc"
+      ]
+    },
+    {
+      "number": 4,
+      "wire_types": [
+        2
+      ],
+      "cardinality": "optional",
+      "value": "yandex.maps.proto.driving.route_representation.RouteRepresentation",
+      "object_offset": "0x28",
+      "mutable_helper": "0x181026c",
+      "nested_allocator": "0x1bbe5a8",
+      "nested_get_type_name": "0x1bbe594",
+      "nested_typename": "0x281683",
+      "evidence_va": [
+        "0x1bb56ac",
+        "0x1bb56b8",
+        "0x1bb5824",
+        "0x1bb5828"
+      ]
+    }
+  ],
+  "unknown": [
+    "Field 3 semantic meaning",
+    "Request HTTP envelope/authentication",
+    "RouteRepresentation inner fields",
+    "Speed unit semantics"
+  ],
+  "notes": "Parser dispatch recognizes only field numbers3/4; other tags use unknown-field path. Direct BL scan finds mutable helper called by generated parser/copy only, not semantic population; inlined population not excluded. No schema guessed from SDK JSON.",
+  "route_representation": {
+    "parser_va": "0x1bbe210",
+    "serializer_va": "0x1bbb148",
+    "fields": [
+      {
+        "number": 1,
+        "wire_type": 2,
+        "type": "optional common2.geometry.Polyline; opaque wire bytes"
+      },
+      {
+        "number": 2,
+        "wire_type": 2,
+        "type": "optional string/bytes; semantic name unknown"
+      }
+    ]
+  },
+  "speed_limit": {
+    "parser_va": "0x1bc46b4",
+    "serializer_va": "0x1bc4818",
+    "fields": [
+      {
+        "number": 1,
+        "wire_type": 5,
+        "type": "float32",
+        "unit": "UNKNOWN"
+      },
+      {
+        "number": 2,
+        "wire_type": 0,
+        "type": "signed int32; sign-extended serialization at0x1bc486c",
+        "semantic_name": "UNKNOWN"
+      }
+    ]
+  },
+  "speed_limits": {
+    "parser_va": "0x1bc4a40",
+    "fields": [
+      {
+        "number": 1,
+        "wire_type": 2,
+        "type": "repeated SpeedLimit",
+        "helper_va": "0x17e9140"
+      }
+    ]
+  },
+  "codec_scope": "Raw verified fields only. Unknown field numbers retained, no network root-envelope/authentication, event/control semantics or speed-unit mapping. Synthetic vectors only, no native response fixture."
+}

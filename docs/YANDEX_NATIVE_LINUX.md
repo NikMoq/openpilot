@@ -50,12 +50,28 @@ field names/numbers match the server protocol. The initial SDK route contained
 zero events; a separate conditions update produced the camera payload. A native
 client therefore needs both route acquisition and its bound conditions exchange.
 
-Known gaps: exact HTTP method/path/body envelope; route/session binding for the
-conditions request; normal own-key/application authorization; error/compression
-formats; and native speed field semantics. Header names in a library do not prove
-which headers are mandatory, or establish an authentication signature algorithm.
-No borrowed application key, identity rotation, certificate bypass or fabricated
-signature is part of this implementation.
+Static analysis now confirms GET for the route path and POST for the conditions
+path, with a serialized protobuf body and application/x-protobuf content type.
+The service base URL is configuration supplied; a production host was not
+established from these code paths alone.
+
+The shared header builder computes X-YRuntime-Signature using HMAC-SHA1 and an
+embedded 16-byte key. The key value was not read or extracted. The generic GET
+and POST dispatch paths are consistent with using that builder, although one
+intermediate virtual/thread dispatch remains unresolved. This does not prove
+the server's exact signature requirement or authorize borrowing credentials.
+
+One bounded normal-TLS Linux Docker GET with the owner's known-working MapKit
+API key header still returned HTTP403, 10 bytes, SHA-256
+`c029d1c560ecb35bbb632f9f7102907b41a289e258055d477f92e21884f9ab79`.
+The request did not implement the complete SDK wire/authentication contract;
+it does not prove that the owner's key is invalid. No key was embedded in the
+script, passed in command-line arguments or exported in the result.
+
+Remaining gaps: full service/request contract, normal own-key/application
+authorization, semantic population and route binding of the conditions request,
+response root/error/compression formats, native event and speed field semantics.
+No borrowed application key, identity rotation or certificate bypass is used.
 
 Offline Linux inspection of the official SDK ARM64 ELF (SHA-256
 `126607c7824398ca365c1e3eba1718d92e6bf7abeda419c610442b54d3e73f9d`)
@@ -64,7 +80,18 @@ virtual address `0x2a9ad0`, and `route_events.RouteEvents` at `0x297dfb`.
 Neither `conditions_request.proto` nor `route_events.proto` occurs in that
 artifact. This narrow check recovered no field numbers/types or speed units;
 it does not exclude differently named, packed descriptors or generated parsers.
-These type-name observations alone are insufficient to implement a wire client.
+Subsequent generated-parser/serializer analysis recovered some actual field
+numbers and wire types. See [the raw contract](yandex_native_wire_contract.json).
+The dependency-free native_codec.py now encodes/decodes the confirmed raw shapes
+of ConditionsRequest, RouteRepresentation, SpeedLimit and SpeedLimits. Polyline
+and representation field2 remain opaque; field3 has no invented semantic enum;
+speed fields have no asserted units. The module neither authenticates HTTP nor
+turns a decoded numeric value into a control limit.
+
+The combined Yandex Linux Docker suite now passes 114 tests, including 27 fixed
+synthetic native-wire cases. The native wire codec has not decoded an actual
+server conditions response; its confirmed component schemas are not a claimed
+complete network envelope.
 
 The public HTTP Routing API documents geometry/travel times and road flags, but
 does not document a camera/mobile-event response contract. It is not treated as
