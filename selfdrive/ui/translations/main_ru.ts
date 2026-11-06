@@ -4130,12 +4130,20 @@ Default: %1. Custom HTTPS sources do not use the backup. Source and direction da
         <translation>Яндекс.Навигатор</translation>
     </message>
     <message>
-        <source>PHASE 2</source>
-        <translation>ВТОРОЙ ЭТАП</translation>
+        <source>Yandex Status</source>
+        <translation>Состояние Яндекса</translation>
     </message>
     <message>
-        <source>Yandex Navigator will be added in the second phase. This source is not available yet.</source>
-        <translation>Яндекс.Навигатор будет добавлен на втором этапе. Этот источник пока недоступен.</translation>
+        <source>Speed cameras, mobile cameras, and police posts.</source>
+        <translation>Камеры контроля скорости, мобильные камеры и полицейские посты.</translation>
+    </message>
+    <message>
+        <source>Waiting for direction</source>
+        <translation>Ожидание направления</translation>
+    </message>
+    <message>
+        <source>Source unavailable</source>
+        <translation>Источник недоступен</translation>
     </message>
     <message>
         <source>Connected</source>

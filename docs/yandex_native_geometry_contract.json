@@ -1,0 +1,18 @@
+{
+  "status": "VERIFIED_STATIC_WIRE_CONTRACT",
+  "sdk": "official Android Maps Mobile 4.45.0-full; portable protobuf representation only",
+  "elf_sha256": "126607c7824398ca365c1e3eba1718d92e6bf7abeda419c610442b54d3e73f9d",
+  "coordinates": "integer millionths of a degree; pair order longitude, latitude",
+  "polyline_fields": {"1": "longitude CoordSequence", "2": "latitude CoordSequence"},
+  "coord_sequence_fields": {"1": "initial sint32", "2": "packed repeated sint32 deltas; unpacked accepted"},
+  "encoding": "32-bit zigzag then unsigned base-128 varint; no float conversion",
+  "budgets": {"bytes": 1048576, "points": 100000},
+  "joining": "Exact shared endpoint required; remove one boundary duplicate only; never bridge gaps",
+  "evidence": {
+    "point_order": ["102d6ac", "cd15e4", "102de44"],
+    "scaled_conversion": ["102e8f4", "102e960", "1fb938"],
+    "sequence_serializer": "1b9ec40",
+    "polyline_serializer": "1b9f058"
+  },
+  "limitations": "No authentication, network requests, SDK runtime, source freshness or control eligibility supplied by this adapter"
+}

@@ -48,6 +48,9 @@ class SpeedCamera:
     speed = _number(self.speed_limit_kph)
     if speed is None or not 0 < speed <= 300:
       return False
+    if self.camera_type.startswith("yandex:"):
+      from openpilot.sunnypilot.mapd.yandex_policy import yandex_control_evidence
+      return yandex_control_evidence(self)
     if self.camera_type.startswith("waze:"):
       from openpilot.sunnypilot.mapd.waze_policy import waze_control_evidence
       return waze_control_evidence(self)

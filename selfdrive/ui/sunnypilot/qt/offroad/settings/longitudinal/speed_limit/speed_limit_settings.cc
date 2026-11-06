@@ -35,8 +35,8 @@ QString cameraStatus(const QString &status) {
 void cameraButtonSymbols(OptionControlSP *control) {
   // Inter contains these glyphs; the full-width variants need a system fallback font.
   for (auto *button : control->findChildren<QPushButton *>()) {
-    if (button->text() == "－") button->setText("−");
-    if (button->text() == "＋") button->setText("+");
+    if (button->text() == "пјЌ") button->setText("в€’");
+    if (button->text() == "пј‹") button->setText("+");
   }
 }
 
@@ -166,10 +166,10 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
 
   list->addItem(new ParamControlSP("SpeedCameraWazeEnabled", tr("Waze"),
     tr("Road cameras, portable cameras, police reports, and speed limits."), "", this));
-  auto *yandex_source = new ButtonControlSP(tr("Yandex Navigator"), tr("PHASE 2"),
-    tr("Yandex Navigator will be added in the second phase. This source is not available yet."));
-  yandex_source->setEnabled(false);
-  list->addItem(yandex_source);
+  list->addItem(new ParamControlSP("SpeedCameraYandexEnabled", tr("Yandex Navigator"),
+    tr("Speed cameras, mobile cameras, and police posts."), "", this));
+  yandex_status = new LabelControlSP(tr("Yandex Status"));
+  list->addItem(yandex_status);
   waze_status = new LabelControlSP(tr("Waze Status"));
   list->addItem(waze_status);
 
@@ -315,9 +315,22 @@ void SpeedLimitSettings::refresh() {
   else if (waze_state == "waiting for localized position") waze_label = tr("Waiting for GPS");
   else if (waze_state == "error") waze_label = tr("Update failed");
   if (params.getBool("SpeedCameraWazeEnabled")) {
-    waze_label += " · " + tr("%1 events").arg(QString::fromStdString(params.get("SpeedCameraWazeCount")));
+    waze_label += " В· " + tr("%1 events").arg(QString::fromStdString(params.get("SpeedCameraWazeCount")));
   }
   waze_status->setText(waze_label);
+  const QString yandex_state = QString::fromStdString(params.get("SpeedCameraYandexStatus"));
+  QString yandex_label = tr("Off");
+  if (yandex_state.startsWith("ready")) yandex_label = tr("Connected");
+  else if (yandex_state.startsWith("partial")) yandex_label = tr("Some data could not be updated");
+  else if (yandex_state == "downloading Yandex") yandex_label = tr("Updating");
+  else if (yandex_state == "waiting for localized position") yandex_label = tr("Waiting for GPS");
+  else if (yandex_state == "waiting for heading") yandex_label = tr("Waiting for direction");
+  else if (yandex_state == "credentials unavailable") yandex_label = tr("Source unavailable");
+  else if (yandex_state == "error") yandex_label = tr("Update failed");
+  if (params.getBool("SpeedCameraYandexEnabled")) {
+    yandex_label += " В· " + tr("%1 events").arg(QString::fromStdString(params.get("SpeedCameraYandexCount")));
+  }
+  yandex_status->setText(yandex_label);
   const QString count = QString::fromStdString(params.get("SpeedCameraDatabaseCount"));
   speed_camera_count->setText(count.isEmpty() ? "0" : count);
   speed_camera_updated->setText(cameraTimestamp(params.get("SpeedCameraDatabaseUpdatedAt")));

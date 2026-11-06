@@ -21,6 +21,8 @@ from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry, car_speed_
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
 from openpilot.sunnypilot.mapd.waze_updater import WazeCameraUpdater
 from openpilot.sunnypilot.mapd.waze_policy import merge_camera_sources
+from openpilot.sunnypilot.mapd.yandex_updater import YandexCameraUpdater
+from openpilot.sunnypilot.mapd.yandex_policy import filter_fresh_yandex, merge_yandex_sources
 from openpilot.sunnypilot.mapd.live_map_data.base_map_data import BaseMapData
 from openpilot.sunnypilot.mapd.speed_cameras import CameraSpatialIndex, find_nearest_camera
 from openpilot.sunnypilot.navd.helpers import Coordinate
@@ -42,6 +44,7 @@ class OsmMapData(BaseMapData):
     self.mem_params = Params("/dev/shm/params") if platform.system() != "Darwin" else self.params
     self.camera_params = CameraParams()
     self.waze_updater = WazeCameraUpdater(self.camera_params, os.path.join(Paths.mapd_root(), "waze"))
+    self.yandex_updater = YandexCameraUpdater(self.camera_params, os.path.join(Paths.mapd_root(), "yandex"))
     self._camera_sources_key = None
     configured_path = self.camera_params.get("SpeedCameraDatabasePath")
     self.camera_database_path = configured_path or os.path.join(Paths.mapd_root(), "speed_cameras.json")
@@ -106,11 +109,23 @@ class OsmMapData(BaseMapData):
       waze = updater.snapshot()
     else:
       waze = ()  # Compatibility for offline publishers created without background workers.
+    yandex_updater = getattr(self, 'yandex_updater', None)
+    if yandex_updater is not None:
+      position = self.last_position
+      enabled = self.camera_params.get('SpeedCameraYandexEnabled') == '1' and self.camera_enabled
+      yandex_updater.tick(position.latitude if position is not None else math.nan,
+                          position.longitude if position is not None else math.nan,
+                          heading=self.last_bearing, enabled=enabled,
+                          position_valid=bool(self.localizer_valid and self.sm['liveLocationKalman'].gpsOK))
+      yandex = tuple(filter_fresh_yandex(yandex_updater.snapshot(), now)) if enabled else ()
+    else:
+      yandex = ()
     signature = (self.camera_database_path, self.camera_database_mtime, id(self.camera_database),
-                 tuple((c.source_id, c.source_params.get('waze_event')) for c in waze))
+                 tuple((c.source_id, c.source_params.get('waze_event')) for c in waze),
+                 tuple((c.source_id, c.source_params.get('yandex_event')) for c in yandex))
     if signature != getattr(self, '_camera_sources_key', None):
       russian = self.camera_database.cameras if self.camera_database is not None else ()
-      combined = merge_camera_sources(russian, waze, now)
+      combined = merge_yandex_sources(merge_camera_sources(russian, waze, now), yandex, now)
       self.camera_index = CameraSpatialIndex(combined) if self.camera_database is not None or combined else None
       self._camera_sources_key = signature
       self._camera_sources_database_reference = self.camera_database
@@ -163,6 +178,14 @@ class OsmMapData(BaseMapData):
       from openpilot.sunnypilot.mapd.waze_policy import filter_fresh_waze
       if (self.camera_params.get('SpeedCameraWazeEnabled') != '1' or
           not filter_fresh_waze((retained.camera,), time.time())):  # noqa: TID251 - source observations use Unix time
+        self.camera_warning_retained = None
+        self.camera_warning_odometry = CameraOdometry()
+        self.camera_warning_fix_time = self.camera_warning_position = None
+    retained = self.camera_warning_retained
+    if retained is not None and retained.camera.camera_type.startswith('yandex:'):
+      from openpilot.sunnypilot.mapd.yandex_policy import filter_fresh_yandex
+      if (self.camera_params.get('SpeedCameraYandexEnabled') != '1' or
+          not filter_fresh_yandex((retained.camera,), time.time())):  # noqa: TID251 -- source UNIX time
         self.camera_warning_retained = None
         self.camera_warning_odometry = CameraOdometry()
         self.camera_warning_fix_time = self.camera_warning_position = None

@@ -12,7 +12,8 @@ import struct
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = 'tools/ui_build/waze_package.json'
 ARTIFACTS = ('selfdrive/ui/ui', 'common/params_pyx.so', 'selfdrive/ui/translations/main_ru.qm')
-KEYS = ('SpeedCameraWazeEnabled', 'SpeedCameraWazeStatus', 'SpeedCameraWazeCount', 'SpeedCameraWazeError', 'SpeedCameraWazeUpdatedAt')
+KEYS = tuple('SpeedCamera' + provider + suffix for provider in ('Waze', 'Yandex')
+             for suffix in ('Enabled', 'Status', 'Count', 'Error', 'UpdatedAt'))
 SOURCES = ('common/params_keys.h', 'common/params.cc', 'common/params_pyx.pyx', 'common/params_pyx.cpp',
            'selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.cc',
            'selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/speed_limit_settings.h',
@@ -51,7 +52,7 @@ def validate(root=ROOT):
       raise ValueError('Packaged native artifact is not ARM64: ' + path)
     if any(key.encode() not in data for key in KEYS):
       raise ValueError('Packaged native artifact lacks the Waze parameter registry: ' + path)
-    if path == 'selfdrive/ui/ui' and any(text not in data for text in (b'Custom database URL', b'Yandex Navigator', b'PHASE 2')):
+    if path == 'selfdrive/ui/ui' and any(text not in data for text in (b'Custom database URL', b'Yandex Navigator', b'Yandex Status', b'Speed cameras, mobile cameras, and police posts.')):
       raise ValueError('Packaged UI lacks the provider controls')
   # Use the real read-only preflight, not a duplicate implementation or a
   # relaxed hash check. A Params rebuild must remain a matched ICBM release.

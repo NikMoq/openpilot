@@ -1,0 +1,26 @@
+{
+  "source": "yandex",
+  "source_sdk": "4.45.0-full",
+  "function": "normalize_native_snapshot(NativeRouteResult, now=UNIX_seconds) -> list[dict]",
+  "status": "raw source qualification; auto_control_eligible always false",
+  "identity": "yandex:native: plus exact UTF-8 SegmentEvent field2; no ID transformation",
+  "classification": {
+    "mobile": ["mobile_control", "police_patrol"],
+    "fixed": ["speed_control"],
+    "warning": "other recognized EventTag tokens, including police alone",
+    "unknown": "retain alongside known tokens; unknown-only event omitted"
+  },
+  "position": "field1 zero-based edge index; field7 fraction [0,1]; field5 optional PointGeo field1 longitude/field2 latitude doubles",
+  "geometry": "road_geometry two directed (longitude,latitude) degree points; road_heading_deg is route edge bearing, not camera facing",
+  "physical_position": "reported PointGeo when present, otherwise edge interpolation; >30m mismatch rejected",
+  "speed": {
+    "road_limit_raw_mps": "Route.getSpeedLimits-equivalent RLE value at exact event edge index",
+    "road_limit_kph": "positive raw*3.6 rounded only within 0.0001 of an integer; null/zero or noncanonical value remains unknown",
+    "speed_limit_confidence": "native_rle_verified_against_sdk_edges",
+    "qualification": "SDK 4.45.0-full: parent evidence of 134 exact directed SDK edge matches, zero raw difference, official canonical 20/40/60",
+    "direction": "acquired_route_forward_edge only; no opposite-direction limit inferred"
+  },
+  "freshness": "observed_at fixed at completed acquisition; local policy expiry mobile180s, fixed/warning300s; expired reads return no record",
+  "directions": "in_face/in_back retained separately; direction null; mobile never filtered by facing",
+  "no_control": "normalizer supplies no control eligibility, vehicle matching, passage, planner or restoration changes"
+}

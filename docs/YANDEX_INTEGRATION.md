@@ -1,3 +1,12 @@
+# Current native implementation status — 6 November 2026
+
+Native Linux GET/POST acquisition, provider and the real updater have now been
+checked offroad on the user's Comma. The updater diagnostic used memory-only
+Params and published no control messages; no manager restart, package deployment
+or road test has occurred. See [current evidence and field guide](YANDEX_NATIVE_LINUX.md)
+for counts, credential location, refresh/freshness policy and remaining gates.
+The earlier inactive/public-source/SDK-only stages below are historical evidence.
+
 # Yandex integration status — 2026-11-06
 
 Status: **SDK ACQUISITION VERIFIED; NATIVE LINUX ACQUISITION UNRESOLVED**.

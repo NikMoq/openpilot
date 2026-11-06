@@ -36,13 +36,30 @@ def main():
     assert params.get_type('SpeedCameraReactionDistance') == binding.ParamKeyType.INT
     assert params.get_type('SpeedCameraRoadGraphPath') == binding.ParamKeyType.STRING
     assert params.get_type('SpeedCameraRoadGraphStatus') == binding.ParamKeyType.STRING
+    yandex_values = {'SpeedCameraYandexEnabled': True,
+                     'SpeedCameraYandexStatus': 'ready:2 warnings;0 verified limits',
+                     'SpeedCameraYandexCount': '2', 'SpeedCameraYandexError': '',
+                     'SpeedCameraYandexUpdatedAt': '123'}
+    defaults = {'SpeedCameraYandexEnabled': False, 'SpeedCameraYandexStatus': 'disabled',
+                'SpeedCameraYandexCount': '0', 'SpeedCameraYandexUpdatedAt': '0'}
+    for key, default in defaults.items():
+      assert params.get(key, return_default=True) == default
+    for key in yandex_values:
+      expected_type = binding.ParamKeyType.BOOL if key.endswith('Enabled') else binding.ParamKeyType.STRING
+      assert params.check_key(key) and params.get_type(key) == expected_type
     backup = set(params.all_keys(binding.ParamKeyFlag.BACKUP))
     persistent = set(params.all_keys(binding.ParamKeyFlag.PERSISTENT))
     for key, value in values.items():
       assert params.check_key(key)
       assert key.encode() in backup and key.encode() in persistent
       params.put(key, value)
-      assert params.get(key) == value
+      assert params.get(key) == (None if value == '' else value)
+    for key, value in yandex_values.items():
+      assert key.encode() in persistent
+      assert (key.encode() in backup) == key.endswith('Enabled')
+      params.put(key, value)
+      assert params.get(key) == (None if value == '' else value)
+    values.update(yandex_values)
     # Unknown files are still removed: there is no cleanup bypass or whitelist.
     unknown = Path(params.get_param_path()) / 'UnknownCameraQaKey'
     unknown.write_text('remove-me')
@@ -50,12 +67,12 @@ def main():
                  binding.ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION, binding.ParamKeyFlag.CLEAR_ON_IGNITION_ON):
       params.clear_all(flag)
       for key, value in values.items():
-        assert params.get(key) == value
+        assert params.get(key) == (None if value == '' else value)
     assert not unknown.exists()
     del params
     reopened = binding.Params(temporary)
     for key, value in values.items():
-      assert reopened.get(key) == value
+      assert reopened.get(key) == (None if value == '' else value)
   print(json.dumps(dict(status='PASS', checks='typed registry, defaults, backup, four cleanup transitions, reopen, unknown removal',
                         binding_sha256=hashlib.sha256(args.binding.read_bytes()).hexdigest()), sort_keys=True))
 

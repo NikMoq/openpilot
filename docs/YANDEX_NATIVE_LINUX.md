@@ -1,4 +1,84 @@
-# Yandex on Comma: native Linux requirement
+# Yandex on Comma: native Linux source
+
+## Current status — 6 November 2026
+
+**CONFIRMED: offroad native acquisition on the user's Comma.** The coordinator's
+bounded device checks reached `192.168.0.104` with offroad=true and used the
+actual `/usr/local/venv/bin/python3`. Route GET and conditions POST ran directly
+on Linux, without Android, a phone or an external relay.
+
+| Check | Observed result |
+| --- | --- |
+| Direct native route + conditions | HTTP 200 + HTTP 200; 391 geometry points; 5 fixed speed-control events and 2 school events; limits 40/60 km/h |
+| Extended native route | 1148 points; 33 fixed, 1 mobile and 6 warning events; limits 40/50/60/70/90 km/h |
+| `NativeYandexProvider` forward/reverse window | complete=true, no errors; 6 fixed and 5 warning events |
+| Real `YandexCameraUpdater` on the same Comma | finished=true; `ready: 12 warnings; 10 verified limits`; Params replaced by memory-only test storage |
+
+These are separate, time/route-specific acquisitions; their counts must not be
+combined or treated as an inventory. School events are decoded warnings, not
+speed cameras. No control messages were published by the worker diagnostic.
+No manager restart, road test or package deployment has been performed yet.
+Device acquisition proof does not establish operation of an installed mapd/UI
+package or physical speed-control behavior.
+
+Separately, 134 exact directed route-edge matches against Full MapKit SDK 4.45
+had zero speed-limit differences, including 20/40/60 km/h. Raw native m/s values
+are preserved and converted only under that verified contract. Linux Docker
+policy/updater/real-wire control regression: 60 tests passed. Real-wire approach
+reduction and proven-passage restoration are synthetic checks, not device control
+execution.
+
+## Field guide
+
+The native worker reads its private client configuration from
+`/data/media/0/osm/yandex/private/client.json`, with file mode `0600`. This
+credential file stays outside Git. Do not place keys in UI fields, source files,
+command-line arguments, public diagnostics or package manifests.
+
+The source toggle is **Yandex Navigator** (Russian: **Яндекс.Навигатор**) in the
+existing Cruise / Speed Limit settings, alongside Waze. It defaults OFF. Tap the
+title to open the standard description: «Камеры контроля скорости, мобильные
+камеры и полицейские посты.» The status/count row shows Off, Waiting for GPS,
+Waiting for direction, Updating, Connected, partial update or source unavailable.
+The ARM64 UI, Russian translation and CPython 3.12 Params binding have been
+rebuilt. The native package guard and the existing ICBM integrity preflight
+pass. The rebuilt Params binding also passed its real lifecycle check on Comma
+using temporary storage; the system Params directory was not used by that test.
+
+A fresh localized position and usable heading are required to acquire a window.
+Refresh is scheduled after 60 seconds, 1 km of movement or a 30-degree heading
+change, subject to the worker's request spacing and error backoff. Acquisition
+and snapshots are bounded in RAM; no camera-event cache is persisted to disk.
+Private client configuration is separate from event storage.
+
+Mobile evidence expires after at most 180 seconds and fixed evidence after at
+most 300 seconds from acquisition. Re-reading or merging never renews its age.
+Source disable/expiry revokes retained warnings; expiry never asserts passage.
+Unknown limits remain warning-only. Mobile cameras and actual police patrols
+are not filtered by report-facing tags; directed road geometry and independently
+verified road limits qualify each approach, including a uniquely matched nearby
+opposite carriageway. A reverse-road limit is never substituted for the current
+road's limit.
+
+Generic `POLICE` alone is not proof of a police post: the official EventTag
+reference defines it as an umbrella for traffic-code control and a compatibility
+fallback. `MOBILE_CONTROL` and `POLICE_PATROL` are distinct enforcement tags.
+[Official EventTag reference](https://yandex.ru/maps-api/docs/mapkit/com/yandex/mapkit/road_events/EventTag.html).
+
+Linux verification after the final native worker fixes: 369 Yandex tests pass.
+The wider camera/Waze/ICBM regression passed 1408 tests and skipped 9; its four
+stale-package failures were then resolved by the rebuilt native package, with
+the package and release checks rerun separately. Preserve the Panda/daemon
+artifacts and integrity checks: only the Params extension hash pin changes with
+its rebuilt binding. No manager restart, firmware change or road test was
+performed.
+
+---
+
+The following notes record earlier research stages. Their unresolved gaps and
+inactive-source statements describe those stages, not the current status.
+
+# Historical research notes — superseded by current status above
 
 Current requirement, 2026-11-06: autonomous acquisition on Comma Linux, with no
 Android runtime, phone or remote Android relay. Android execution was stopped;

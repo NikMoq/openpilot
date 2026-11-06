@@ -1,0 +1,12 @@
+{
+  "sdk_elf_sha256": "126607c7824398ca365c1e3eba1718d92e6bf7abeda419c610442b54d3e73f9d",
+  "path": "Response2.GeoObject6[route].GeoObject6[section].Metadata1.extension92.Section5.SpeedLimits1[run].SpeedLimit",
+  "section_parser": "0x1bc0b50",
+  "field5_type_helper": "0x17e9184 -> SpeedLimits vtable0x2212b18",
+  "speed_limit_fields": {"1": "optional float32, units UNKNOWN", "2": "positive signedint32 run length in edges"},
+  "observed_validation": "One real route:33runs,16sections,390edges; run lengths sum exactly to each section geometry point count minus1",
+  "native_conversion": "17b4e60 reads Section+38;17b4ea4 reads raw float bits and count;17b4ed0 packs them into internal.RawSpeedLimit without floating arithmetic; internal.RawSpeedLimits stored section+90. Full Route vector expansion provenance still under investigation.",
+  "output": "One raw float or None per edge; None denotes missing/unverified value. No m/s or km/h conversion assigned.",
+  "strictness": "Known malformed wire, duplicate singular fields, nonfinite floats, nonpositive counts and sum mismatch rejected. Missing section metadata or field5 yields allNone. Expansion globally bounded100000edges; shared field budget; bounded bytes.",
+  "network": "No requests; synthetic unit fixtures only. No coordinates, opaque IDs or keys included."
+}

@@ -243,6 +243,11 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"RoadNameToggle", {PERSISTENT, STRING}},
 
     // Speed Limit
+    {"SpeedCameraYandexEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"SpeedCameraYandexStatus", {PERSISTENT, STRING, "disabled"}},
+    {"SpeedCameraYandexCount", {PERSISTENT, STRING, "0"}},
+    {"SpeedCameraYandexError", {PERSISTENT, STRING}},
+    {"SpeedCameraYandexUpdatedAt", {PERSISTENT, STRING, "0"}},
     {"SpeedCameraWazeEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
     {"SpeedCameraWazeStatus", {PERSISTENT, STRING, "disabled"}},
     {"SpeedCameraWazeCount", {PERSISTENT, STRING, "0"}},
