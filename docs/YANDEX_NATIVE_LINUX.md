@@ -46,6 +46,15 @@ Configured describes local configuration, not server authorization; Connected
 requires successful acquisition. Do not place keys in other UI fields, source
 files, command-line arguments, public diagnostics or package manifests.
 
+The key-entry package `eaed9e4` was installed and its running UI executable was
+verified as SHA-256
+`737bb358fb94931032f3b4aed16a902967ff40c2f6a13c165313659dfbb617c0`.
+The installed acquisition diagnostic completed with 7 fresh warnings and 7
+verified limit variants. After the separate UI/map-worker reload, UI restarted
+through its watchdog; mapd_manager required a separate launcher and was verified
+running. A normal device reboot restores its normal manager supervision. No
+system-manager restart, Panda action or road test was performed.
+
 The source toggle is **Yandex Navigator** (Russian: **Яндекс.Навигатор**) in the
 existing Cruise / Speed Limit settings, alongside Waze. It defaults OFF. Tap the
 title to open the standard description: «Камеры контроля скорости, мобильные
