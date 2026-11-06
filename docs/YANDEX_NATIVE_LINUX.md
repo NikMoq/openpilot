@@ -13,13 +13,15 @@ on Linux, without Android, a phone or an external relay.
 | Extended native route | 1148 points; 33 fixed, 1 mobile and 6 warning events; limits 40/50/60/70/90 km/h |
 | `NativeYandexProvider` forward/reverse window | complete=true, no errors; 6 fixed and 5 warning events |
 | Real `YandexCameraUpdater` on the same Comma | finished=true; `ready: 12 warnings; 10 verified limits`; Params replaced by memory-only test storage |
+| Installed package `4b46e03`, full mapd module import and native worker | package/ICBM guard PASS; finished=true; `ready: 8 warnings; 6 verified limits`; memory-only test Params |
 
 These are separate, time/route-specific acquisitions; their counts must not be
 combined or treated as an inventory. School events are decoded warnings, not
 speed cameras. No control messages were published by the worker diagnostic.
-No manager restart, road test or package deployment has been performed yet.
-Device acquisition proof does not establish operation of an installed mapd/UI
-package or physical speed-control behavior.
+Package `4b46e03` was installed by a clean fast-forward on the device's `waze`
+branch. No manager restart or road test was performed. Restart Comma normally
+to load the rebuilt UI and worker; the Yandex toggle defaults OFF. Installed
+module and acquisition checks do not establish physical speed-control behavior.
 
 Separately, 134 exact directed route-edge matches against Full MapKit SDK 4.45
 had zero speed-limit differences, including 20/40/60 km/h. Raw native m/s values
@@ -68,7 +70,7 @@ fallback. `MOBILE_CONTROL` and `POLICE_PATROL` are distinct enforcement tags.
 Linux verification after the final native worker fixes: 369 Yandex tests pass.
 The wider camera/Waze/ICBM regression passed 1408 tests and skipped 9; its four
 stale-package failures were then resolved by the rebuilt native package, with
-the package and release checks rerun separately. Preserve the Panda/daemon
+26 package and release checks passing separately. Preserve the Panda/daemon
 artifacts and integrity checks: only the Params extension hash pin changes with
 its rebuilt binding. No manager restart, firmware change or road test was
 performed.
