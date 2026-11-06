@@ -12,12 +12,76 @@
 #include <QTimer>
 #include <QRegularExpression>
 #include <QUrl>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QSaveFile>
+#include <QSet>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "selfdrive/ui/sunnypilot/qt/util.h"
 #include "selfdrive/ui/sunnypilot/qt/offroad/settings/longitudinal/speed_limit/camera_error_ru.h"
 
 namespace {
 constexpr const char *SPEED_CAMERA_DEFAULT_URL = "https://speedcamonline.ru/cg77/Rus/comment/";
+
+constexpr const char *YANDEX_CLIENT_PATH = "/data/media/0/osm/yandex/private/client.json";
+
+// Only an existing, owner-private installation may receive a replacement API key.
+// No credential content or filesystem error is displayed or logged.
+bool readYandexClient(QJsonObject &object) {
+  QString current;
+  const auto parts = QString::fromLatin1(YANDEX_CLIENT_PATH).split('/', QString::SkipEmptyParts);
+  for (int i = 0; i < parts.size() - 1; ++i) {
+    current += "/" + parts[i];
+    struct stat info;
+    if (lstat(current.toLocal8Bit().constData(), &info) != 0 || !S_ISDIR(info.st_mode) ||
+        (info.st_uid != 0 && info.st_uid != getuid()) || (info.st_mode & 0022)) return false;
+    if (i == parts.size() - 2 && (info.st_uid != getuid() || (info.st_mode & 0777) != 0700)) return false;
+  }
+  const int fd = open(YANDEX_CLIENT_PATH, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC);
+  if (fd < 0) return false;
+  struct stat info;
+  const bool trusted = fstat(fd, &info) == 0 && S_ISREG(info.st_mode) && info.st_uid == getuid() &&
+                       (info.st_mode & 0777) == 0600 && info.st_nlink == 1 && info.st_size > 0 && info.st_size <= 4096;
+  QByteArray raw;
+  if (trusted) {
+    QFile input;
+    if (input.open(fd, QIODevice::ReadOnly, QFileDevice::DontCloseHandle)) raw = input.read(4097);
+  }
+  close(fd);
+  if (!trusted || raw.isEmpty() || raw.size() > 4096) return false;
+  QJsonParseError error;
+  const auto document = QJsonDocument::fromJson(raw, &error);
+  raw.fill('\0');
+  if (error.error != QJsonParseError::NoError || !document.isObject()) return false;
+  object = document.object();
+  const QSet<QString> expected{"schema_version", "sdk_build", "api_key", "signing_key_b64"};
+  const auto keys = object.keys();
+  if (QSet<QString>::fromList(keys) != expected || object.value("schema_version").toDouble(-1) != 1 ||
+      object.value("sdk_build").toString() != "4.45.0-full" || !object.value("api_key").isString()) return false;
+  static const QRegularExpression uuid("^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$");
+  if (!uuid.match(object.value("api_key").toString()).hasMatch()) return false;
+  const QByteArray signing = object.value("signing_key_b64").toString().toLatin1();
+  // Strict canonical encoding of the existing 16-byte signing material.
+  return signing.size() == 24 && QByteArray::fromBase64(signing).size() == 16 &&
+         QByteArray::fromBase64(signing).toBase64() == signing;
+}
+
+bool saveYandexApiKey(const QString &key) {
+  QJsonObject object;
+  if (!readYandexClient(object)) return false;
+  object.insert("api_key", key);
+  QSaveFile output(QString::fromLatin1(YANDEX_CLIENT_PATH));
+  output.setDirectWriteFallback(false);
+  if (!output.open(QIODevice::WriteOnly) || !output.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)) return false;
+  QByteArray data = QJsonDocument(object).toJson(QJsonDocument::Compact);
+  const bool written = output.write(data) == data.size();
+  data.fill('\0');
+  return written && output.commit();
+}
 
 // Display only: persisted updater protocol values stay unchanged.
 QString cameraStatus(const QString &status) {
@@ -168,6 +232,24 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
     tr("Road cameras, portable cameras, police reports, and speed limits."), "", this));
   list->addItem(new ParamControlSP("SpeedCameraYandexEnabled", tr("Yandex Navigator"),
     tr("Speed cameras, mobile cameras, and police posts."), "", this));
+  yandex_api_key = new ButtonControlSP(tr("Yandex API key"), tr("EDIT"),
+    tr("Paste your own Yandex key to connect this source."), this);
+  connect(yandex_api_key, &ButtonControlSP::clicked, this, [this]() {
+    const QString key = InputDialog::getText(tr("Yandex API key"), this,
+      tr("Paste your own Yandex key."), true, -1, "").trimmed();
+    if (key.isEmpty()) return;
+    static const QRegularExpression uuid("^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$");
+    if (!uuid.match(key).hasMatch()) {
+      ConfirmationDialog::alert(tr("Enter a valid Yandex key."), this);
+      return;
+    }
+    if (!saveYandexApiKey(key)) {
+      ConfirmationDialog::alert(tr("Could not save the key. Yandex setup is unavailable."), this);
+      return;
+    }
+    refresh();
+  });
+  list->addItem(yandex_api_key);
   yandex_status = new LabelControlSP(tr("Yandex Status"));
   list->addItem(yandex_status);
   waze_status = new LabelControlSP(tr("Waze Status"));
@@ -318,6 +400,8 @@ void SpeedLimitSettings::refresh() {
     waze_label += " В· " + tr("%1 events").arg(QString::fromStdString(params.get("SpeedCameraWazeCount")));
   }
   waze_status->setText(waze_label);
+  QJsonObject yandex_client;
+  yandex_api_key->setValue(readYandexClient(yandex_client) ? tr("Configured") : tr("Not configured"));
   const QString yandex_state = QString::fromStdString(params.get("SpeedCameraYandexStatus"));
   QString yandex_label = tr("Off");
   if (yandex_state.startsWith("ready")) yandex_label = tr("Connected");

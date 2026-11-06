@@ -211,6 +211,9 @@ def test_error_backoff_cap(module, tmp_path):
 
 
 def test_real_policy_mobile_variants_count_one_physical_report(module, tmp_path, monkeypatch):
+  # The updater fixture installs a narrow policy stub; the shared real-policy
+  # fixture must import its actual module even when this file runs alone.
+  monkeypatch.delitem(__import__('sys').modules, 'openpilot.sunnypilot.mapd.yandex_policy', raising=False)
   from test_yandex_policy import event as native_event
   spec = importlib.util.spec_from_file_location('_yandex_real_count_policy', Path(__file__).resolve().parents[2] /
                                                'sunnypilot/mapd/yandex_policy.py')
@@ -262,3 +265,143 @@ def test_snapshot_conversion_cannot_publish_prior_enabled_generation(module, tmp
   assert p.values['SpeedCameraYandexCount'] == ('2' if reenable else '0')
   if reenable:
     assert {c.source_id for c in u.snapshot()} == {'new', 'second'}
+
+
+def replace_synthetic_configuration(root, generation):
+  directory = root / 'private'
+  directory.mkdir(exist_ok=True)
+  temporary = directory / 'replacement.json'
+  temporary.write_text('synthetic configuration revision ' + str(generation))
+  temporary.replace(directory / 'client.json')
+
+
+def test_configuration_replacement_resets_backoff_without_clock_advance(module, tmp_path):
+  u, p, b, _, mono = setup(module, tmp_path)
+  b.error = OSError('synthetic unavailable')
+  assert tick(u)
+  finish(u)
+  assert u._next_attempt > mono[0] and not tick(u)
+  replace_synthetic_configuration(tmp_path, 1)
+  b.error, b.events = None, (event('replacement'),)
+  assert tick(u)
+  finish(u)
+  assert len(b.calls) == 2 and u._failures == 0
+  assert [camera.source_id for camera in u.snapshot()] == ['replacement']
+  assert p.values['SpeedCameraYandexError'] == ''
+  # An unchanged file does not repeatedly invalidate or bypass the 60s gap.
+  assert not tick(u) and len(b.calls) == 2
+
+
+def test_same_size_atomic_replacement_discards_running_prior_generation(module, tmp_path):
+  replace_synthetic_configuration(tmp_path, 1)
+  started, release = threading.Event(), threading.Event()
+
+  class Blocking(Backend):
+    def fetch_window(self, lat, lon, heading, *, should_continue):
+      self.calls.append(should_continue)
+      if len(self.calls) == 1:
+        started.set()
+        assert release.wait(3)
+        return NS(events=(event('old'),), complete=True, errors=())
+      return NS(events=(event('replacement'),), complete=True, errors=())
+
+  backend = Blocking()
+  u, p, _, _, _ = setup(module, tmp_path, backend)
+  assert tick(u) and started.wait(2)
+  old_worker = u._worker
+  replace_synthetic_configuration(tmp_path, 2)  # Equal byte count, different inode.
+  assert tick(u)
+  finish(u)
+  assert not backend.calls[0]()
+  assert [camera.source_id for camera in u.snapshot()] == ['replacement']
+  deadline = u._next_attempt
+  release.set()
+  old_worker.join(2)
+  assert not old_worker.is_alive()
+  assert [camera.source_id for camera in u.snapshot()] == ['replacement']
+  assert u._next_attempt == deadline and p.values['SpeedCameraYandexCount'] == '1'
+
+
+def test_configuration_change_clears_existing_cameras_before_position_recovery(module, tmp_path):
+  u, p, b, _, _ = setup(module, tmp_path)
+  b.events = (event('old'),)
+  assert tick(u)
+  finish(u)
+  assert len(u.snapshot()) == 1
+  replace_synthetic_configuration(tmp_path, 1)
+  assert not tick(u, position_valid=False)
+  assert u.snapshot() == () and p.values['SpeedCameraYandexCount'] == '0'
+  assert p.values['SpeedCameraYandexUpdatedAt'] == '0'
+  assert u._point is None and u._heading is None and u._failures == 0
+  assert tick(u)
+  finish(u)
+
+
+def test_repeated_key_changes_preserve_two_old_worker_cap(module, tmp_path):
+  release = threading.Event()
+  started = [threading.Event(), threading.Event()]
+
+  class Blocking(Backend):
+    def fetch_window(self, lat, lon, heading, *, should_continue):
+      index = len(self.calls)
+      self.calls.append(should_continue)
+      if index < 2:
+        started[index].set()
+        assert release.wait(3)
+      return NS(events=(event(str(index)),), complete=True, errors=())
+
+  backend = Blocking()
+  u, _, _, _, _ = setup(module, tmp_path, backend)
+  assert tick(u) and started[0].wait(2)
+  replace_synthetic_configuration(tmp_path, 1)
+  assert tick(u) and started[1].wait(2)
+  replace_synthetic_configuration(tmp_path, 2)
+  assert not tick(u) and len(backend.calls) == 2
+  assert not any(check() for check in backend.calls)
+  assert u.snapshot() == ()
+  release.set()
+  for worker in u._workers:
+    worker.join(2)
+    assert not worker.is_alive()
+  assert tick(u)
+  finish(u)
+  assert [camera.source_id for camera in u.snapshot()] == ['2']
+
+
+def test_missing_file_baseline_and_removal_are_stable(module, tmp_path):
+  u, _, _, _, _ = setup(module, tmp_path)
+  assert tick(u)
+  finish(u)
+  generation = u._generation
+  assert not tick(u) and u._generation == generation
+  replace_synthetic_configuration(tmp_path, 1)
+  assert tick(u)
+  finish(u)
+  (tmp_path / 'private' / 'client.json').unlink()
+  assert tick(u)
+  finish(u)
+  generation = u._generation
+  assert not tick(u) and u._generation == generation
+
+
+def test_owned_backend_recreated_after_configuration_replacement(module, tmp_path, monkeypatch):
+  instances = []
+  native_provider = types.ModuleType('openpilot.sunnypilot.mapd.yandex.native_provider')
+
+  class Provider(Backend):
+    def __init__(self, path):
+      super().__init__()
+      instances.append(self)
+      self.events = (event(str(len(instances))),)
+
+  native_provider.NativeYandexProvider = Provider
+  monkeypatch.setitem(__import__('sys').modules, native_provider.__name__, native_provider)
+  updater = module.YandexCameraUpdater(Params(), tmp_path, clock=lambda: 1000, monotonic=lambda: 10)
+  assert tick(updater)
+  finish(updater)
+  assert len(instances) == 1
+  replace_synthetic_configuration(tmp_path, 1)
+  assert tick(updater)
+  finish(updater)
+  assert len(instances) == 2 and updater.backend is instances[1]
+  assert [camera.source_id for camera in updater.snapshot()] == ['2']

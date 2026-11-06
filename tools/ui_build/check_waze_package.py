@@ -52,7 +52,7 @@ def validate(root=ROOT):
       raise ValueError('Packaged native artifact is not ARM64: ' + path)
     if any(key.encode() not in data for key in KEYS):
       raise ValueError('Packaged native artifact lacks the Waze parameter registry: ' + path)
-    if path == 'selfdrive/ui/ui' and any(text not in data for text in (b'Custom database URL', b'Yandex Navigator', b'Yandex Status', b'Speed cameras, mobile cameras, and police posts.')):
+    if path == 'selfdrive/ui/ui' and any(text not in data for text in (b'Custom database URL', b'Yandex Navigator', b'Yandex Status', b'Yandex API key', b'Speed cameras, mobile cameras, and police posts.')):
       raise ValueError('Packaged UI lacks the provider controls')
   # Use the real read-only preflight, not a duplicate implementation or a
   # relaxed hash check. A Params rebuild must remain a matched ICBM release.

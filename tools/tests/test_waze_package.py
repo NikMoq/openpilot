@@ -62,6 +62,18 @@ def test_package_with_stale_icbm_extension_pin_cannot_ship(tmp_path):
     module.validate(tmp_path)
 
 
+def test_package_without_yandex_key_input_cannot_ship(tmp_path):
+  module = package_copy(tmp_path)
+  ui = tmp_path / 'selfdrive/ui/ui'
+  ui.write_bytes(ui.read_bytes().replace(b'Yandex API key', b'Source API key'))
+  manifest_path = tmp_path / module.MANIFEST
+  manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+  manifest['artifacts']['selfdrive/ui/ui'] = hashlib.sha256(ui.read_bytes()).hexdigest()
+  manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
+  with pytest.raises(ValueError, match='lacks the provider controls'):
+    module.validate(tmp_path)
+
+
 def test_icbm_extension_pin_cannot_be_removed_to_make_package_pass(tmp_path):
   module = package_copy(tmp_path)
   release_manifest = tmp_path / 'selfdrive/pandad/pq_icbm_release.json'

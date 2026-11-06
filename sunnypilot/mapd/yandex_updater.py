@@ -22,6 +22,8 @@ class YandexCameraUpdater:
   def __init__(self, params, state_dir, *, backend=None, clock=_utc_now_s, monotonic=time.monotonic):
     self.params, self.state_dir = params, Path(state_dir)
     self.backend, self.clock, self.monotonic = backend, clock, monotonic
+    self._owns_backend = backend is None
+    self._credentials_fingerprint = self._credential_metadata()
     self._lock = threading.RLock()
     self._generation, self._enabled = 0, False
     self._events, self._written = (), {}
@@ -30,6 +32,34 @@ class YandexCameraUpdater:
     self._next_attempt, self._last = -math.inf, -math.inf
     self._point, self._heading = None, None
     self._failures = 0
+
+  def _credential_metadata(self):
+    """Observe atomic configuration replacement without reading its contents."""
+    try:
+      info = (self.state_dir / 'private' / 'client.json').lstat()
+      return (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns,
+              info.st_mode, info.st_uid, info.st_gid)
+    except OSError as error:
+      return ('unavailable', error.errno)
+
+  def _reload_credentials_if_changed(self):
+    fingerprint = self._credential_metadata()
+    if fingerprint == self._credentials_fingerprint:
+      return
+    self._credentials_fingerprint = fingerprint
+    self._generation += 1
+    self._worker = None
+    self._events = ()
+    self._point = self._heading = None
+    self._last = self._next_attempt = -math.inf
+    self._failures = 0
+    if self._owns_backend:
+      self.backend = None
+    # Keep old worker references so repeated edits cannot exceed the two-worker
+    # cap. Their generation tokens immediately stop authorizing publication.
+    self._put('Count', 0)
+    self._put('UpdatedAt', 0)
+    self._put('Error', '')
 
   def _put(self, suffix, value):
     value = str(value)
@@ -79,6 +109,7 @@ class YandexCameraUpdater:
       if not enabled:
         self._status('disabled')
         return False
+      self._reload_credentials_if_changed()
       if (not position_valid or not all(self._number(v) for v in (latitude, longitude)) or
           not (-85 < latitude < 85 and -180 <= longitude <= 180)):
         self._status('waiting for localized position')

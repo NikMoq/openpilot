@@ -4169,6 +4169,13 @@ Default: %1. Custom HTTPS sources do not use the backup. Source and direction da
         <source>%1 events</source>
         <translation>Событий: %1</translation>
     </message>
+    <message><source>Yandex API key</source><translation>Ключ Яндекса</translation></message>
+    <message><source>Paste your own Yandex key to connect this source.</source><translation>Вставьте свой ключ Яндекса для подключения источника.</translation></message>
+    <message><source>Paste your own Yandex key.</source><translation>Вставьте свой ключ Яндекса.</translation></message>
+    <message><source>Enter a valid Yandex key.</source><translation>Введите корректный ключ Яндекса.</translation></message>
+    <message><source>Could not save the key. Yandex setup is unavailable.</source><translation>Не удалось сохранить ключ. Настройка Яндекса недоступна.</translation></message>
+    <message><source>Configured</source><translation>Настроен</translation></message>
+    <message><source>Not configured</source><translation>Не настроен</translation></message>
 </context>
 
 <context>

@@ -41,6 +41,7 @@ private:
   LabelControlSP *speed_camera_status;
   LabelControlSP *waze_status;
   LabelControlSP *yandex_status;
+  ButtonControlSP *yandex_api_key;
   LabelControlSP *speed_camera_count;
   LabelControlSP *speed_camera_updated;
   LabelControlSP *speed_camera_version;

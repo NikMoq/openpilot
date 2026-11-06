@@ -34,8 +34,17 @@ execution.
 
 The native worker reads its private client configuration from
 `/data/media/0/osm/yandex/private/client.json`, with file mode `0600`. This
-credential file stays outside Git. Do not place keys in UI fields, source files,
-command-line arguments, public diagnostics or package manifests.
+credential file stays outside Git. The dedicated **Yandex API key** row
+(Russian: **Ключ Яндекса**) accepts the owner's replacement MapKit key through
+a hidden input dialog. It displays only Configured / Not configured; saving
+preserves the other installation fields and atomically replaces the file with
+mode `0600`. An existing valid private installation is required.
+
+Saving triggers credential metadata detection: old results are revoked and the
+next position-valid tick starts a fresh request without the prior error backoff.
+Configured describes local configuration, not server authorization; Connected
+requires successful acquisition. Do not place keys in other UI fields, source
+files, command-line arguments, public diagnostics or package manifests.
 
 The source toggle is **Yandex Navigator** (Russian: **Яндекс.Навигатор**) in the
 existing Cruise / Speed Limit settings, alongside Waze. It defaults OFF. Tap the
