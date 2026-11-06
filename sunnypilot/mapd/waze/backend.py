@@ -1,6 +1,7 @@
 """Raw Waze acquisition facade. Call only from the map-data network worker."""
 from __future__ import annotations
 
+import math
 import threading
 import time
 from dataclasses import dataclass, field
@@ -48,7 +49,7 @@ class WazeBackend:
       client = self._sessions.setdefault(region, RTClient(self._store, region, self._transport, self._clock, self._monotonic))
       return AcquisitionResult(**client.fetch(lat, lon, radius_m, timeout_s))
 
-  def enrich_events(self, events: list[dict], timeout_s: float = 45, *, should_continue=None) -> list[dict]:
+  def enrich_events(self, events: list[dict], timeout_s: float = 45, *, should_continue=None, center=None) -> list[dict]:
     """Attach independently sourced posted road limits; failed lookups keep warnings.
 
     Report facing never filters mobile enforcement. A two-way road can yield two
@@ -58,7 +59,18 @@ class WazeBackend:
       deadline = self._monotonic() + timeout_s
       output, attempted = [], 0
       self.road_error_count = 0
-      for event in events:
+      ordered = events
+      if center is not None:
+        latitude, longitude = center
+        if not all(type(v) in (int, float) and math.isfinite(v) for v in center) or not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+          raise ValueError("Invalid Waze enrichment center")
+        def distance(event):
+          lat, lon = event.get("latitude"), event.get("longitude")
+          if not all(type(v) in (int, float) and math.isfinite(v) for v in (lat, lon)):
+            return math.inf
+          return math.hypot((lat - latitude) * 111320, (lon - longitude) * 111320 * math.cos(math.radians(latitude)))
+        ordered = sorted(events, key=distance)
+      for event in ordered:
         if should_continue is not None and not should_continue():
           return output
         relevant = ((event.get("source_kind") == "fixed" and event.get("raw_subtype") in ("SPEED_CAMERA", "RED_LIGHT_CAMERA")) or

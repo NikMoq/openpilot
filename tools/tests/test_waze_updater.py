@@ -205,3 +205,112 @@ def test_snapshot_and_disable_do_not_wait_for_bulk_disk_serialization(tmp_path, 
   assert not u._worker.is_alive()
   assert not (tmp_path / 'waze/events.json').exists()
   assert p.values['SpeedCameraWazeStatus'] == 'disabled'
+
+
+def test_unknown_fixed_categories_keep_known_and_fresh_previous_without_renewal(tmp_path):
+  class Partial(Backend):
+    def __init__(self):
+      super().__init__()
+      self.partial = False
+
+    def fetch_fixed(self, *args):
+      if not self.partial:
+        return NS(events=[event(source_id='waze:fixed:old'),
+                          event(source_id='waze:fixed:expired', expires_at_ms=int((NOW + 1) * 1000))],
+                  complete=True, unknown_count=0, loaded_tiles=2, requested_tiles=2)
+      return NS(events=[event(source_id='waze:fixed:new'),
+                        event(source_id='waze:fixed:unknown', category_raw=99, raw_subtype='UNKNOWN_CATEGORY_99')],
+                complete=False, unknown_count=1, loaded_tiles=2, requested_tiles=2)
+
+    def fetch_mobile(self, *args):
+      return NS(events=[], complete=True, unknown_count=0)
+
+  u, p, b, clock, mono = updater(tmp_path, Partial())
+  refresh(u)
+  original = next(e for e in u._events['fixed'] if e['source_id'] == 'waze:fixed:old').copy()
+  b.partial = True
+  clock[0] += 121
+  mono[0] += 121
+  refresh(u)
+  assert {c.source_id for c in u.snapshot()} == {'waze:fixed:old', 'waze:fixed:new', 'waze:fixed:unknown'}
+  retained = next(e for e in u._events['fixed'] if e['source_id'] == 'waze:fixed:old')
+  assert retained['observed_at_ms'] == original['observed_at_ms']
+  assert retained['expires_at_ms'] == original['expires_at_ms']
+  assert not any(c.allowed_auto_control for c in u.snapshot())
+  assert 'fixed:unsupported_categories' in p.values['SpeedCameraWazeError']
+  assert p.values['SpeedCameraWazeStatus'].startswith('partial:')
+
+
+def test_updater_passes_actual_position_for_enrichment_priority(tmp_path):
+  class Enriched(Backend):
+    road_error_count = 0
+
+    def __init__(self):
+      super().__init__()
+      self.centers = []
+
+    def enrich_events(self, events, *, should_continue, center):
+      assert should_continue()
+      self.centers.append(center)
+      return events
+
+  u, _, b, _, _ = updater(tmp_path, Enriched())
+  refresh(u)
+  assert b.centers == [(55, 37), (55, 37)]
+
+
+def test_error_diagnostics_whitelist_fields_without_server_messages():
+  from openpilot.sunnypilot.mapd.waze_updater import _safe_error
+  from openpilot.sunnypilot.mapd.waze.transport import TransportError
+
+  error = TransportError('SECRET_URL_UID_KEY', category='http', status=403)
+  error.stage = 'registration'
+  assert _safe_error(error) == 'TransportError[category=http,stage=registration,status=403]'
+  error.category, error.stage, error.status = {'SECRET': 1}, 'SECRET_TOKEN', 'SECRET_UID'
+  assert _safe_error(error) == 'TransportError'
+
+
+def test_mobile_pending_diagnostic_does_not_hide_successful_fixed_data(tmp_path):
+  from openpilot.sunnypilot.mapd.waze.rt import AccountRejectedError
+
+  class Pending(Backend):
+    def fetch_mobile(self, *args):
+      error = AccountRejectedError('SECRET_INSTALLATION_UUID')
+      error.category, error.stage, error.status = 'local_pending', 'registration', None
+      raise error
+
+  u, p, _, _, _ = updater(tmp_path, Pending())
+  refresh(u)
+  assert p.values['SpeedCameraWazeError'] == 'mobile:AccountRejectedError[category=local_pending,stage=registration]'
+  assert p.values['SpeedCameraWazeStatus'].startswith('partial:')
+  assert len(u.snapshot()) == 1
+  assert 'SECRET' not in str(p.values)
+
+
+def test_partial_retention_evicts_fresh_records_from_previous_area():
+  from openpilot.sunnypilot.mapd.waze_updater import _retain_partial
+
+  far = event(source_id='waze:fixed:far', latitude=56.)
+  near = event(source_id='waze:fixed:near', latitude=55.001)
+  original = near.copy()
+  result = _retain_partial([far, near], [event(source_id='waze:fixed:new')], (55, 37), NOW)
+  assert {row['source_id'] for row in result} == {'waze:fixed:near', 'waze:fixed:new'}
+  assert next(row for row in result if row['source_id'] == 'waze:fixed:near') == original
+
+
+@pytest.mark.parametrize('budget', ['count', 'bytes'])
+def test_partial_old_budget_cannot_block_new_nearest_record(budget):
+  from openpilot.sunnypilot.mapd.waze_updater import _retain_partial
+
+  if budget == 'count':
+    old = [event(source_id=f'waze:fixed:old{i}', latitude=55.) for i in range(5000)]
+    new = event(source_id='waze:fixed:new')
+  else:
+    old = [event(source_id='waze:fixed:old', latitude=55.01, diagnostic_padding='x' * (5 * 1024 * 1024))]
+    new = event(source_id='waze:fixed:new', diagnostic_padding='x' * (4 * 1024 * 1024))
+  original = (new['observed_at_ms'], new['expires_at_ms'])
+  result = _retain_partial(old, [new], (55, 37), NOW)
+  assert result[0]['source_id'] == 'waze:fixed:new'
+  assert len(result) <= 5000
+  assert len(json.dumps(result, separators=(',', ':')).encode()) <= 8 * 1024 * 1024
+  assert (result[0]['observed_at_ms'], result[0]['expires_at_ms']) == original

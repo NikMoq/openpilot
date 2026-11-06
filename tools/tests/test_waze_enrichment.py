@@ -84,3 +84,32 @@ def test_disabled_generation_stops_new_road_requests_between_reports(tmp_path):
   enriched = backend.enrich_events([report(), report()], should_continue=lambda: next(checks))
   assert len(enriched) == 1 and enriched[0]['road_match_status'] == 'verified'
   assert len(calls) == 1
+
+
+def test_nearest_report_gets_road_budget_even_when_received_after_32_far_reports(tmp_path):
+  from types import SimpleNamespace as NS
+
+  class Roads:
+    def __init__(self):
+      self.calls = []
+
+    def fetch(self, lat, lon, **kwargs):
+      self.calls.append((lat, lon))
+      return NS(complete=True, unknown_count=0, loaded_windows=1, requested_windows=1, segments=(), camera_links=())
+
+  backend = WazeBackend(tmp_path, transport=lambda *_args, **_kwargs: pytest.fail('No network'), clock=lambda: NOW_MS / 1000)
+  roads = Roads()
+  backend._roads = roads
+  near = report()
+  near['source_id'] = 'waze:rt:nearest'
+  far = []
+  for index in range(32):
+    item = report()
+    item['source_id'] = f'waze:rt:far{index}'
+    item['latitude'] += 0.05 + index * .001
+    far.append(item)
+  output = backend.enrich_events([*far, near], center=(near['latitude'], near['longitude']))
+  assert roads.calls[0] == (near['latitude'], near['longitude'])
+  assert len(roads.calls) == 32
+  assert {item['source_id'] for item in output} == {item['source_id'] for item in [*far, near]}
+  assert len(output) == 33 and backend.road_error_count == 1

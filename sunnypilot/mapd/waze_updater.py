@@ -28,6 +28,51 @@ def _prepare_snapshot(path, events):
     raise
 
 
+def _safe_error(error):
+  # Never stringify server errors: messages may carry tokens, URLs or user IDs.
+  fields = []
+  category = getattr(error, "category", None)
+  stage = getattr(error, "stage", None)
+  status = getattr(error, "status", None)
+  if isinstance(category, str) and category in {"transport", "http", "local_pending",
+                                          "protobuf_rejected", "protobuf_unavailable", "relogin", "protocol", "network", "timeout"}:
+    fields.append("category=" + category)
+  if isinstance(stage, str) and stage in {"registration", "login", "handshake", "viewport"}:
+    fields.append("stage=" + stage)
+  if category in ("http", "protobuf_rejected", "protobuf_unavailable") and type(status) is int and 0 <= status <= 99999:
+    fields.append("status=" + str(status))
+  return type(error).__name__ + ("[" + ",".join(fields) + "]" if fields else "")
+
+
+def _retain_partial(old, new, point, now):
+  """Bound a partial snapshot around this query; retained TTLs stay untouched."""
+  merged = {}
+  latitude, longitude = point
+  for index, item in enumerate((*old, *new)):
+    if not events_to_cameras((item,), now):
+      continue
+    lat, lon = item["latitude"], item["longitude"]
+    a, b = math.radians(latitude), math.radians(lat)
+    h = math.sin((b - a) / 2) ** 2 + math.cos(a) * math.cos(b) * math.sin(math.radians(lon - longitude) / 2) ** 2
+    distance = 6371000 * 2 * math.asin(math.sqrt(min(1, max(0, h))))
+    # Query radius is5km; at most1km tile margin may survive a partial refresh.
+    if distance > 6000:
+      continue
+    identity = json.dumps([item.get("source_id"), item.get("road_segment_id"), item.get("road_geometry")],
+                          sort_keys=True, separators=(",", ":"))
+    merged[identity] = (distance, index < len(old), item)
+  retained, size = [], 2  # JSON list brackets and comma separators count too.
+  for _, _, item in sorted(merged.values(), key=lambda row: row[:2]):
+    if len(retained) == 5000:
+      break
+    encoded_size = len(json.dumps(item, allow_nan=False, separators=(",", ":")).encode()) + bool(retained)
+    if size + encoded_size > 8 * 1024 * 1024:
+      continue
+    retained.append(item)
+    size += encoded_size
+  return retained
+
+
 class WazeCameraUpdater:
   def __init__(self, params, state_dir, *, backend=None, clock=utc_now_s, monotonic=time.monotonic):
     self.params, self.state_dir = params, Path(state_dir)
@@ -128,7 +173,9 @@ class WazeCameraUpdater:
             return
         try:
           result = getattr(self.backend, "fetch_" + kind)(*point, 5000)
-          if not result.complete or result.unknown_count or (kind == "fixed" and result.loaded_tiles != result.requested_tiles):
+          coverage_gap = kind == "fixed" and result.loaded_tiles != result.requested_tiles
+          partial_fixed = kind == "fixed" and result.unknown_count > 0 and not coverage_gap
+          if coverage_gap or ((not result.complete or result.unknown_count) and not partial_fixed):
             raise ValueError("incomplete Waze coverage")
           events = [dict(e) for e in result.events]
           if len(events) > 5000 or any(e.get("source_kind") != kind for e in events):
@@ -136,19 +183,25 @@ class WazeCameraUpdater:
           if hasattr(self.backend, "enrich_events"):
             if not current_generation():
               return
-            events = self.backend.enrich_events(events, should_continue=current_generation)
+            events = self.backend.enrich_events(events, should_continue=current_generation, center=point)
             if self.backend.road_error_count:
               failures.append(kind + ":road_limit_unavailable")
+          if len(events) > 5000 or len(json.dumps(events, allow_nan=False).encode()) > 8 * 1024 * 1024:
+            raise ValueError("Waze event budget exceeded")
           with self._lock:
             if token != self._generation or not self._enabled:
               return
+            if partial_fixed:
+              # Unknown categories do not invalidate independently decoded records.
+              events = _retain_partial(self._events[kind], events, point, self.clock())
+              failures.append("fixed:unsupported_categories")
             self._events[kind] = events
             self._last[kind] = self.monotonic()
             self._position[kind] = point
           successful.append(kind)
         except Exception as error:
           # Server/parser text can contain tokens; expose classes only.
-          failures.append(kind + ":" + type(error).__name__)
+          failures.append(kind + ":" + _safe_error(error))
       with self._lock:
         if token != self._generation or not self._enabled:
           return
@@ -173,9 +226,11 @@ class WazeCameraUpdater:
     except Exception as error:
       with self._lock:
         if token == self._generation and self._enabled:
-          self._put("SpeedCameraWazeError", type(error).__name__)
+          self._put("SpeedCameraWazeError", _safe_error(error))
           self._set_status("error")
     finally:
       if staged is not None and os.path.exists(staged):
         os.unlink(staged)
-      self._next_attempt = self.monotonic() + (30 if failures or not successful else 1)
+      with self._lock:
+        if token == self._generation and self._enabled:
+          self._next_attempt = self.monotonic() + (30 if failures or not successful else 1)

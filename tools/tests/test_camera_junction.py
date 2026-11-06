@@ -13,14 +13,16 @@ def junction_graph(root, *, spacing=None):
 
 
 @pytest.mark.parametrize('camera_point',[point(40),point(0,40),point(0,-40)])
-def test_junction_accepts_straight_sibling_and_opposite_arms_without_strict_route(tmp_path,camera_point):
+def test_junction_accepts_sibling_arms_and_preserves_known_same_way_straight_route(tmp_path,camera_point):
   graph = junction_graph(tmp_path)
-  assert graph.camera_distance(point(-100),0,camera_point,0) is None
+  strict = graph.camera_distance(point(-100),0,camera_point,0)
+  assert strict == pytest.approx(140.,abs=.05) if camera_point == point(40) else strict is None
   distance,junction = graph.junction_camera_approach(point(-100),0,camera_point)
   assert distance == pytest.approx(140.,abs=.05)
   assert junction == point()
-  # The new approximate API does not invent a strict forward route.
-  assert graph.camera_distance(point(-100),0,camera_point,0) is None
+  # The approximate API does not invent a strict route onto a sibling arm.
+  again = graph.camera_distance(point(-100),0,camera_point,0)
+  assert again == strict
 
 
 @pytest.mark.parametrize('scenario',['parallel','crossing','incoming_arm','behind_vehicle'])

@@ -1,5 +1,6 @@
 """Deterministic worker lifecycle tests with injected acquisition and policy."""
 import importlib.util
+import math
 from pathlib import Path
 import threading
 from types import SimpleNamespace as NS
@@ -405,3 +406,58 @@ def test_owned_backend_recreated_after_configuration_replacement(module, tmp_pat
   finish(updater)
   assert len(instances) == 2 and updater.backend is instances[1]
   assert [camera.source_id for camera in updater.snapshot()] == ['2']
+
+
+
+def context_event(points):
+  return event(approach_geometry=points, approach_source='yandex_native_route',
+               approach_observed_at=1000, approach_expires_at=1180)
+
+
+def test_gentle_departure_refreshes_before_time_or_turn_threshold(module, tmp_path):
+  u, _, b, _, mono = setup(module, tmp_path)
+  b.events = (context_event([[37, 54.99], [37, 55.01]]),)
+  tick(u)
+  finish(u)
+  mono[0] += 4
+  assert not tick(u, lon=37.0004, heading=20)
+  mono[0] += 1
+  assert tick(u, lon=37.0004, heading=20)
+  finish(u)
+  assert len(b.calls) == 2
+
+
+def test_following_curve_and_twelve_meter_jitter_do_not_refresh(module, tmp_path):
+  u, _, b, _, mono = setup(module, tmp_path)
+  # Northern segment bends east by 20 degrees; this is still the witnessed road.
+  endpoint = [37 + .001 * math.tan(math.radians(20)) / math.cos(math.radians(55)), 55.001]
+  b.events = (context_event([[37, 54.999], [37, 55], endpoint]),)
+  tick(u)
+  finish(u)
+  mono[0] += 5
+  assert not tick(u, lat=55.0005, lon=(37 + endpoint[0]) / 2, heading=20)
+  assert not tick(u, lat=54.9995, lon=37.0001, heading=0)  # about 6.4m jitter
+  assert len(b.calls) == 1
+
+
+def test_reverse_context_cannot_block_matching_forward_context(module, tmp_path):
+  u, _, b, _, mono = setup(module, tmp_path)
+  forward = [[37, 54.99], [37, 55.01]]
+  b.events = (context_event(list(reversed(forward))), dict(context_event(forward), source_id='forward'))
+  tick(u)
+  finish(u)
+  mono[0] += 5
+  assert not tick(u, lat=55.0001, heading=0)
+  assert tick(u, lat=55.0001, heading=40)  # heading leaves every compatible context
+  finish(u)
+
+
+def test_context_limits_and_missing_fallback(module, tmp_path):
+  u, _, b, _, mono = setup(module, tmp_path)
+  b.events = tuple(dict(context_event([[37+i*.001, 54.99], [37+i*.001, 55.01]]), source_id=str(i)) for i in range(10))
+  tick(u)
+  finish(u)
+  assert len(u._approach_contexts) == 4
+  u._approach_contexts = ()
+  mono[0] += 5
+  assert not tick(u, lon=37.0004, heading=20)

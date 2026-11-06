@@ -323,3 +323,53 @@ def test_modified_placeholder_cannot_bypass_tile_identity():
   changed = body[:12] + struct.pack("<II", len(compressed), len(raw)) + compressed
   with pytest.raises(ValueError, match="tile header mismatch"):
     parse_tile(changed, 394015501)
+
+
+@pytest.mark.parametrize('path,login,stage', [('/rtserver/distrib/static', False, 'registration'),
+                                           ('/rtserver/distrib/login', True, 'login'),
+                                           ('/rtserver/distrib/command', False, 'handshake'),
+                                           ('/rtserver/distrib/command', False, 'viewport')])
+def test_http_rejection_keeps_numeric_status_and_exact_rt_stage(tmp_path, path, login, stage):
+  from openpilot.sunnypilot.mapd.waze.transport import TransportError
+
+  def denied(*args, **kwargs):
+    raise TransportError('SECRET_URL_UID_TOKEN', category='http', status=403)
+
+  client = RTClient(GuestStore(tmp_path), 'row', denied, lambda: NOW, monotonic=lambda: 10)
+  with pytest.raises(TransportError) as caught:
+    client._request(path, 'synthetic', 20, login=login, stage=stage)
+  assert (caught.value.category, caught.value.stage, caught.value.status) == ('http', stage, 403)
+
+
+def test_protobuf_rejection_is_distinct_from_local_pending_without_registration_repeat(tmp_path):
+  store = GuestStore(tmp_path)
+  store.begin_registration('row')
+  calls = []
+  client = RTClient(store, 'row', lambda *a, **k: calls.append(a), lambda: NOW)
+  with pytest.raises(AccountRejectedError) as pending:
+    client.fetch(48, 11, 1000)
+  assert (pending.value.category, pending.value.stage, pending.value.status) == ('local_pending', 'registration', None)
+  assert calls == []
+
+  def denied(*args, **kwargs):
+    return batch(codec.binary(2003, codec.integer(10101, 403) + codec.binary(10102, 'SECRET_UID_TOKEN')))
+
+  other = RTClient(store, 'row', denied, lambda: NOW, monotonic=lambda: 10)
+  with pytest.raises(AccountRejectedError) as server:
+    other._request('/rtserver/distrib/login', 'synthetic', 20, login=True)
+  assert (server.value.category, server.value.stage, server.value.status) == ('protobuf_rejected', 'login', 403)
+
+
+def test_transport_http_error_exports_only_numeric_metadata(monkeypatch):
+  from urllib.error import HTTPError
+  from types import SimpleNamespace as NS
+  from openpilot.sunnypilot.mapd.waze import transport
+
+  def denied(*args, **kwargs):
+    raise HTTPError('https://SECRET/token', 403, 'SECRET_UID', {}, BytesIO(b'SECRET_BODY'))
+
+  monkeypatch.setattr(transport, 'build_opener', lambda *handlers: NS(open=denied))
+  with pytest.raises(transport.TransportError) as caught:
+    transport.request('https://rt-xlb-row.waze.com/rtserver/distrib/static', body=b'synthetic')
+  assert caught.value.category == 'http' and caught.value.status == 403
+  assert 'SECRET' not in str(caught.value)

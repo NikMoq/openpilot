@@ -1,5 +1,6 @@
 """Normalize verified native route evidence; this module never enables control."""
 import math
+from bisect import bisect_left, bisect_right
 import struct
 import time
 
@@ -56,6 +57,27 @@ def _bearing(a, b):
                                 math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(delta))) % 360
 
 
+def approach_context(points, index, fraction, observed, expires, *, distances=None):
+  """Keep a bounded witnessed road path, never a straight extrapolation.
+
+  Retain the exact event edge even for unusually dense route vertices. A short
+  retained path does not authorize matching beyond its actual endpoints.
+  """
+  if distances is None:
+    distances = [0.]
+    for a, b in zip(points, points[1:], strict=False):
+      distances.append(distances[-1] + _distance(tuple(v / 1e6 for v in a), tuple(v / 1e6 for v in b)))
+  position = distances[index] + fraction * (distances[index + 1] - distances[index])
+  begin = max(0, bisect_left(distances, position - 5000) - 1)
+  end = min(len(points), bisect_right(distances, position + 300) + 1)
+  if end - begin > 512:
+    begin = max(begin, index - 383)
+    end = min(end, begin + 512)
+  geometry = tuple(tuple(v / 1e6 for v in p) for p in points[begin:end])
+  return {'approach_geometry': geometry, 'approach_source': 'yandex_native_route',
+          'approach_observed_at': observed, 'approach_expires_at': expires}
+
+
 def normalize_native_snapshot(result, *, now=None):
   """Return fresh source records, preserving acquisition time and raw provenance.
 
@@ -77,12 +99,16 @@ def normalize_native_snapshot(result, *, now=None):
   limits = decode_route_limits(route)
   if len(limits) != len(points) - 1:
     raise ValueError('route limit geometry mismatch')
+  distances = [0.]
+  for a, b in zip(points, points[1:], strict=False):
+    distances.append(distances[-1] + _distance(tuple(v / 1e6 for v in a), tuple(v / 1e6 for v in b)))
   events = conditions['field4_route_events']
   if conditions['unknown_field_numbers'] or events is None or events['unknown_field_numbers']:
     raise ValueError('unsupported native events envelope')
   if len(events['field1_events']) > wire.MAX_VALUES:
     raise ValueError('native event budget exceeded')
   records = []
+  remaining_context_points = 32_768
   seen = set()
   for event in events['field1_events']:
     index, fraction = event['field1_int32'], event['field7_float64']
@@ -121,6 +147,12 @@ def normalize_native_snapshot(result, *, now=None):
       rounded = round(canonical)
       if rounded > 0 and abs(canonical - rounded) <= 1e-4:
         kph = rounded
+    context = {}
+    if kind in ('fixed', 'mobile') and kph is not None:
+      candidate = approach_context(points, index, fraction, observed, expires, distances=distances)
+      if len(candidate['approach_geometry']) <= remaining_context_points:
+        context = candidate
+        remaining_context_points -= len(candidate['approach_geometry'])
     records.append({'source': 'yandex', 'source_kind': kind, 'source_id': 'yandex:native:' + event_id,
                     'source_sdk': SDK_VERSION, 'raw_event_id': event_id, 'raw_tags': raw_tags,
                     'tags': tuple(sorted(known_tags)), 'in_face': 'in_face' in raw_tags, 'in_back': 'in_back' in raw_tags,
@@ -135,5 +167,6 @@ def normalize_native_snapshot(result, *, now=None):
                     'road_limit_unit': 'km/h' if kph is not None else None,
                     'speed_limit_confidence': LIMIT_CONFIDENCE if kph is not None else None,
                     'road_limit_direction_basis': 'acquired_route_forward_edge',
-                    'direction': None, 'auto_control_eligible': False})
+                    'direction': None, 'auto_control_eligible': False,
+                    **context})
   return records

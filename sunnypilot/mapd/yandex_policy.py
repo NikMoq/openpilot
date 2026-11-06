@@ -142,7 +142,11 @@ def events_to_cameras(events, now):
     except (TypeError, ValueError):
       continue
     if len(raw.encode()) > MAX_EVENT_BYTES:
-      continue
+      # A long witnessed approach must not erase the underlying camera report.
+      event = {key: value for key, value in event.items() if not key.startswith('approach_')}
+      raw = json.dumps(event, sort_keys=True, separators=(',', ':'), allow_nan=False)
+      if len(raw.encode()) > MAX_EVENT_BYTES:
+        continue
     params = {'yandex_event': raw, 'source_id': event['source_id']}
     evidence = _control(event)
     if evidence is None or event['source_kind'] == 'mobile':

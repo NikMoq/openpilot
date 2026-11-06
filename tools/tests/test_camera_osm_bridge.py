@@ -34,7 +34,7 @@ def tile(root, roads, *, bounds=(54.9,36.9,55.1,37.1), speeds=123, one_way=True)
   msg.minLat,msg.minLon,msg.maxLat,msg.maxLon = bounds
   msg.overlap = .001
   ways = msg.init('ways',len(roads))
-  for way,points in zip(ways,roads):
+  for way,points in zip(ways,roads,strict=True):
     way.minLat = min(p[0] for p in points)
     way.minLon = min(p[1] for p in points)
     way.maxLat = max(p[0] for p in points)
@@ -42,7 +42,7 @@ def tile(root, roads, *, bounds=(54.9,36.9,55.1,37.1), speeds=123, one_way=True)
     way.oneWay = one_way
     way.maxSpeed = way.maxSpeedForward = way.maxSpeedBackward = speeds
     nodes = way.init('nodes',len(points))
-    for node,p in zip(nodes,points):
+    for node,p in zip(nodes,points,strict=True):
       node.latitude,node.longitude = p
   target.write_bytes(msg.to_bytes_packed())
   return target
@@ -256,10 +256,11 @@ def test_parallel_road_camera_cannot_join_vehicle_path(tmp_path):
   assert bridge.snapshot.camera_distance(point(),0,point(900,20),0) is None
 
 
-def test_turning_branch_is_not_guessed(tmp_path):
+def test_same_way_main_continues_but_turning_branch_is_not_guessed(tmp_path):
   tile(tmp_path,[[point(-100),point(200),point(1500)],[point(200),point(200,200)]])
   bridge = load(tmp_path)
-  assert bridge.snapshot.camera_distance(point(),0,point(900),0) is None
+  assert bridge.snapshot.camera_distance(point(),0,point(900),0) == pytest.approx(900,abs=.1)
+  assert bridge.snapshot.camera_distance(point(),0,point(200,100),90) is None
 
 
 @pytest.mark.parametrize('vehicle,camera', [(-5.,5.),(-50.,0.),(0.,50.)])
@@ -443,13 +444,13 @@ def test_cached_route_keeps_covered_prefix_but_never_crosses_gap():
   assert snapshot.camera_distance((0.,.005),90,(0.,.009),90) == prefix
 
 
-def test_cached_route_never_extends_past_ambiguous_branch(tmp_path):
+def test_cached_same_way_route_continues_without_selecting_branch(tmp_path):
   tile(tmp_path,[[point(-100),point(200),point(1500)],[point(200),point(200,200)]])
   snapshot = load(tmp_path).snapshot
   assert snapshot.camera_distance(point(),0,point(100),0) == pytest.approx(100,abs=.1)
   route = snapshot._route_entries
   for _ in range(3):
-    assert snapshot.camera_distance(point(),0,point(900),0) is None
+    assert snapshot.camera_distance(point(),0,point(900),0) == pytest.approx(900,abs=.1)
     assert snapshot._route_entries is route
     assert snapshot.camera_distance(point(),0,point(100),0) == pytest.approx(100,abs=.1)
 
@@ -489,7 +490,7 @@ def test_cumulative_index_reference_budget_rejects_many_long_segments_before_all
 # Adding survey nodes must not change the road represented by a polyline.
 def dense_way(vertices, spacing):
   coordinates = []
-  for (north,east),(next_north,next_east) in zip(vertices,vertices[1:]):
+  for (north,east),(next_north,next_east) in zip(vertices,vertices[1:],strict=False):
     count = math.ceil(math.hypot(next_north-north,next_east-east)/spacing)
     coordinates.extend(point(north+(next_north-north)*step/count,
                              east+(next_east-east)*step/count) for step in range(count))
@@ -551,7 +552,7 @@ def test_dense_near_junction_can_associate_connected_fork_or_merge(tmp_path,junc
   graph = load(tmp_path).snapshot
   assert graph.associate(point(-7.5 if junction == 'fork' else 7.5),0) is not None
   strict = graph.camera_distance(point(-50),0,point(500),0)
-  assert (strict is None) is (junction == 'fork')
+  assert strict == pytest.approx(550,abs=.1)
 
 
 def test_dense_disconnected_crossing_does_not_create_connectivity(tmp_path):

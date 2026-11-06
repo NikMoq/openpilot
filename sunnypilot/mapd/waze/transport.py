@@ -12,7 +12,10 @@ ALLOWED_HOSTS = frozenset({"rt-xlb-row.waze.com", "rt-xlb-am.waze.com", "rt-xlb-
 
 
 class TransportError(OSError):
-  pass
+  def __init__(self, *args, category="transport", status=None):
+    super().__init__(*args)
+    self.category = category
+    self.status = status
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -73,7 +76,7 @@ def request(url: str, body: bytes | None = None, headers: dict | None = None,
   except HTTPError as error:
     status = error.code
     error.close()
-    raise TransportError(f"Waze HTTP {status}") from None
+    raise TransportError(f"Waze HTTP {status}", category="http", status=status) from None
 
 
 class WazeTransport:

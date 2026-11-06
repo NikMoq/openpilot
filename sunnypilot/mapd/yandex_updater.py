@@ -27,6 +27,7 @@ class YandexCameraUpdater:
     self._lock = threading.RLock()
     self._generation, self._enabled = 0, False
     self._events, self._written = (), {}
+    self._approach_contexts = ()
     self._worker = None
     self._workers = []
     self._next_attempt, self._last = -math.inf, -math.inf
@@ -50,6 +51,7 @@ class YandexCameraUpdater:
     self._generation += 1
     self._worker = None
     self._events = ()
+    self._approach_contexts = ()
     self._point = self._heading = None
     self._last = self._next_attempt = -math.inf
     self._failures = 0
@@ -95,6 +97,52 @@ class YandexCameraUpdater:
   def _number(value):
     return type(value) in (int, float) and math.isfinite(value)
 
+  def _contexts(self, events, now):
+    contexts = {}
+    for event in events:
+      geometry = event.get('approach_geometry')
+      observed, expires = event.get('approach_observed_at'), event.get('approach_expires_at')
+      if (event.get('approach_source') != 'yandex_native_route' or
+          not self._number(observed) or not self._number(expires) or
+          not observed <= now + 1 or not now < expires or not 0 < expires - observed <= 300 or
+          not self._number(event.get('expires_at')) or expires > event['expires_at'] or
+          not isinstance(geometry, (list, tuple)) or not 2 <= len(geometry) <= 512):
+        continue
+      if any(not isinstance(p, (tuple, list)) or len(p) != 2 or
+             not all(self._number(v) for v in p) or abs(p[0]) > 180 or abs(p[1]) >= 85 for p in geometry):
+        continue
+      points = tuple(tuple(p) for p in geometry)
+      if any(abs(a[0] - b[0]) > 180 for a, b in zip(points, points[1:], strict=False)):
+        continue
+      contexts[points] = (observed, expires, points)
+      if len(contexts) == 4:
+        break
+    return tuple(contexts.values())
+
+  def _left_approach(self, latitude, longitude, heading):
+    now = self.clock()
+    active = [points for observed, expires, points in self._approach_contexts if observed <= now + 1 and now < expires]
+    if not active:
+      return False  # Old producers retain the existing time/movement/turn policy.
+    cosine = math.cos(math.radians(latitude))
+    for points in active:
+      nearest = None
+      for a, b in zip(points, points[1:], strict=False):
+        ax, ay = (a[0] - longitude) * 111320 * cosine, (a[1] - latitude) * 111320
+        bx, by = (b[0] - longitude) * 111320 * cosine, (b[1] - latitude) * 111320
+        dx, dy = bx - ax, by - ay
+        length2 = dx * dx + dy * dy
+        if length2 <= 0:
+          continue
+        fraction = max(0., min(1., -(ax * dx + ay * dy) / length2))
+        distance = math.hypot(ax + fraction * dx, ay + fraction * dy)
+        tangent = math.degrees(math.atan2(dx, dy)) % 360
+        if nearest is None or distance < nearest[0]:
+          nearest = distance, tangent
+      if nearest is not None and nearest[0] <= 12 and abs((heading - nearest[1] + 180) % 360 - 180) <= 35:
+        return False
+    return True
+
   def tick(self, latitude, longitude, *, heading, enabled, position_valid):
     with self._lock:
       if bool(enabled) != self._enabled:
@@ -102,6 +150,7 @@ class YandexCameraUpdater:
         self._generation += 1
         self._worker = None
         self._events = ()
+        self._approach_contexts = ()
         self._point = None
         self._last = self._next_attempt = -math.inf
         self._failures = 0
@@ -125,7 +174,8 @@ class YandexCameraUpdater:
       moved = self._point is None or math.hypot((latitude - self._point[0]) * 111320,
           (longitude - self._point[1]) * 111320 * math.cos(math.radians(latitude))) >= 1000
       turned = self._heading is None or abs((heading - self._heading + 180) % 360 - 180) >= 30
-      if not moved and not turned and now - self._last < 60:
+      departed = self._left_approach(latitude, longitude, heading)
+      if not moved and not turned and not departed and now - self._last < 60:
         return False
       self._workers = [worker for worker in self._workers if worker.is_alive()]
       if len(self._workers) >= 2:
@@ -184,6 +234,7 @@ class YandexCameraUpdater:
         count = len({c.source_params.get('source_id', c.source_id) for c in cameras})
         controls = sum(bool(c.allowed_auto_control) for c in cameras)
         self._events = combined
+        self._approach_contexts = self._contexts(combined, self.clock())
         self._last, self._point, self._heading = self.monotonic(), point, heading
         self._failures = self._failures + 1 if partial else 0
         self._next_attempt = self.monotonic() + (min(300, 30 * 2 ** min(self._failures - 1, 4)) if partial else 5)

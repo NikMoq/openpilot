@@ -32,6 +32,11 @@ class ThrottledError(RuntimeError):
   pass
 
 
+def _diagnostic(error, category, stage=None, status=None):
+  error.category, error.stage, error.status = category, stage, status
+  return error
+
+
 def _check_errors(batch: list[dict]) -> None:
   for element in batch:
     if 2003 in element:
@@ -40,11 +45,12 @@ def _check_errors(batch: list[dict]) -> None:
       # Descriptions are inspected for classification only and never exported.
       description = codec.text(error, 10102).lower()
       if code >= 500:
-        raise RetryableError(f"Waze server operation error {code}")
+        raise _diagnostic(RetryableError(f"Waze server operation error {code}"), "protobuf_unavailable", status=code)
       if code >= 400:
-        raise AccountRejectedError(f"Waze guest/session rejected ({code}); existing credentials retained")
+        raise _diagnostic(AccountRejectedError(f"Waze guest/session rejected ({code}); existing credentials retained"),
+                          "protobuf_rejected", status=code)
       if any(value in description for value in ("relogin", "unknown userid", "secretkey missing", "secret key missing")):
-        raise RetryableError("Waze session needs login")
+        raise _diagnostic(RetryableError("Waze session needs login"), "relogin")
     errors = []
     if 2224 in element:
       errors.append(codec.nested(element, 2224))
@@ -55,8 +61,9 @@ def _check_errors(batch: list[dict]) -> None:
     for error in errors:
       code = codec.scalar(error, 2)
       if code in (1, 3, 7):
-        raise AccountRejectedError(f"Waze guest rejected ({code}); existing credentials retained")
-      raise RetryableError(f"Waze login unavailable ({code})")
+        raise _diagnostic(AccountRejectedError(f"Waze guest rejected ({code}); existing credentials retained"),
+                          "protobuf_rejected", status=code)
+      raise _diagnostic(RetryableError(f"Waze login unavailable ({code})"), "protobuf_unavailable", status=code)
 
 
 class GuestStore:
@@ -99,7 +106,8 @@ class GuestStore:
   def begin_registration(self, region: str) -> str:
     path = self.directory / f"registration_{region}.pending"
     if path.exists():
-      raise AccountRejectedError("Previous Waze guest registration was not completed; automatic registration stopped")
+      raise _diagnostic(AccountRejectedError("Previous Waze guest registration was not completed; automatic registration stopped"),
+                        "local_pending", "registration")
     installation = str(uuid.uuid4())
     # Persist before the network call, preventing account churn on process crashes.
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -127,10 +135,11 @@ class RTClient:
     self._cache: dict[str, dict] = {}
     self._last_key, self._last_result = None, None
 
-  def _request(self, path: str, payload: str, deadline: float, login: bool = False) -> list[dict]:
+  def _request(self, path: str, payload: str, deadline: float, login: bool = False, stage: str | None = None) -> list[dict]:
+    stage = stage or ("login" if login else "registration" if path.endswith("/static") else "viewport")
     remaining = deadline - self.monotonic()
     if remaining <= 0:
-      raise TimeoutError("Waze RT acquisition deadline exceeded")
+      raise _diagnostic(TimeoutError("Waze RT acquisition deadline exceeded"), "timeout", stage)
     region = "am" if self.region == "na" else self.region
     headers = {"User-Agent": ("waze/" if login else "") + "5.17.1.0", "x-waze-network-version": "3",
                "sequence-number": str(self._sequence), "Content-Type": "binary/octet-stream", "cache-control": "no-cache"}
@@ -139,10 +148,16 @@ class RTClient:
       headers["x-waze-wait-timeout"] = "8500"
     if self._uid and path.endswith("/command"):
       headers.update({"uid": self._uid, "x-waze-wait-timeout": "10500"})
-    raw = self.transport(f"https://rt-xlb-{region}.waze.com{path}", body=payload.encode(), headers=headers,
-                         timeout_s=remaining, max_bytes=codec.MAX_MESSAGE_BYTES)
-    batch = codec.elements(raw)
-    _check_errors(batch)
+    try:
+      raw = self.transport(f"https://rt-xlb-{region}.waze.com{path}", body=payload.encode(), headers=headers,
+                           timeout_s=remaining, max_bytes=codec.MAX_MESSAGE_BYTES)
+      batch = codec.elements(raw)
+      _check_errors(batch)
+    except Exception as error:
+      error.stage = stage
+      if not hasattr(error, "category"):
+        error.category = "timeout" if isinstance(error, TimeoutError) else "network" if isinstance(error, OSError) else "protocol"
+      raise
     self._last_use = self.monotonic()
     return batch
 
@@ -158,10 +173,10 @@ class RTClient:
       batch = self._request("/rtserver/distrib/static", codec.client_info(lat, lon, installation, now_ms) + "\n" + codec.line(2219, b""), deadline)
       registered = next((codec.nested(element, 2220) for element in batch if 2220 in element), None)
       if registered is None:
-        raise RetryableError("Waze guest registration did not succeed; automatic repeat stopped")
+        raise _diagnostic(RetryableError("Waze guest registration did not succeed; automatic repeat stopped"), "protocol", "registration")
       username, password = codec.text(registered, 1), codec.text(registered, 2)
       if not username or not password:
-        raise RetryableError("Waze guest registration returned incomplete credentials; automatic repeat stopped")
+        raise _diagnostic(RetryableError("Waze guest registration returned incomplete credentials; automatic repeat stopped"), "protocol", "registration")
       state = {"installation": installation, "username": username, "password": password}
       self.store.save(self.region, state, now_ms)
     payload = (codec.client_info(lat, lon, state["installation"], now_ms) + "\n"
@@ -174,12 +189,12 @@ class RTClient:
       success = codec.nested(response, 1)
       identifier, secret = codec.scalar(success, 1), codec.text(success, 3)
       if not identifier or not secret:
-        raise RetryableError("Waze login returned an invalid session")
+        raise _diagnostic(RetryableError("Waze login returned an invalid session"), "protocol", "login")
       self._uid = codec.uid_header(identifier, secret)
       self._sequence, self._logged_at = 2, self.monotonic()
       self._cache.clear()
       return True
-    raise RetryableError("Waze login returned no accepted session; credentials retained")
+    raise _diagnostic(RetryableError("Waze login returned no accepted session; credentials retained"), "protocol", "login")
 
   def _merge(self, batch: list[dict]) -> list[str]:
     now_ms = round(self.clock() * 1000)
@@ -219,7 +234,7 @@ class RTClient:
       fresh = self._ensure_login(lat, lon, deadline)
       if fresh:
         handshake = f"SeeMe,1,2,T,T,T,1,-1,1,7\nSetMood,1\nLocation,{lon},{lat}\n" + codec.map_command(lon - .018, lat - .015, lon + .018, lat + .015)
-        removed += self._merge(self._request("/rtserver/distrib/command", handshake, deadline))
+        removed += self._merge(self._request("/rtserver/distrib/command", handshake, deadline, stage="handshake"))
       removed += self._merge(self._request("/rtserver/distrib/command", codec.map_command(west, south, east, north), deadline))
     except Exception:
       self._uid = None  # retry existing credentials on next scheduled call, never replace guest

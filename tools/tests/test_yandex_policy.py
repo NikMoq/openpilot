@@ -40,6 +40,16 @@ def test_fixed_admission_and_expiry():
   assert camera.direction_type == 1 and camera.direction_deg == 0
 
 
+def test_oversized_approach_does_not_erase_underlying_camera():
+  record = event()
+  record.update(approach_geometry=[[38., 45.]] * 2000, approach_source='yandex_native_route',
+                approach_observed_at=NOW, approach_expires_at=NOW + 300)
+  camera, = events_to_cameras([record], NOW)
+  assert yandex_control_evidence(camera)
+  stored = json.loads(camera.source_params['yandex_event'])
+  assert 'approach_geometry' not in stored and stored['source_id'] == record['source_id']
+
+
 @pytest.mark.parametrize('tag', ['mobile_control', 'police_patrol'])
 @pytest.mark.parametrize('facing', ['in_face', 'in_back'])
 def test_mobile_warning_all_approaches_and_directed_control(tag, facing):

@@ -26,6 +26,32 @@ def acquisition(tags=(b'speed_control',), raw=16.66666603088379, point=None):
   return SimpleNamespace(complete=True, observed_at=NOW, route=route, conditions=conditions)
 
 
+def test_acquisition_preserves_witnessed_approach_and_freshness():
+  result = acquisition()
+  value = snapshot.normalize_native_snapshot(result, now=NOW)[0]
+  assert value['approach_geometry'] == value['road_geometry']
+  assert value['approach_source'] == 'yandex_native_route'
+  assert value['approach_observed_at'] == value['observed_at'] == NOW
+  assert value['approach_expires_at'] == value['expires_at'] == NOW + 300
+
+
+@pytest.mark.parametrize('index', [0, 300, 998])
+def test_dense_approach_is_bounded_without_extrapolation_and_keeps_event_edge(index):
+  points = tuple((38_000_000 + i, 45_000_000 + i) for i in range(1000))
+  context = snapshot.approach_context(points, index, .5, NOW, NOW + 180)
+  geometry = context['approach_geometry']
+  original = tuple(tuple(v / 1e6 for v in p) for p in points)
+  assert 2 <= len(geometry) <= 512
+  begin = original.index(geometry[0])
+  assert geometry == original[begin:begin + len(geometry)]
+  assert original[index] in geometry and original[index + 1] in geometry
+
+
+def test_missing_limit_does_not_add_control_approach_context():
+  value = snapshot.normalize_native_snapshot(acquisition(raw=None), now=NOW)[0]
+  assert value['road_limit_kph'] is None and 'approach_geometry' not in value
+
+
 @pytest.mark.parametrize('raw,kph', [(5.55555534362793, 20), (11.11111068725586, 40), (16.66666603088379, 60),
                                     (None, None), (0, None), (1, None)])
 def test_verified_si_conversion(raw, kph):

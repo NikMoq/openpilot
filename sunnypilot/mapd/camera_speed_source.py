@@ -184,6 +184,30 @@ class CameraSpeedSource:
                     (vehicle_tolerance_m != 12. or vehicle_heading_tolerance_deg != 35.) else {})
     if reaction_distance_m not in range(50, 1001, 50):
       reaction_distance_m = 300
+    source_fresh = getattr(road_graph, 'camera_is_fresh', None)
+    if self._camera is not None and callable(source_fresh):
+      retained_id = camera_identity(self._camera)
+      replacements = (cameras.query(self._camera.latitude, self._camera.longitude, 1.)
+                      if isinstance(cameras, CameraSpatialIndex) else cameras)
+      for replacement in replacements:
+        if camera_identity(replacement) == retained_id and replacement.allowed_auto_control and source_fresh(replacement):
+          # Adopt an actual fresh source object without resetting measured
+          # approach/pass progress. Re-reading an old object cannot renew TTL.
+          self._camera = replacement
+          break
+    if self._camera is not None and callable(source_fresh) and not source_fresh(self._camera):
+      # Expired provider evidence cannot be prolonged by a retained CAN anchor.
+      # Expiry is not passage evidence and never marks the report completed.
+      self._camera = self._travel_heading = None
+      self._pending = self._previous_projection = None
+      self._junction_key = self._junction_distance = None
+      self._junction_anchored = self._confirmed_approach = False
+      self._crossed = False
+      self._behind_fixes = 0
+      self._behind_anchor = None
+      self.odometry = CameraOdometry()
+      self._odometry_fix_time = self._odometry_position = None
+      self.selection = CameraSelection(reason='camera_source_expired')
     point = (latitude, longitude)
     reliable = (gps_valid and all(isinstance(v, (float, int)) and math.isfinite(v) for v in (*point, heading, fix_time_s, now_s))
                 and -90 <= latitude <= 90 and -180 <= longitude <= 180 and 0 <= heading <= 360 and
@@ -237,9 +261,14 @@ class CameraSpeedSource:
       if road_graph is None:
         measured = camera_projection(camera, point, heading, self._travel_heading)
       else:
-        distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading,**road_options)
+        per_camera = getattr(road_graph, 'camera_distance_for_camera', None)
+        distance = (per_camera(camera, point, heading, self._travel_heading, **road_options) if callable(per_camera) else
+                    road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading,**road_options))
         if distance is None:
-          if hasattr(road_graph, 'passed_distance'):
+          per_camera_passed = getattr(road_graph, 'passed_distance_for_camera', None)
+          if callable(per_camera_passed):
+            behind = per_camera_passed(camera, point, heading, self._travel_heading, **road_options)
+          elif hasattr(road_graph, 'passed_distance'):
             behind = road_graph.passed_distance(point, heading, (camera.latitude, camera.longitude), self._travel_heading,**road_options)
           else:
             behind = road_graph.camera_distance((camera.latitude, camera.longitude), self._travel_heading, point, heading)
@@ -306,7 +335,9 @@ class CameraSpeedSource:
         if road_graph is None:
           measured = camera_projection(camera, point, heading, direction)
         else:
-          distance = road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), direction,**road_options)
+          per_camera = getattr(road_graph, 'camera_distance_for_camera', None)
+          distance = (per_camera(camera, point, heading, direction, **road_options) if callable(per_camera) else
+                      road_graph.camera_distance(point, heading, (camera.latitude, camera.longitude), direction,**road_options))
           measured = None if distance is None else (distance, 0.)
         strict_available |= measured is not None
         if measured is not None and 0 <= measured[0] <= LOOKAHEAD_M:
@@ -349,7 +380,8 @@ class CameraSpeedSource:
                                          identity, camera, distance, junction_key is None, False,
                                          'offline_approach' if junction_key is None else 'odometry_unavailable')
         return self.selection
-    if pending is None or pending[0] != identity or pending[4] != junction_key or angle_difference(pending[1], direction) > HEADING_TOLERANCE_DEG or distance > pending[3] + 3:
+    if (pending is None or pending[0] != identity or pending[4] != junction_key or
+        angle_difference(pending[1], direction) > HEADING_TOLERANCE_DEG or distance > pending[3] + 3):
       self._pending = (identity, direction, point, distance, junction_key)
     self.selection = CameraSelection(reason='confirming_approach')
     return self.selection

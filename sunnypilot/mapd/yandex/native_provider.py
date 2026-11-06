@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .native_client import AcquisitionCancelled, NativeYandexClient
 from .native_limits import decode_route_limits
-from .native_snapshot import LIMIT_CONFIDENCE, _bearing, _distance, normalize_native_snapshot
+from .native_snapshot import LIMIT_CONFIDENCE, _bearing, _distance, approach_context, normalize_native_snapshot
 from .native_transport import NativeHTTPTransport, load_private_credentials
 
 MAX_WINDOW_POINTS = 10_000
@@ -111,6 +111,7 @@ def _parallel_variant(event, forward, *, limits=None, projection_budget=None, sh
                 match_unique=True, observed_at=observed, observed_at_ms=int(observed * 1000),
                 expires_at=min(event['expires_at'], observed + 180))
   result['expires_at_ms'] = int(result['expires_at'] * 1000)
+  result.update(approach_context(points, index, fraction, observed, result['expires_at']))
   return result
 
 

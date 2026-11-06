@@ -451,9 +451,9 @@ class OfflineRoadSnapshot:
         return None
     return incoming_distance+best[1],junction
 
-  def _route(self, origin):
+  def _route(self, origin, target_way=None):
     edge,along = origin
-    key = (edge.key,along)
+    key = (edge.key,along,target_way)
     if key == self._route_key:
       return self._route_entries
     entries = {}
@@ -473,7 +473,19 @@ class OfflineRoadSnapshot:
         break
       following = [e for e in self.outgoing.get(edge.end, ()) if e.end != edge.start and e.key not in visited]
       if len(following) != 1:
-        break
+        # A side street does not erase a uniquely continuing main way. Only
+        # retain its exact directed way identity when the camera is on that
+        # same way; never select a future turn or resolve a same-way fork.
+        same_way = [candidate for candidate in following if candidate.way == edge.way == target_way]
+        if len(same_way) != 1:
+          break
+        before_dx, before_dy = xy(edge.end, edge.start)
+        after_dx, after_dy = xy(same_way[0].end, same_way[0].start)
+        before_heading = math.degrees(math.atan2(before_dx, before_dy)) % 360
+        after_heading = math.degrees(math.atan2(after_dx, after_dy)) % 360
+        if angle_difference(before_heading, after_heading) > 35.:
+          break  # Existing road-heading tolerance; a turn remains a junction.
+        following = same_way
       edge = following[0]
     self._route_key,self._route_entries = key,entries
     return entries
@@ -482,7 +494,7 @@ class OfflineRoadSnapshot:
     if origin is None or destination is None:
       return None
     target,target_along = destination
-    entry = self._route(origin).get(target.key)
+    entry = self._route(origin, target.way).get(target.key)
     if entry is None:
       return None
     offset,segment_start = entry
@@ -598,7 +610,7 @@ class OfflineOsmBridge:
         phase = 'decode'
         reader = self._schema.Offline.from_bytes_packed(self._bytes(path),traversal_limit_in_words=16*1024*1024)
         actual = (reader.minLat,reader.minLon,reader.maxLat,reader.maxLon)
-        if any(abs(a-b)>1e-6 for a,b in zip(expected,actual)):
+        if any(abs(a-b)>1e-6 for a,b in zip(expected,actual,strict=True)):
           raise ValueError('offline_map_bounds_mismatch')
         bounds.append(actual)
         for way in reader.ways:
@@ -610,7 +622,7 @@ class OfflineOsmBridge:
             raise ValueError('offline_map_invalid_coordinate')
           # Stable derived geometry identity, not an original OSM ID.
           identity = hashlib.sha256(repr((nodes,bool(way.oneWay))).encode()).hexdigest()[:24]
-          for i,(start,end) in enumerate(zip(nodes,nodes[1:])):
+          for i,(start,end) in enumerate(zip(nodes,nodes[1:],strict=False)):
             segment_box = (min(start[0],end[0]),min(start[1],end[1]),max(start[0],end[0]),max(start[1],end[1]))
             if not intersects(segment_box,crop):
               continue

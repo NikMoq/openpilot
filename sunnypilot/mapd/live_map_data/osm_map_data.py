@@ -16,6 +16,7 @@ from openpilot.common.params import Params
 from openpilot.system.hardware.hw import Paths
 from openpilot.sunnypilot.mapd.camera_database import load_database
 from openpilot.sunnypilot.mapd.camera_osm_bridge import OfflineOsmBridge
+from openpilot.sunnypilot.mapd.camera_provider_roads import ProviderRoadGraph
 from openpilot.sunnypilot.mapd.camera_speed_source import CameraSpeedSource, MAX_POSITION_AGE_S, camera_identity
 from openpilot.sunnypilot.mapd.camera_odometry import CameraOdometry, car_speed_sample
 from openpilot.sunnypilot.mapd.camera_updater import CameraParams
@@ -253,11 +254,12 @@ class OsmMapData(BaseMapData):
     if position_valid:
       self.camera_osm_bridge.tick(latitude, longitude)
     roads = self.camera_osm_bridge.snapshot
+    provider_roads = ProviderRoadGraph(roads, now_s=time.time())  # noqa: TID251 -- provider source expiry uses UNIX time
     self.camera_selection = self.camera_speed_source.update(
       self.camera_index or (), latitude, longitude, self.last_bearing,
-      gps_valid=position_valid and self.camera_index is not None and roads is not None,
+      gps_valid=position_valid and self.camera_index is not None,
       fix_time_s=position_time, now_s=now,
-      reaction_distance_m=reaction, road_graph=roads)
+      reaction_distance_m=reaction, road_graph=provider_roads)
     self.camera_selection = self.camera_speed_source.update_odometry(
       car_speed_sample(self.sm,time.monotonic()),trusted_position=position_valid,reaction_distance_m=reaction)
     if not self.camera_selection.valid and not self.camera_selection.pass_proven:
@@ -265,7 +267,7 @@ class OsmMapData(BaseMapData):
         reason = 'localizer_unreliable'
       elif self.camera_index is None:
         reason = database_reason
-      elif roads is None:
+      elif roads is None and self.camera_selection.reason != 'confirming_approach':
         reason = self.camera_osm_bridge.status
         if reason == 'ready':
           reason = 'offline_maps_loading'  # Worker completed after this tick captured snapshot=None.
