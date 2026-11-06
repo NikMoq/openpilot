@@ -36,7 +36,8 @@ The native worker reads its private client configuration from
 `/data/media/0/osm/yandex/private/client.json`, with file mode `0600`. This
 credential file stays outside Git. The dedicated **Yandex API key** row
 (Russian: **Ключ Яндекса**) accepts the owner's replacement MapKit key through
-a hidden input dialog. It displays only Configured / Not configured; saving
+an input dialog with the complete key visible while editing. After saving, the
+dialog closes and the menu displays only Configured / Not configured; saving
 preserves the other installation fields and atomically replaces the file with
 mode `0600`. An existing valid private installation is required.
 

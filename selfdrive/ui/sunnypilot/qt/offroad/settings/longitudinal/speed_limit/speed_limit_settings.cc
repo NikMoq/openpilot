@@ -236,7 +236,7 @@ SpeedLimitSettings::SpeedLimitSettings(QWidget *parent) : QStackedWidget(parent)
     tr("Paste your own Yandex key to connect this source."), this);
   connect(yandex_api_key, &ButtonControlSP::clicked, this, [this]() {
     const QString key = InputDialog::getText(tr("Yandex API key"), this,
-      tr("Paste your own Yandex key."), true, -1, "").trimmed();
+      tr("Paste your own Yandex key."), false, -1, "").trimmed();
     if (key.isEmpty()) return;
     static const QRegularExpression uuid("^[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$");
     if (!uuid.match(key).hasMatch()) {
