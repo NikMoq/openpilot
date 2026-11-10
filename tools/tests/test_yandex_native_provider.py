@@ -66,6 +66,7 @@ def test_partial_reverse_failure_and_all_failure():
   source = provider.NativeYandexProvider('/unused', client=FakeClient(callback), clock=lambda: NOW)
   value = source.fetch_window(45, 38, 0)
   assert not value.complete and value.errors == ('reverse:TimeoutError',) and len(value.events) == 1
+  assert value.network_failure
 
   def fail(*args):
     raise TimeoutError('synthetic')
@@ -103,6 +104,7 @@ def test_endpoint_mismatch_marks_partial():
     return result(start, end, shift=.1 if number == 1 else 0)
   value = provider.NativeYandexProvider('/unused', client=FakeClient(callback), clock=lambda: NOW).fetch_window(45, 38, 0)
   assert not value.complete and value.errors == ('forward:ValueError',)
+  assert not value.network_failure
   assert len(value.events) == 1
 
 

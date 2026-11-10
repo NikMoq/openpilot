@@ -12,6 +12,9 @@ from openpilot.sunnypilot.mapd.yandex_policy import events_to_cameras
 
 MAX_EVENTS = 5000
 MAX_BYTES = 8 * 1024 * 1024
+NETWORK_ERRORS = frozenset(('network_error', 'timeout', 'worker_timeout'))
+PROBE_INTERVAL_S = 10.
+WORKER_STALL_S = 65.
 
 
 def _utc_now_s():
@@ -19,7 +22,7 @@ def _utc_now_s():
 
 
 class YandexCameraUpdater:
-  def __init__(self, params, state_dir, *, backend=None, clock=_utc_now_s, monotonic=time.monotonic):
+  def __init__(self, params, state_dir, *, backend=None, connectivity_probe=None, clock=_utc_now_s, monotonic=time.monotonic):
     self.params, self.state_dir = params, Path(state_dir)
     self.backend, self.clock, self.monotonic = backend, clock, monotonic
     self._owns_backend = backend is None
@@ -33,6 +36,78 @@ class YandexCameraUpdater:
     self._next_attempt, self._last = -math.inf, -math.inf
     self._point, self._heading = None, None
     self._failures = 0
+    self._connectivity_probe = connectivity_probe
+    self._network_failure = False
+    self._probe_worker = None
+    self._next_probe = -math.inf
+    self._last_probe_started = -math.inf
+    self._worker_started = None
+    self._last_fetch_start = -math.inf
+
+  def _reset_network_recovery(self):
+    self._network_failure = False
+    self._next_probe = -math.inf
+    self._worker_started = None
+
+  def _probe_current(self, token):
+    with self._lock:
+      return self._current(token) and self._network_failure
+
+  def _probe(self, token):
+    try:
+      if not self._probe_current(token):
+        return
+      probe = self._connectivity_probe
+      if probe is None:
+        from openpilot.sunnypilot.mapd.yandex.connectivity import ConnectivityProbe
+        probe = ConnectivityProbe()
+      online = probe(should_continue=lambda: self._probe_current(token))
+      with self._lock:
+        if online is not True or not self._probe_current(token):
+          return
+        # A typed acquisition network failure already establishes unhealthy
+        # connectivity. Its first successful probe is a recovery edge.
+        self._generation += 1
+        self._worker = None
+        self._worker_started = None
+        self._network_failure = False
+        self._failures = 0
+        self._last = -math.inf
+        self._point = self._heading = None
+        self._next_attempt = max(self.monotonic(), self._last_fetch_start + 5.)
+        self._put('Error', '')
+    except Exception:
+      pass  # Probe diagnostics never export exception text or reset auth backoff.
+    finally:
+      with self._lock:
+        if self._probe_worker is threading.current_thread():
+          self._probe_worker = None
+
+  def _maybe_probe(self, now):
+    if (not self._network_failure or now < max(self._next_probe, self._last_probe_started + PROBE_INTERVAL_S) or
+        (self._worker is not None and self._worker.is_alive()) or
+        (self._probe_worker is not None and self._probe_worker.is_alive())):
+      return
+    self._next_probe = now + PROBE_INTERVAL_S
+    self._last_probe_started = now
+    worker = threading.Thread(target=self._probe, args=(self._generation,), daemon=True, name='yandex-connectivity-probe')
+    self._probe_worker = worker
+    worker.start()
+
+  def _check_worker_age(self, now):
+    if (self._worker is None or not self._worker.is_alive() or self._worker_started is None or
+        now - self._worker_started < WORKER_STALL_S):
+      return
+    # The default subprocess deadline is 60s. This defensive generation fence
+    # also cancels a delayed parent/injected backend, preserving the thread cap.
+    self._generation += 1
+    self._worker = None
+    self._worker_started = None
+    self._network_failure = True
+    self._failures += 1
+    self._next_attempt = now + min(300, 30 * 2 ** min(self._failures - 1, 4))
+    self._put('Error', 'worker_timeout')
+    self._status('error')
 
   def _credential_metadata(self):
     """Observe atomic configuration replacement without reading its contents."""
@@ -55,6 +130,7 @@ class YandexCameraUpdater:
     self._point = self._heading = None
     self._last = self._next_attempt = -math.inf
     self._failures = 0
+    self._reset_network_recovery()
     if self._owns_backend:
       self.backend = None
     # Keep old worker references so repeated edits cannot exceed the two-worker
@@ -154,11 +230,15 @@ class YandexCameraUpdater:
         self._point = None
         self._last = self._next_attempt = -math.inf
         self._failures = 0
+        self._reset_network_recovery()
         self._put('Count', 0)
       if not enabled:
         self._status('disabled')
         return False
       self._reload_credentials_if_changed()
+      now = self.monotonic()
+      self._check_worker_age(now)
+      self._maybe_probe(now)
       if (not position_valid or not all(self._number(v) for v in (latitude, longitude)) or
           not (-85 < latitude < 85 and -180 <= longitude <= 180)):
         self._status('waiting for localized position')
@@ -166,9 +246,10 @@ class YandexCameraUpdater:
       if not self._number(heading) or not 0 <= heading < 360:
         self._status('waiting for heading')
         return False
+      if self._probe_worker is not None and self._probe_worker.is_alive():
+        return False
       if self._worker is not None and self._worker.is_alive():
         return False
-      now = self.monotonic()
       if now < self._next_attempt:
         return False
       moved = self._point is None or math.hypot((latitude - self._point[0]) * 111320,
@@ -182,6 +263,7 @@ class YandexCameraUpdater:
         return False
       token = self._generation
       self._next_attempt = now + 5
+      self._worker_started = self._last_fetch_start = now
       self._status('downloading Yandex')
       worker = threading.Thread(target=self._refresh, args=((latitude, longitude), heading, token), daemon=True,
                                 name='yandex-camera-fetch')
@@ -217,8 +299,8 @@ class YandexCameraUpdater:
         return
       with self._lock:
         if self.backend is None:
-          from openpilot.sunnypilot.mapd.yandex.native_provider import NativeYandexProvider
-          self.backend = NativeYandexProvider(self.state_dir / 'private' / 'client.json')
+          from openpilot.sunnypilot.mapd.yandex.isolated import IsolatedYandexProvider
+          self.backend = IsolatedYandexProvider(self.state_dir / 'private' / 'client.json')
         backend = self.backend
       result = backend.fetch_window(*point, heading, should_continue=lambda: self._current(token))
       events = self._validate(result.events)
@@ -237,6 +319,7 @@ class YandexCameraUpdater:
         self._approach_contexts = self._contexts(combined, self.clock())
         self._last, self._point, self._heading = self.monotonic(), point, heading
         self._failures = self._failures + 1 if partial else 0
+        self._network_failure = partial and getattr(result, 'network_failure', False) is True
         self._next_attempt = self.monotonic() + (min(300, 30 * 2 ** min(self._failures - 1, 4)) if partial else 5)
         self._put('Count', count)
         if events or result.complete:
@@ -249,5 +332,9 @@ class YandexCameraUpdater:
           self._failures += 1
           self._next_attempt = self.monotonic() + min(300, 30 * 2 ** min(self._failures - 1, 4))
           credentials = getattr(error, 'category', None) in ('credentials_unavailable', 'creds_unavailable')
-          self._put('Error', 'creds_unavailable' if credentials else type(error).__name__)
+          category = getattr(error, 'category', None)
+          self._network_failure = category in NETWORK_ERRORS
+          known = NETWORK_ERRORS | {'http_error', 'invalid_service_configuration', 'invalid_timeout', 'unexpected_content_type',
+                                    'response_over_budget', 'invalid_request', 'closed', 'invalid_payload'}
+          self._put('Error', 'creds_unavailable' if credentials else category if category in known else 'acquisition_error')
           self._status('credentials unavailable' if credentials else 'error')

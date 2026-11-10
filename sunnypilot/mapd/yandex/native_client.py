@@ -8,10 +8,7 @@ import math
 import time
 
 from . import native_codec, native_events, native_route
-
-
-class AcquisitionCancelled(RuntimeError):
-  pass
+from .native_errors import AcquisitionCancelled
 
 
 @dataclass(frozen=True)

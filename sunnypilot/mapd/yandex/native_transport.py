@@ -14,20 +14,15 @@ import requests
 from urllib3.exceptions import HTTPError, ReadTimeoutError
 
 from .native_auth import request_signature
+from .native_endpoint import DEFAULT_BASE_URL
+from .native_errors import NativeTransportError
 
 SDK_BUILD = '4.45.0-full'
-DEFAULT_BASE_URL = 'https://proxy.mob.maps.yandex.net:443/mapkit2/driving/2.x/'
 DEFAULT_USER_AGENT = 'org.sunnypilot.yandexprobe/0.1-diagnostic maps.mobile/2026081315.14-d31a76c2e2204db-210.5-full-public linux/4.9.103 (comma; Comma; ru_RU)'
 MAX_RESPONSE_BYTES = 1024 * 1024
 TOTAL_TIMEOUT_S = 45
 _HOSTS = frozenset(('proxy.mob.maps.yandex.net', 'proxy.mob.maps.yandex-net.ru', 'proxy.mob.maps.yandexcom.net'))
 _API_KEY = re.compile(r'[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\Z')
-
-
-class NativeTransportError(RuntimeError):
-  def __init__(self, category, status=None):
-    self.category, self.status = category, status
-    super().__init__(category)  # Never export URL, server text, headers or credentials.
 
 
 def load_private_credentials(path):

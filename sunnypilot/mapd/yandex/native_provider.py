@@ -25,6 +25,7 @@ class NativeWindowResult:
   events: tuple[dict, ...]
   complete: bool
   errors: tuple[str, ...] = ()
+  network_failure: bool = False
 
 
 def _destination(latitude, longitude, heading, distance):
@@ -140,6 +141,7 @@ class NativeYandexProvider:
       origin = (latitude, longitude)
       records, errors, snapshots = [], [], {}
       first_error = None
+      network_failure = False
       for name, start, end in (('forward', origin, target), ('reverse', target, origin)):
         if not should_continue():
           raise AcquisitionCancelled('native window cancelled')
@@ -166,6 +168,8 @@ class NativeYandexProvider:
         except AcquisitionCancelled:
           raise
         except Exception as error:
+          network_failure |= (getattr(error, 'category', None) in ('network_error', 'timeout', 'worker_timeout')
+                              or isinstance(error, (TimeoutError, ConnectionError)))
           first_error = first_error or error
           errors.append(name + ':' + type(error).__name__)
       if not snapshots:
@@ -189,7 +193,7 @@ class NativeYandexProvider:
                    and _distance((longitude, latitude), (event['longitude'], event['latitude'])) <= self.radius_m + 1000)
       if not should_continue():
         raise AcquisitionCancelled('native window cancelled')
-      return NativeWindowResult(near, len(snapshots) == 2 and not errors, tuple(errors))
+      return NativeWindowResult(near, len(snapshots) == 2 and not errors, tuple(errors), network_failure)
     finally:
       if transport is not None:
         transport.close()

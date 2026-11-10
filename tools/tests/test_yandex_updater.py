@@ -49,10 +49,11 @@ def event(identity='yandex:native:1', **extra):
   return dict(source_id=identity, observed_at=1000, expires_at=1180, **extra)
 
 
-def setup(module, tmp_path, backend=None):
+def setup(module, tmp_path, backend=None, probe=None):
   clock, mono = [1000], [10]
   params, backend = Params(), backend or Backend()
-  updater = module.YandexCameraUpdater(params, tmp_path, backend=backend, clock=lambda: clock[0], monotonic=lambda: mono[0])
+  updater = module.YandexCameraUpdater(params, tmp_path, backend=backend, connectivity_probe=probe,
+                                      clock=lambda: clock[0], monotonic=lambda: mono[0])
   return updater, params, backend, clock, mono
 
 
@@ -387,7 +388,7 @@ def test_missing_file_baseline_and_removal_are_stable(module, tmp_path):
 
 def test_owned_backend_recreated_after_configuration_replacement(module, tmp_path, monkeypatch):
   instances = []
-  native_provider = types.ModuleType('openpilot.sunnypilot.mapd.yandex.native_provider')
+  native_provider = types.ModuleType('openpilot.sunnypilot.mapd.yandex.isolated')
 
   class Provider(Backend):
     def __init__(self, path):
@@ -395,7 +396,7 @@ def test_owned_backend_recreated_after_configuration_replacement(module, tmp_pat
       instances.append(self)
       self.events = (event(str(len(instances))),)
 
-  native_provider.NativeYandexProvider = Provider
+  native_provider.IsolatedYandexProvider = Provider
   monkeypatch.setitem(__import__('sys').modules, native_provider.__name__, native_provider)
   updater = module.YandexCameraUpdater(Params(), tmp_path, clock=lambda: 1000, monotonic=lambda: 10)
   assert tick(updater)
@@ -406,6 +407,258 @@ def test_owned_backend_recreated_after_configuration_replacement(module, tmp_pat
   finish(updater)
   assert len(instances) == 2 and updater.backend is instances[1]
   assert [camera.source_id for camera in updater.snapshot()] == ['2']
+
+
+class Probe:
+  def __init__(self, online=False):
+    self.online, self.calls = online, []
+
+  def __call__(self, *, should_continue):
+    self.calls.append(should_continue)
+    return self.online
+
+
+def network_failure(category='network_error', status=None):
+  error = RuntimeError('untrusted detail must not be exported')
+  error.category, error.status = category, status
+  return error
+
+
+def finish_probe(updater):
+  worker = updater._probe_worker
+  if worker is not None:
+    worker.join(3)
+    assert not worker.is_alive()
+
+
+def test_recovery_resets_300_second_backoff_and_uses_latest_location(module, tmp_path):
+  probe = Probe()
+  u, p, b, _, mono = setup(module, tmp_path, probe=probe)
+  b.error = network_failure()
+  for _ in range(5):
+    assert tick(u)
+    finish(u)
+    if _ < 4:
+      mono[0] = u._next_attempt
+      tick(u)
+      finish_probe(u)
+  assert u._next_attempt == mono[0] + 300
+  probe.online, b.error, b.events = True, None, (event('recovered'),)
+  mono[0] += 10
+  assert not tick(u, lat=56, heading=90)
+  finish_probe(u)
+  assert u._failures == 0 and u._point is None and u._next_attempt <= mono[0]
+  assert tick(u, lat=56, heading=90)
+  finish(u)
+  assert b.calls[-1][:3] == (56, 37, 90)
+  assert p.values['SpeedCameraYandexStatus'].startswith('ready:')
+  assert [camera.source_id for camera in u.snapshot()] == ['recovered']
+
+
+def test_first_online_probe_counts_recovery_and_limits_request_spacing(module, tmp_path):
+  probe = Probe(online=True)
+  u, _, b, _, mono = setup(module, tmp_path, probe=probe)
+  b.error = network_failure('timeout')
+  assert tick(u)
+  finish(u)
+  assert not tick(u)
+  finish_probe(u)
+  assert len(probe.calls) == 1 and u._next_attempt == mono[0] + 5
+  b.error = None
+  assert not tick(u)
+  mono[0] += 4.99
+  assert not tick(u)
+  mono[0] += .01
+  assert tick(u)
+  finish(u)
+  assert len(b.calls) == 2
+
+
+@pytest.mark.parametrize('category,status', [('http_error', 403), ('credentials_unavailable', None),
+                                           ('invalid_service_configuration', None), ('unexpected_content_type', None)])
+def test_auth_and_configuration_errors_never_start_connectivity_retry_loop(module, tmp_path, category, status):
+  probe = Probe(online=True)
+  u, p, b, _, mono = setup(module, tmp_path, probe=probe)
+  b.error = network_failure(category, status)
+  assert tick(u)
+  finish(u)
+  mono[0] += 10
+  assert not tick(u)
+  assert not probe.calls and u._probe_worker is None
+  assert p.values['SpeedCameraYandexError'] in ('http_error', 'creds_unavailable', category)
+
+
+def test_probes_are_throttled_and_expired_cache_never_renews(module, tmp_path):
+  probe = Probe()
+  u, p, b, clock, mono = setup(module, tmp_path, probe=probe)
+  b.events = (event('cached'),)
+  assert tick(u)
+  finish(u)
+  b.error = network_failure()
+  mono[0] += 60
+  assert tick(u)
+  finish(u)
+  assert len(u.snapshot()) == 1
+  assert not tick(u)
+  finish_probe(u)
+  assert len(probe.calls) == 1
+  mono[0] += 9
+  assert not tick(u)
+  assert len(probe.calls) == 1
+  mono[0] += 1
+  assert not tick(u)
+  finish_probe(u)
+  assert len(probe.calls) == 2
+  probe.online = True
+  mono[0] += 10
+  clock[0] = 1180
+  assert not tick(u)
+  finish_probe(u)
+  assert u.snapshot() == () and p.values['SpeedCameraYandexCount'] == '0'
+  assert u._events[0]['observed_at'] == 1000 and u._events[0]['expires_at'] == 1180
+
+
+def test_recovery_does_not_fetch_with_invalid_location_or_heading(module, tmp_path):
+  probe = Probe(online=True)
+  u, p, b, _, mono = setup(module, tmp_path, probe=probe)
+  b.error = network_failure()
+  assert tick(u)
+  finish(u)
+  assert not tick(u, position_valid=False)
+  finish_probe(u)
+  b.error = None
+  mono[0] += 5
+  assert not tick(u, position_valid=False)
+  assert not tick(u, heading=None)
+  assert len(b.calls) == 1
+  assert tick(u, lat=54, heading=180)
+  finish(u)
+  assert b.calls[-1][:3] == (54, 37, 180)
+  assert p.values['SpeedCameraYandexStatus'].startswith('ready:')
+
+
+@pytest.mark.parametrize('action', ['disable', 'key_change'])
+def test_one_blocked_probe_is_cancelled_and_late_success_is_discarded(module, tmp_path, action):
+  started, release = threading.Event(), threading.Event()
+  continuations = []
+
+  def probe(*, should_continue):
+    continuations.append(should_continue)
+    started.set()
+    assert release.wait(3)
+    return True
+
+  u, _, b, _, mono = setup(module, tmp_path, probe=probe)
+  b.error = network_failure()
+  assert tick(u)
+  finish(u)
+  assert not tick(u) and started.wait(2)
+  old_probe = u._probe_worker
+  mono[0] += 15
+  assert not tick(u)
+  assert len(continuations) == 1
+  if action == 'disable':
+    assert not tick(u, enabled=False)
+  else:
+    replace_synthetic_configuration(tmp_path, 1)
+    assert not tick(u, position_valid=False)
+  assert not continuations[0]()
+  generation, deadline = u._generation, u._next_attempt
+  release.set()
+  old_probe.join(2)
+  assert not old_probe.is_alive()
+  assert u._generation == generation and u._next_attempt == deadline
+
+
+def test_stalled_worker_is_fenced_and_late_result_cannot_replace_recovery(module, tmp_path):
+  started, release = threading.Event(), threading.Event()
+
+  class Blocking(Backend):
+    def fetch_window(self, lat, lon, heading, *, should_continue):
+      self.calls.append(should_continue)
+      if len(self.calls) == 1:
+        started.set()
+        assert release.wait(3)
+        return NS(events=(event('late'),), complete=True, errors=())
+      return NS(events=(event('fresh'),), complete=True, errors=())
+
+  probe = Probe(online=True)
+  u, _, b, _, mono = setup(module, tmp_path, Blocking(), probe=probe)
+  assert tick(u) and started.wait(2)
+  old_worker = u._worker
+  mono[0] += 65
+  assert not tick(u)
+  finish_probe(u)
+  assert not b.calls[0]()
+  assert tick(u)
+  finish(u)
+  release.set()
+  old_worker.join(2)
+  assert not old_worker.is_alive()
+  assert [camera.source_id for camera in u.snapshot()] == ['fresh']
+
+
+@pytest.mark.parametrize('network', [False, True])
+def test_partial_network_flag_only_arms_probe_for_typed_network_failure(module, tmp_path, network):
+  probe = Probe(online=True)
+  u, _, b, _, _ = setup(module, tmp_path, probe=probe)
+  b.fetch_window = lambda *args, **kwargs: NS(events=(), complete=False, errors=('reverse:NativeTransportError',), network_failure=network)
+  assert tick(u)
+  finish(u)
+  assert u._network_failure is network
+  assert not tick(u)
+  finish_probe(u)
+  assert len(probe.calls) == int(network)
+
+
+def test_repeated_failures_cannot_reset_ten_second_probe_spacing(module, tmp_path):
+  probe_times = []
+
+  def probe(*, should_continue):
+    probe_times.append(mono[0])
+    return True
+
+  u, _, b, _, mono = setup(module, tmp_path, probe=probe)
+  b.error = network_failure()
+  assert tick(u)
+  finish(u)
+  assert not tick(u)
+  finish_probe(u)
+  mono[0] += 5
+  assert tick(u)
+  finish(u)
+  assert not tick(u)
+  assert probe_times == [10]
+  mono[0] += 4.99
+  assert not tick(u)
+  assert probe_times == [10]
+  mono[0] = 20
+  assert not tick(u)
+  finish_probe(u)
+  assert probe_times == [10, 20]
+
+
+def test_repeated_loss_and_restoration_each_resume_acquisition(module, tmp_path):
+  probe = Probe(online=True)
+  u, p, b, _, mono = setup(module, tmp_path, probe=probe)
+  b.events = (event('initial'),)
+  assert tick(u)
+  finish(u)
+  for cycle in range(2):
+    mono[0] += 60
+    b.error = network_failure('timeout')
+    assert tick(u)
+    finish(u)
+    assert not tick(u)
+    finish_probe(u)
+    mono[0] += 5
+    b.error, b.events = None, (event('recovered-' + str(cycle)),)
+    assert tick(u)
+    finish(u)
+    assert u._failures == 0 and not u._network_failure
+    assert p.values['SpeedCameraYandexStatus'].startswith('ready:')
+  assert len(b.calls) == 5 and len(probe.calls) == 2
+  assert [camera.source_id for camera in u.snapshot()] == ['recovered-1']
 
 
 
