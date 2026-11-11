@@ -10,7 +10,6 @@
 
 #include "selfdrive/ui/qt/util.h"
 #include "selfdrive/ui/sunnypilot/qt/onroad/camera_warning.h"
-#include "selfdrive/ui/sunnypilot/qt/onroad/camera_warning_presentation.h"
 
 
 
@@ -308,9 +307,7 @@ void HudRendererSP::draw(QPainter &p, const QRect &surface_rect) {
       drawUpcomingSpeedLimit(p, surface_rect);
     }
 
-    if (camera_ui::drawWarning(cameraMode, cameraAwaitRoadPlan, cameraSignVisible, cameraWarningVisible)) {
-      drawSpeedCameraWarning(p, surface_rect);
-    }
+    if (!cameraMode && !cameraAwaitRoadPlan) drawSpeedCameraWarning(p, surface_rect);
 
     drawCameraStatus(p, sign_rect);
 
@@ -517,7 +514,6 @@ QString HudRendererSP::cameraRawStatusText() const {
     status = text("Camera database error", "Ошибка базы камер");
   }
   if (status.isEmpty()) {
-    if (reason == "no_camera" && camera_ui::suppressNoCameraStatus(cameraSignVisible, cameraWarningVisible)) return {};
     if (reason == "no_camera" || reason == "route_pass_proven" || reason == "odometry_passed" || speedCameraControlState == "passed") {
       status = reason == "no_camera" && cameraSignVisible ? text("Camera limit held", "Лимит удержан") : text("No cameras", "Камер нет");
     } else if (reason.isEmpty() || reason == "idle" || reason == "camera_limit" ||
@@ -604,9 +600,6 @@ void HudRendererSP::updateCameraDiagnosticText(double now_s) {
 }
 
 QString HudRendererSP::cameraStatusText() const {
-  // A newly valid warning must immediately outrank a buffered no-camera status.
-  if (speedCameraControlReason.section(':', 0, 0) == "no_camera" &&
-      camera_ui::suppressNoCameraStatus(cameraSignVisible, cameraWarningVisible)) return {};
   return cameraDiagnosticText;
 }
 

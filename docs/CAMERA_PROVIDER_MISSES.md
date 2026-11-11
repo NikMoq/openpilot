@@ -1,6 +1,10 @@
 # Camera misses: shared road selection and source coverage
 
 Status: confirmed code defects reproduced locally; field retest pending.
+UI status superseded on 11 November 2026: the HUD changes from `888f0dc` were
+rolled back to the exact approved `9690042` UI at the owner's request. Only the
+camera acquisition/matching algorithms and network recovery changes are retained.
+The historical HUD-warning change described below is not part of the current UI.
 The user reported Waze misses in Germany and Yandex misses in Krasnodar on the
 current `waze` branch. A later Yandex camera at 60 km/h did trigger reduction.
 No software was installed or process restarted during this driving report.
